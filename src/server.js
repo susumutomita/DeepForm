@@ -63,6 +63,35 @@ db.exec(`
   );
 `);
 
+// Deployments table: generated apps from spec
+db.exec(`
+  CREATE TABLE IF NOT EXISTS deployments (
+    id TEXT PRIMARY KEY,
+    session_id TEXT NOT NULL,
+    campaign_id TEXT,
+    html TEXT NOT NULL,
+    version INTEGER NOT NULL DEFAULT 1,
+    status TEXT NOT NULL DEFAULT 'active',
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (session_id) REFERENCES sessions(id)
+  );
+`);
+
+// Feedback table: user feedback on deployed apps
+db.exec(`
+  CREATE TABLE IF NOT EXISTS feedback (
+    id TEXT PRIMARY KEY,
+    deployment_id TEXT NOT NULL,
+    session_id TEXT,
+    rating INTEGER,
+    comment TEXT NOT NULL,
+    page_url TEXT,
+    user_agent TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (deployment_id) REFERENCES deployments(id)
+  );
+`);
+
 // --- Middleware ---
 app.use(express.json({ limit: '10mb' }));
 app.use(express.static(path.join(__dirname, '..', 'public')));
@@ -1170,6 +1199,211 @@ app.delete('/api/sessions/:id', (req, res) => {
     res.json({ ok: true });
   } catch (e) {
     console.error('Delete session error:', e);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// ==========================================
+// App Generation + Deploy + Feedback Loop
+// ==========================================
+
+// Generate app from spec
+app.post('/api/sessions/:id/generate', async (req, res) => {
+  try {
+    const session = db.prepare('SELECT * FROM sessions WHERE id = ?').get(req.params.id);
+    if (!session) return res.status(404).json({ error: 'Session not found' });
+
+    const specResult = db.prepare("SELECT data FROM analysis_results WHERE session_id = ? AND type = 'spec' ORDER BY created_at DESC LIMIT 1").get(req.params.id);
+    if (!specResult) return res.status(400).json({ error: 'Spec not yet generated' });
+
+    const spec = JSON.parse(specResult.data);
+
+    // Gather feedback from previous deployments if any
+    const prevDeployment = db.prepare('SELECT id FROM deployments WHERE session_id = ? ORDER BY created_at DESC LIMIT 1').get(req.params.id);
+    let feedbackContext = '';
+    if (prevDeployment) {
+      const feedbacks = db.prepare('SELECT rating, comment FROM feedback WHERE deployment_id = ? ORDER BY created_at DESC LIMIT 20').all(prevDeployment.id);
+      if (feedbacks.length > 0) {
+        feedbackContext = `\n\n## Previous User Feedback (incorporate these improvements):\n${feedbacks.map((f, i) => `${i+1}. [Rating: ${f.rating}/5] ${f.comment}`).join('\n')}`;
+      }
+    }
+
+    const systemPrompt = `You are a senior full-stack developer. Generate a COMPLETE, PRODUCTION-READY single-page web application based on the provided spec.json.
+
+Rules:
+- Output ONLY the HTML. No explanations, no markdown fences.
+- The HTML must be a complete <!DOCTYPE html> document.
+- Include ALL CSS inline in a <style> tag.
+- Include ALL JavaScript inline in a <script> tag.
+- Use modern CSS (grid, flexbox, custom properties) for a polished, professional UI.
+- Implement ALL features described in the spec, with real UI interactions.
+- Use localStorage for data persistence (simulate backend).
+- Make it fully responsive (mobile-first).
+- Use a clean, modern SaaS-style design (like Linear, Stripe).
+- Add smooth animations and transitions.
+- Ensure accessibility (ARIA labels, keyboard navigation).
+- The app must be fully functional and interactive, not just a mockup.${feedbackContext}`;
+
+    const response = await callClaude(
+      [{ role: 'user', content: `Generate the app from this spec:\n\n${JSON.stringify(spec, null, 2)}` }],
+      systemPrompt,
+      16000
+    );
+    const html = extractText(response);
+
+    if (!html || !html.includes('<!DOCTYPE') && !html.includes('<html')) {
+      return res.status(500).json({ error: 'Failed to generate valid HTML' });
+    }
+
+    // Get version number
+    const lastDeploy = db.prepare('SELECT MAX(version) as maxVer FROM deployments WHERE session_id = ?').get(req.params.id);
+    const version = (lastDeploy?.maxVer || 0) + 1;
+
+    const deployId = uuidv4().split('-')[0];
+    db.prepare('INSERT INTO deployments (id, session_id, campaign_id, html, version) VALUES (?, ?, ?, ?, ?)').run(
+      deployId, req.params.id, session.campaign_id || null, html, version
+    );
+
+    res.json({ deployId, version, url: `/deploy/${deployId}` });
+  } catch (e) {
+    console.error('Generate app error:', e);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// List deployments for a session
+app.get('/api/sessions/:id/deployments', (req, res) => {
+  try {
+    const deployments = db.prepare('SELECT id, version, status, created_at FROM deployments WHERE session_id = ? ORDER BY created_at DESC').all(req.params.id);
+    const deploymentsWithFeedback = deployments.map(d => {
+      const feedbackCount = db.prepare('SELECT COUNT(*) as count FROM feedback WHERE deployment_id = ?').get(d.id);
+      const avgRating = db.prepare('SELECT AVG(rating) as avg FROM feedback WHERE deployment_id = ? AND rating IS NOT NULL').get(d.id);
+      return { ...d, feedbackCount: feedbackCount.count, avgRating: avgRating.avg };
+    });
+    res.json(deploymentsWithFeedback);
+  } catch (e) {
+    console.error('List deployments error:', e);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// Serve deployed app (with feedback widget injected)
+app.get('/deploy/:deployId', (req, res) => {
+  try {
+    const deployment = db.prepare('SELECT * FROM deployments WHERE id = ?').get(req.params.deployId);
+    if (!deployment) return res.status(404).send('Deployment not found');
+
+    // Inject feedback widget before </body>
+    const feedbackWidget = `
+<!-- DeepForm Feedback Widget -->
+<div id="df-feedback-widget" style="position:fixed;bottom:20px;right:20px;z-index:99999;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif">
+  <button id="df-fb-toggle" style="width:48px;height:48px;border-radius:50%;background:#4A7C9B;color:#fff;border:none;cursor:pointer;font-size:20px;box-shadow:0 4px 12px rgba(0,0,0,0.15);transition:transform 0.2s" onmouseover="this.style.transform='scale(1.1)'" onmouseout="this.style.transform='scale(1)'">💬</button>
+  <div id="df-fb-panel" style="display:none;position:absolute;bottom:60px;right:0;width:320px;background:#fff;border-radius:12px;box-shadow:0 8px 32px rgba(0,0,0,0.12);padding:20px;border:1px solid #e2e8f0">
+    <h4 style="margin:0 0 4px;font-size:15px;color:#1a202c">フィードバック</h4>
+    <p style="margin:0 0 12px;font-size:12px;color:#718096">このアプリの改善にご協力ください</p>
+    <div id="df-fb-stars" style="display:flex;gap:4px;margin-bottom:12px">
+      ${[1,2,3,4,5].map(n => `<button class="df-star" data-rating="${n}" style="background:none;border:none;font-size:24px;cursor:pointer;padding:2px;transition:transform 0.15s" onmouseover="this.style.transform='scale(1.2)'" onmouseout="this.style.transform='scale(1)'">☆</button>`).join('')}
+    </div>
+    <textarea id="df-fb-comment" placeholder="改善点、要望、バグ報告など…" style="width:100%;height:80px;border:1px solid #e2e8f0;border-radius:8px;padding:8px;font-size:13px;resize:vertical;box-sizing:border-box;font-family:inherit"></textarea>
+    <button id="df-fb-submit" style="margin-top:8px;width:100%;padding:10px;background:#4A7C9B;color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;transition:background 0.2s" onmouseover="this.style.background='#3d6a85'" onmouseout="this.style.background='#4A7C9B'">送信</button>
+    <div id="df-fb-thanks" style="display:none;text-align:center;padding:20px 0">
+      <div style="font-size:32px;margin-bottom:8px">✓</div>
+      <p style="color:#718096;font-size:13px">ありがとうございます！フィードバックは次の改善に反映されます。</p>
+    </div>
+  </div>
+</div>
+<script>
+(function(){
+  const DEPLOY_ID = '${deployment.id}';
+  let selectedRating = 0;
+  const toggle = document.getElementById('df-fb-toggle');
+  const panel = document.getElementById('df-fb-panel');
+  toggle.addEventListener('click', () => { panel.style.display = panel.style.display === 'none' ? 'block' : 'none'; });
+  document.querySelectorAll('.df-star').forEach(btn => {
+    btn.addEventListener('click', () => {
+      selectedRating = parseInt(btn.dataset.rating);
+      document.querySelectorAll('.df-star').forEach((s, i) => { s.textContent = i < selectedRating ? '★' : '☆'; });
+    });
+  });
+  document.getElementById('df-fb-submit').addEventListener('click', async () => {
+    const comment = document.getElementById('df-fb-comment').value.trim();
+    if (!comment && !selectedRating) return;
+    try {
+      await fetch('/api/feedback/' + DEPLOY_ID, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ rating: selectedRating || null, comment: comment || '(rating only)', pageUrl: location.href, userAgent: navigator.userAgent })
+      });
+      document.getElementById('df-fb-thanks').style.display = 'block';
+      document.getElementById('df-fb-submit').style.display = 'none';
+      document.getElementById('df-fb-comment').style.display = 'none';
+      document.getElementById('df-fb-stars').style.display = 'none';
+    } catch(e) { console.error('Feedback error:', e); }
+  });
+})();
+</script>`;
+
+    let finalHtml = deployment.html;
+    if (finalHtml.includes('</body>')) {
+      finalHtml = finalHtml.replace('</body>', feedbackWidget + '\n</body>');
+    } else {
+      finalHtml += feedbackWidget;
+    }
+
+    res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    res.send(finalHtml);
+  } catch (e) {
+    console.error('Serve deploy error:', e);
+    res.status(500).send('Internal error');
+  }
+});
+
+// Submit feedback for a deployed app
+app.post('/api/feedback/:deployId', (req, res) => {
+  try {
+    const deployment = db.prepare('SELECT * FROM deployments WHERE id = ?').get(req.params.deployId);
+    if (!deployment) return res.status(404).json({ error: 'Deployment not found' });
+
+    const { rating, comment, pageUrl, userAgent } = req.body;
+    if (!comment) return res.status(400).json({ error: 'Comment is required' });
+
+    const id = uuidv4();
+    db.prepare('INSERT INTO feedback (id, deployment_id, session_id, rating, comment, page_url, user_agent) VALUES (?, ?, ?, ?, ?, ?, ?)').run(
+      id, deployment.id, deployment.session_id, rating || null, comment, pageUrl || null, userAgent || null
+    );
+
+    res.json({ ok: true, id });
+  } catch (e) {
+    console.error('Feedback submit error:', e);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// Get feedback for a deployment
+app.get('/api/feedback/:deployId', (req, res) => {
+  try {
+    const feedbacks = db.prepare('SELECT * FROM feedback WHERE deployment_id = ? ORDER BY created_at DESC').all(req.params.deployId);
+    const avg = db.prepare('SELECT AVG(rating) as avg, COUNT(*) as count FROM feedback WHERE deployment_id = ? AND rating IS NOT NULL').get(req.params.deployId);
+    res.json({ feedbacks, avgRating: avg.avg, totalCount: avg.count });
+  } catch (e) {
+    console.error('Get feedback error:', e);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// Get all feedback for a session (across all deployments)
+app.get('/api/sessions/:id/feedback', (req, res) => {
+  try {
+    const feedbacks = db.prepare(`
+      SELECT f.*, d.version as deploy_version
+      FROM feedback f
+      JOIN deployments d ON f.deployment_id = d.id
+      WHERE f.session_id = ?
+      ORDER BY f.created_at DESC
+    `).all(req.params.id);
+    res.json(feedbacks);
+  } catch (e) {
+    console.error('Get session feedback error:', e);
     res.status(500).json({ error: e.message });
   }
 });

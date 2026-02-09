@@ -554,6 +554,117 @@ function exportPRDMarkdown() {
     });
 }
 
+// ==========================================
+// App Generation + Deploy + Feedback Loop
+// ==========================================
+
+let currentDeployId = null;
+
+async function generateAndDeploy() {
+  if (!currentSessionId) return;
+  showLoading('AIがアプリを生成中…（30秒ほど）');
+  try {
+    const res = await fetch(`/api/sessions/${currentSessionId}/generate`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+    });
+    if (!res.ok) throw new Error((await res.json()).error);
+    const data = await res.json();
+    currentDeployId = data.deployId;
+    activateStep('deploy');
+    showDeployPreview(data.deployId, data.version);
+    loadDeployments();
+    showToast(`v${data.version} をデプロイしました`);
+  } catch (e) {
+    console.error('Generate error:', e);
+    showToast('生成に失敗しました: ' + e.message);
+  } finally {
+    hideLoading();
+  }
+}
+
+function showDeployPreview(deployId, version) {
+  document.getElementById('deploy-empty').style.display = 'none';
+  document.getElementById('deploy-preview').style.display = 'block';
+  const iframe = document.getElementById('deploy-iframe');
+  iframe.src = `/deploy/${deployId}`;
+  const link = document.getElementById('deploy-link');
+  link.href = `/deploy/${deployId}`;
+  currentDeployId = deployId;
+  loadFeedback(deployId);
+}
+
+function copyDeployUrl() {
+  if (!currentDeployId) return;
+  const url = `${window.location.origin}/deploy/${currentDeployId}`;
+  navigator.clipboard.writeText(url).then(() => showToast('URLをコピーしました'));
+}
+
+async function loadDeployments() {
+  if (!currentSessionId) return;
+  try {
+    const res = await fetch(`/api/sessions/${currentSessionId}/deployments`);
+    const deployments = await res.json();
+    const list = document.getElementById('deploy-list');
+    if (deployments.length === 0) {
+      list.style.display = 'none';
+      return;
+    }
+    list.style.display = 'block';
+    list.innerHTML = '<h4 style="margin-bottom:8px">デプロイ履歴</h4>' +
+      deployments.map(d => `
+        <div class="deploy-card ${d.id === currentDeployId ? 'active' : ''}" onclick="showDeployPreview('${d.id}', ${d.version})" style="cursor:pointer;padding:10px 14px;border:1px solid var(--border);border-radius:8px;margin-bottom:6px;display:flex;justify-content:space-between;align-items:center;transition:background 0.15s">
+          <div>
+            <strong>v${d.version}</strong>
+            <span style="color:var(--text-dim);font-size:12px;margin-left:8px">${new Date(d.created_at).toLocaleString()}</span>
+          </div>
+          <div style="display:flex;gap:12px;align-items:center;font-size:12px;color:var(--text-dim)">
+            ${d.feedbackCount > 0 ? '<span>💬 ' + d.feedbackCount + '</span>' : ''}
+            ${d.avgRating ? '<span>★ ' + d.avgRating.toFixed(1) + '</span>' : ''}
+          </div>
+        </div>
+      `).join('');
+  } catch (e) {
+    console.error('Load deployments error:', e);
+  }
+}
+
+async function loadFeedback(deployId) {
+  try {
+    const res = await fetch(`/api/feedback/${deployId}`);
+    const data = await res.json();
+    const section = document.getElementById('feedback-section');
+    if (data.feedbacks.length === 0) {
+      section.style.display = 'none';
+      return;
+    }
+    section.style.display = 'block';
+    document.getElementById('feedback-stats').innerHTML = `
+      <div style="display:flex;gap:24px;padding:12px 0;font-size:14px">
+        <span>回答数: <strong>${data.totalCount}</strong></span>
+        ${data.avgRating ? '<span>平均評価: <strong>★ ' + data.avgRating.toFixed(1) + '</strong> / 5</span>' : ''}
+      </div>
+    `;
+    document.getElementById('feedback-list').innerHTML = data.feedbacks.map(f => `
+      <div style="padding:10px 14px;border:1px solid var(--border);border-radius:8px;margin-bottom:6px">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
+          ${f.rating ? '<span style="color:#d69e2e">' + '★'.repeat(f.rating) + '☆'.repeat(5-f.rating) + '</span>' : '<span></span>'}
+          <span style="font-size:11px;color:var(--text-dim)">${new Date(f.created_at).toLocaleString()}</span>
+        </div>
+        <p style="margin:0;font-size:13px">${escapeHtml(f.comment)}</p>
+      </div>
+    `).join('');
+  } catch (e) {
+    console.error('Load feedback error:', e);
+  }
+}
+
+async function regenerateWithFeedback() {
+  showToast('フィードバックを反映して再生成します…');
+  await generateAndDeploy();
+}
+
+
 // --- Step Navigation ---
 function activateStep(stepName) {
   // Update content visibility
@@ -568,10 +679,10 @@ function activateStep(stepName) {
 }
 
 function updateStepNav(status) {
-  const order = ['interviewing', 'analyzed', 'respondent_done', 'hypothesized', 'prd_generated', 'spec_generated'];
+  const order = ['interviewing', 'analyzed', 'respondent_done', 'hypothesized', 'prd_generated', 'spec_generated', 'deployed'];
   // Normalize: respondent_done counts same as analyzed
   if (status === 'respondent_done') status = 'respondent_done';
-  const stepNames = ['interview', 'facts', 'hypotheses', 'prd', 'spec'];
+  const stepNames = ['interview', 'facts', 'hypotheses', 'prd', 'spec', 'deploy'];
   const currentIndex = order.indexOf(status);
 
   stepNames.forEach((name, i) => {

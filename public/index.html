@@ -140,6 +140,13 @@
               <h3 data-i18n="step5.title">実装仕様エクスポート</h3>
               <p data-i18n="step5.desc">API仕様・DBスキーマ・テストケースを spec.json で出力</p>
             </div>
+            <div class="flow-arrow">→</div>
+            <div class="flow-card">
+              <div class="flow-num">06</div>
+              <div class="flow-icon"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg></div>
+              <h3 data-i18n="step6.title">デプロイ & フィードバック</h3>
+              <p data-i18n="step6.desc">AIがアプリを生成・公開。ユーザーの声を収集して次の改善に回す。</p>
+            </div>
           </div>
         </div>
 
@@ -217,6 +224,10 @@
               <div class="step" data-step="spec">
                 <span class="step-num">5</span>
                 <span class="step-label" data-i18n="stepnav.spec">実装仕様</span>
+              </div>
+              <div class="step" data-step="deploy">
+                <span class="step-num">6</span>
+                <span class="step-label" data-i18n="stepnav.deploy">デプロイ</span>
               </div>
             </div>
             <div class="session-theme" id="session-theme"></div>
@@ -311,10 +322,17 @@
                 </button>
               </div>
 
-              <!-- Next Steps -->
-              <div class="next-steps">
-                <h3 data-i18n="next.title">次のステップ：コーディングエージェントで実装を開始</h3>
-                <p class="next-steps-desc" data-i18n="next.desc">エクスポートした spec.json / PRD.md をコーディングエージェントに渡すだけで、実装を開始できます。</p>
+              <div class="step-actions">
+                <button class="btn btn-accent" onclick="generateAndDeploy()" id="btn-deploy">
+                  <span data-i18n="spec.deploy">アプリを生成・デプロイ →</span>
+                </button>
+              </div>
+
+              <!-- Next Steps (manual export) -->
+              <details class="next-steps-details" style="margin-top:24px">
+                <summary data-i18n="next.summary" style="cursor:pointer;color:var(--text-dim);font-size:13px">手動でエクスポートして外部ツールで実装する場合</summary>
+                <div class="next-steps" style="margin-top:12px">
+                <h3 data-i18n="next.title">コーディングエージェントで実装</h3>
                 <div class="next-steps-grid">
                   <a href="https://exe.dev" target="_blank" rel="noopener" class="next-step-card">
                     <div class="next-step-header">
@@ -349,6 +367,47 @@
                     <p data-i18n="next.other.desc">GitHub Copilot, Devin, Cline, Windsurf など、任意のコーディングエージェントで利用可能。</p>
                     <code data-i18n="next.other.code">spec.json は標準JSON形式</code>
                   </div>
+                </div>
+              </div>
+              </details>
+            </div>
+
+            <!-- Step: Deploy -->
+            <div id="step-deploy" class="step-content">
+              <div class="step-header">
+                <h2 data-i18n="deploy.title">デプロイ & フィードバック</h2>
+                <p class="step-desc" data-i18n="deploy.desc">生成されたアプリを公開し、ユーザーフィードバックを収集して次の改善に回す</p>
+              </div>
+
+              <div id="deploy-container">
+                <div id="deploy-empty" class="empty-state">
+                  <p data-i18n="deploy.empty">まだデプロイがありません。実装仕様からアプリを生成してください。</p>
+                  <button class="btn btn-accent" onclick="generateAndDeploy()" data-i18n="deploy.generate">アプリを生成</button>
+                </div>
+                <div id="deploy-list" style="display:none"></div>
+                <div id="deploy-preview" style="display:none">
+                  <div class="deploy-preview-header">
+                    <h3 data-i18n="deploy.preview">プレビュー</h3>
+                    <div class="deploy-actions">
+                      <a id="deploy-link" href="#" target="_blank" class="btn btn-primary btn-sm">
+                        <span data-i18n="deploy.open">アプリを開く</span>
+                      </a>
+                      <button class="btn btn-sm btn-secondary" onclick="copyDeployUrl()" data-i18n="deploy.copyUrl">URLをコピー</button>
+                    </div>
+                  </div>
+                  <iframe id="deploy-iframe" style="width:100%;height:500px;border:1px solid var(--border);border-radius:8px"></iframe>
+                </div>
+              </div>
+
+              <!-- Feedback Summary -->
+              <div id="feedback-section" style="display:none;margin-top:24px">
+                <h3 data-i18n="deploy.feedbackTitle">ユーザーフィードバック</h3>
+                <div id="feedback-stats" class="feedback-stats"></div>
+                <div id="feedback-list" class="feedback-list"></div>
+                <div class="step-actions" style="margin-top:16px">
+                  <button class="btn btn-accent" onclick="regenerateWithFeedback()">
+                    <span data-i18n="deploy.regenerate">フィードバックを反映して再生成</span>
+                  </button>
                 </div>
               </div>
             </div>

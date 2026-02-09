@@ -164,6 +164,27 @@ const TRANSLATIONS = {
     'next.other.title': 'その他のエージェント',
     'next.other.desc': 'GitHub Copilot, Devin, Cline, Windsurf など、任意のコーディングエージェントで利用可能。',
     'next.other.code': 'spec.json は標準JSON形式',
+    'next.summary': '手動でエクスポートして外部ツールで実装する場合',
+
+    // Step nav
+    'stepnav.deploy': 'デプロイ',
+
+    // Spec deploy button
+    'spec.deploy': 'アプリを生成・デプロイ →',
+
+    // Deploy step
+    'deploy.title': 'デプロイ & フィードバック',
+    'deploy.desc': '生成されたアプリを公開し、ユーザーフィードバックを収集して次の改善に回す',
+    'deploy.empty': 'まだデプロイがありません。実装仕様からアプリを生成してください。',
+    'deploy.generate': 'アプリを生成',
+    'deploy.preview': 'プレビュー',
+    'deploy.open': 'アプリを開く',
+    'deploy.copyUrl': 'URLをコピー',
+    'deploy.feedbackTitle': 'ユーザーフィードバック',
+    'deploy.regenerate': 'フィードバックを反映して再生成',
+    'howItWorks.sub': '6つのステップで、課題テーマからアプリ生成・デプロイ・フィードバックループまで',
+    'step6.title': 'デプロイ & フィードバック',
+    'step6.desc': 'AIがアプリを生成・公開。ユーザーの声を収集して次の改善に回す。',
   },
 
   en: {
@@ -301,6 +322,22 @@ const TRANSLATIONS = {
     'next.other.title': 'Other agents',
     'next.other.desc': 'Compatible with GitHub Copilot, Devin, Cline, Windsurf, and any coding agent.',
     'next.other.code': 'spec.json is standard JSON',
+    'next.summary': 'Manually export and build with external tools',
+
+    'stepnav.deploy': 'Deploy',
+    'spec.deploy': 'Generate & Deploy App →',
+    'deploy.title': 'Deploy & Feedback',
+    'deploy.desc': 'Publish the generated app, collect user feedback, and iterate',
+    'deploy.empty': 'No deployments yet. Generate an app from the spec.',
+    'deploy.generate': 'Generate App',
+    'deploy.preview': 'Preview',
+    'deploy.open': 'Open App',
+    'deploy.copyUrl': 'Copy URL',
+    'deploy.feedbackTitle': 'User Feedback',
+    'deploy.regenerate': 'Regenerate with Feedback',
+    'howItWorks.sub': '6 steps: from challenge theme to app generation, deploy, and feedback loop',
+    'step6.title': 'Deploy & Feedback',
+    'step6.desc': 'AI generates the app and deploys it. Collect user feedback and iterate.',
   },
 
   es: {
@@ -438,6 +475,22 @@ const TRANSLATIONS = {
     'next.other.title': 'Otros agentes',
     'next.other.desc': 'Compatible con GitHub Copilot, Devin, Cline, Windsurf y cualquier agente de código.',
     'next.other.code': 'spec.json es JSON estándar',
+    'next.summary': 'Exportar manualmente y construir con herramientas externas',
+
+    'stepnav.deploy': 'Desplegar',
+    'spec.deploy': 'Generar y Desplegar App →',
+    'deploy.title': 'Despliegue y Retroalimentación',
+    'deploy.desc': 'Publica la app generada, recopila retroalimentación y mejora iterativamente',
+    'deploy.empty': 'Aún no hay despliegues. Genera una app desde la especificación.',
+    'deploy.generate': 'Generar App',
+    'deploy.preview': 'Vista previa',
+    'deploy.open': 'Abrir App',
+    'deploy.copyUrl': 'Copiar URL',
+    'deploy.feedbackTitle': 'Retroalimentación de usuarios',
+    'deploy.regenerate': 'Regenerar con retroalimentación',
+    'howItWorks.sub': '6 pasos: del tema de desafío a la generación de app, despliegue y ciclo de retroalimentación',
+    'step6.title': 'Despliegue & Retroalimentación',
+    'step6.desc': 'La IA genera la app y la despliega. Recopila retroalimentación e itera.',
   },
 };
 

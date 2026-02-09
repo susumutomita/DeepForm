@@ -49,9 +49,19 @@ db.exec(`
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (owner_session_id) REFERENCES sessions(id)
   );
+  CREATE TABLE IF NOT EXISTS users (
+    id TEXT PRIMARY KEY,
+    github_id INTEGER UNIQUE NOT NULL,
+    github_login TEXT NOT NULL,
+    avatar_url TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  );
 `);
 
 // Migration: ensure indexes exist
 try { db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_sessions_share_token ON sessions(share_token)'); } catch { /* already exists */ }
+try { db.exec('ALTER TABLE sessions ADD COLUMN user_id TEXT REFERENCES users(id)'); } catch { /* already exists */ }
+try { db.exec('ALTER TABLE sessions ADD COLUMN is_public INTEGER DEFAULT 0'); } catch { /* already exists */ }
 
 export { db };

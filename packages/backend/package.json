@@ -6,7 +6,7 @@
   "license": "MIT",
   "scripts": {
     "start": "node dist/index.js",
-    "dev": "nodemon --watch 'src/**/*' -e ts,tsx --exec 'ts-node' src/index.ts",
+    "dev": "ts-node src/index.ts",
     "build": "tsc",
     "lint": "eslint 'src/**/*.{ts,tsx}' --fix",
     "format": "oxfmt src",
@@ -15,10 +15,20 @@
     "test:coverage": "jest --coverage --verbose",
     "test:watch": "jest --watch --verbose"
   },
-  "dependencies": {},
+  "dependencies": {
+    "better-sqlite3": "^12.6.2",
+    "cors": "^2.8.6",
+    "express": "^5.2.1",
+    "openai": "^6.18.0",
+    "uuid": "^13.0.0"
+  },
   "devDependencies": {
+    "@types/better-sqlite3": "^7.6.13",
+    "@types/cors": "^2.8.19",
+    "@types/express": "^5.0.6",
     "@types/jest": "^29.5.11",
     "@types/node": "^20.11.4",
+    "@types/uuid": "^11.0.0",
     "@typescript-eslint/eslint-plugin": "^6.19.0",
     "eslint": "^8.56.0",
     "jest": "^29.7.0",

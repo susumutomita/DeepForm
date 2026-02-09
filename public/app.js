@@ -618,7 +618,7 @@ function handleSharedKeydown(event) {
   if (event.isComposing || event.keyCode === 229) return;
   if (event.key === 'Enter' && event.shiftKey) {
     event.preventDefault();
-    sendSharedMessage();
+    campaignToken ? sendCampaignMessage() : sendSharedMessage();
   }
 }
 
@@ -855,6 +855,147 @@ async function shareSession(sessionId) {
   }
 }
 
+// ==========================================
+// Campaign (multi-respondent) functions
+// ==========================================
+
+let campaignToken = null;
+let campaignSessionId = null;
+
+async function createCampaign(sessionId) {
+  try {
+    const res = await fetch(`/api/sessions/${sessionId}/campaign`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+    });
+    const data = await res.json();
+    if (data.error) throw new Error(data.error);
+
+    const url = `${window.location.origin}/c/${data.shareToken}`;
+    await navigator.clipboard.writeText(url);
+    showToast(t('toast.campaignUrl') || `キャンペーンURLをコピーしました: ${url}`);
+  } catch (e) {
+    showToast(e.message, true);
+  }
+}
+
+async function initCampaignInterview(token) {
+  campaignToken = token;
+  // Show shared page (reuse the UI)
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.getElementById('page-shared').classList.add('active');
+
+  try {
+    const res = await fetch(`/api/campaigns/${token}`);
+    const data = await res.json();
+    if (data.error) throw new Error(data.error);
+
+    document.getElementById('shared-theme-title').textContent = data.theme;
+  } catch (e) {
+    showToast(t('toast.notFound'), true);
+  }
+}
+
+async function startCampaignInterview() {
+  const nameInput = document.getElementById('shared-name');
+  const respondentName = nameInput ? nameInput.value.trim() : '';
+
+  showLoading(t('loading.session'));
+  try {
+    const res = await fetch(`/api/campaigns/${campaignToken}/join`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ respondentName }),
+    });
+    const data = await res.json();
+    if (data.error) throw new Error(data.error);
+
+    campaignSessionId = data.sessionId;
+    hideLoading();
+
+    // Switch to chat screen
+    document.getElementById('shared-welcome').classList.remove('active');
+    document.getElementById('shared-chat').classList.add('active');
+    document.getElementById('shared-chat-theme').textContent = data.theme;
+
+    const container = document.getElementById('shared-chat-container');
+    container.innerHTML = '';
+    appendChatBubble(container, 'assistant', data.reply);
+  } catch (e) {
+    hideLoading();
+    showToast(e.message, true);
+  }
+}
+
+async function sendCampaignMessage() {
+  const input = document.getElementById('shared-chat-input');
+  const message = input.value.trim();
+  if (!message) return;
+  input.value = '';
+
+  const container = document.getElementById('shared-chat-container');
+  appendChatBubble(container, 'user', message);
+  showTypingIndicator('shared-chat-container');
+
+  try {
+    const res = await fetch(`/api/campaigns/${campaignToken}/sessions/${campaignSessionId}/chat`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ message }),
+    });
+    const data = await res.json();
+    removeTypingIndicator('shared-chat-container');
+    if (data.error) throw new Error(data.error);
+
+    appendChatBubble(container, 'assistant', data.reply);
+
+    if (data.isComplete) {
+      document.getElementById('shared-complete-actions').style.display = 'block';
+    }
+
+    // Update progress bar
+    const bar = document.getElementById('shared-progress-bar');
+    if (bar) bar.style.width = `${Math.min(100, (data.turnCount / 6) * 100)}%`;
+  } catch (e) {
+    removeTypingIndicator('shared-chat-container');
+    showToast(e.message, true);
+  }
+}
+
+async function completeCampaignInterview() {
+  showLoading(t('loading.facts'));
+  try {
+    const res = await fetch(`/api/campaigns/${campaignToken}/sessions/${campaignSessionId}/complete`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+    });
+    const data = await res.json();
+    hideLoading();
+    if (data.error) throw new Error(data.error);
+
+    renderSharedFacts(data);
+    document.getElementById('shared-chat').classList.remove('active');
+    document.getElementById('shared-facts').classList.add('active');
+  } catch (e) {
+    hideLoading();
+    showToast(e.message, true);
+  }
+}
+
+async function submitCampaignFeedback() {
+  const feedback = document.getElementById('shared-feedback')?.value?.trim() || '';
+  try {
+    await fetch(`/api/campaigns/${campaignToken}/sessions/${campaignSessionId}/feedback`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ feedback }),
+    });
+  } catch (e) { /* ignore */ }
+
+  document.getElementById('shared-facts').classList.remove('active');
+  document.getElementById('shared-thanks').classList.add('active');
+}
+
 // --- Init ---
 (function init() {
   // Apply i18n translations and set active lang button
@@ -865,10 +1006,13 @@ async function shareSession(sessionId) {
     });
   }
 
-  // Check if URL is a shared interview
-  const pathMatch = window.location.pathname.match(/^\/i\/([a-z0-9]+)$/i);
-  if (pathMatch) {
-    initSharedInterview(pathMatch[1]);
+  // Check if URL is a shared interview or campaign
+  const sharedMatch = window.location.pathname.match(/^\/i\/([a-z0-9]+)$/i);
+  const campaignMatch = window.location.pathname.match(/^\/c\/([a-z0-9]+)$/i);
+  if (campaignMatch) {
+    initCampaignInterview(campaignMatch[1]);
+  } else if (sharedMatch) {
+    initSharedInterview(sharedMatch[1]);
   } else {
     loadSessions();
   }

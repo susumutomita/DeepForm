@@ -1,11 +1,12 @@
 {
-  "name": "typescript-template",
+  "name": "deepform",
   "version": "1.0.0",
-  "author": "Susumu Tomita <oyster880@gmail.com>",
-  "license": "MIT",
+  "description": "AI Depth Interview → Hypothesis → PRD → Coding Agent Spec",
+  "main": "src/server.js",
   "scripts": {
+    "start": "node src/server.js",
+    "dev": "node --watch src/server.js",
     "install:all": "cd packages/frontend && bun install && cd ../backend && bun install",
-    "dev": "cd packages/frontend && bun run start",
     "build": "cd packages/frontend && bun run build && cd ../backend && bun run build",
     "clean": "bunx rimraf node_modules out && cd packages/frontend && bunx rimraf node_modules out dist coverage && cd ../backend && bunx rimraf node_modules out dist coverage",
     "test": "cd packages/frontend && bun run test && cd ../backend && bun run test",
@@ -20,6 +21,11 @@
     "prepare": "husky",
     "start:frontend": "cd packages/frontend && bun run start",
     "start:backend": "cd packages/backend && bun run start"
+  },
+  "dependencies": {
+    "better-sqlite3": "^11.0.0",
+    "express": "^4.18.2",
+    "uuid": "^9.0.0"
   },
   "devDependencies": {
     "husky": "^9.1.7",

@@ -1,0 +1,16 @@
+[Unit]
+Description=DeepForm AI Depth Interview
+After=network.target
+
+[Service]
+Type=simple
+User=exedev
+Group=exedev
+WorkingDirectory=/home/exedev/DeepForm
+ExecStart=/usr/bin/node src/server.js
+Restart=on-failure
+RestartSec=3
+Environment=NODE_ENV=production
+
+[Install]
+WantedBy=multi-user.target

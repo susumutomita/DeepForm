@@ -15,4 +15,4 @@ lint_text:
 	bun run lint:text
 
 .PHONY: before-commit
-before-commit: lint_text
+before-commit: lint_text typecheck

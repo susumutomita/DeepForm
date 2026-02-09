@@ -383,6 +383,13 @@ a:hover { color: var(--primary-hover); }
   border-color: var(--border-focus);
 }
 
+.chat-hint {
+  text-align: right;
+  font-size: 11px;
+  color: var(--text-dim);
+  margin-top: 4px;
+}
+
 .step-actions {
   margin-top: 20px;
   display: flex;

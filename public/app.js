@@ -1,5 +1,15 @@
 // === DeepForm Client ===
 
+// IME対応: Shift+Enterで送信、Enterは改行
+function handleChatKeydown(event) {
+  // IME変換中は何もしない
+  if (event.isComposing || event.keyCode === 229) return;
+  if (event.key === 'Enter' && event.shiftKey) {
+    event.preventDefault();
+    sendMessage();
+  }
+}
+
 let currentSessionId = null;
 let currentSession = null;
 

@@ -78,9 +78,10 @@
               <div class="chat-container" id="chat-container"></div>
               <div class="chat-input-area">
                 <textarea id="chat-input" placeholder="回答を入力…" rows="2"
-                  onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendMessage();}"></textarea>
+                  onkeydown="handleChatKeydown(event)"></textarea>
                 <button class="btn btn-primary" onclick="sendMessage()" id="btn-send">送信</button>
               </div>
+              <div class="chat-hint">Shift + Enter で送信</div>
               <div class="step-actions">
                 <button class="btn btn-secondary" onclick="runAnalysis()" id="btn-analyze" disabled>
                   → ファクト抽出に進む

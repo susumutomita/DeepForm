@@ -130,3 +130,8 @@ dist
 .pnp.*
 
 .DS_Store
+
+# DeepForm
+data/*.db
+data/*.db-wal
+data/*.db-shm

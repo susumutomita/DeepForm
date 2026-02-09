@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>DeepForm — AI Depth Interview</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+JP:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <div id="app">
+    <!-- Header -->
+    <header class="header">
+      <div class="header-inner">
+        <a href="/" class="logo" onclick="showHome(); return false;">
+          <span class="logo-icon">&#9672;</span> DeepForm
+        </a>
+        <span class="header-tagline">AI Depth Interview → Spec</span>
+      </div>
+    </header>
+
+    <!-- Main Content -->
+    <main id="main-content">
+      <!-- Home / Sessions List -->
+      <section id="page-home" class="page active">
+        <div class="hero">
+          <h1>ふわっとした課題から<br>実装仕様まで、一直線。</h1>
+          <p class="hero-sub">AIがデプスインタビューを実施し、ファクト抽出・仮説生成・PRD・実装仕様まで自動生成します。</p>
+          <div class="theme-input-area">
+            <textarea id="theme-input" placeholder="例：研究室の週末オペを楽にしたい…" rows="3"></textarea>
+            <button id="btn-start" class="btn btn-primary" onclick="startNewSession()">
+              インタビューを開始
+            </button>
+          </div>
+        </div>
+
+        <div class="sessions-section">
+          <h2>過去のセッション</h2>
+          <div id="sessions-list" class="sessions-list">
+            <p class="empty-state">まだセッションがありません</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- Interview Page -->
+      <section id="page-interview" class="page">
+        <div class="interview-layout">
+          <div class="interview-sidebar">
+            <div class="step-nav">
+              <div class="step active" data-step="interview">
+                <span class="step-num">1</span>
+                <span class="step-label">インタビュー</span>
+              </div>
+              <div class="step" data-step="facts">
+                <span class="step-num">2</span>
+                <span class="step-label">ファクト抽出</span>
+              </div>
+              <div class="step" data-step="hypotheses">
+                <span class="step-num">3</span>
+                <span class="step-label">仮説生成</span>
+              </div>
+              <div class="step" data-step="prd">
+                <span class="step-num">4</span>
+                <span class="step-label">PRD</span>
+              </div>
+              <div class="step" data-step="spec">
+                <span class="step-num">5</span>
+                <span class="step-label">実装仕様</span>
+              </div>
+            </div>
+            <div class="session-theme" id="session-theme"></div>
+          </div>
+
+          <div class="interview-main">
+            <!-- Step: Interview -->
+            <div id="step-interview" class="step-content active">
+              <div class="chat-container" id="chat-container"></div>
+              <div class="chat-input-area">
+                <textarea id="chat-input" placeholder="回答を入力…" rows="2"
+                  onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendMessage();}"></textarea>
+                <button class="btn btn-primary" onclick="sendMessage()" id="btn-send">送信</button>
+              </div>
+              <div class="step-actions">
+                <button class="btn btn-secondary" onclick="runAnalysis()" id="btn-analyze" disabled>
+                  → ファクト抽出に進む
+                </button>
+              </div>
+            </div>
+
+            <!-- Step: Facts -->
+            <div id="step-facts" class="step-content">
+              <h2>抽出されたファクト</h2>
+              <div id="facts-container" class="cards-grid"></div>
+              <div class="step-actions">
+                <button class="btn btn-secondary" onclick="runHypotheses()" id="btn-hypotheses">
+                  → 仮説生成に進む
+                </button>
+              </div>
+            </div>
+
+            <!-- Step: Hypotheses -->
+            <div id="step-hypotheses" class="step-content">
+              <h2>仮説（反証付き）</h2>
+              <div id="hypotheses-container"></div>
+              <div class="step-actions">
+                <button class="btn btn-secondary" onclick="runPRD()" id="btn-prd">
+                  → PRD生成に進む
+                </button>
+              </div>
+            </div>
+
+            <!-- Step: PRD -->
+            <div id="step-prd" class="step-content">
+              <h2>PRD（プロダクト要件定義書）</h2>
+              <div id="prd-container"></div>
+              <div class="step-actions">
+                <button class="btn btn-secondary" onclick="runSpec()" id="btn-spec">
+                  → 実装仕様を生成
+                </button>
+              </div>
+            </div>
+
+            <!-- Step: Spec -->
+            <div id="step-spec" class="step-content">
+              <h2>実装仕様（コーディングエージェント向け）</h2>
+              <div id="spec-container"></div>
+              <div class="export-actions">
+                <button class="btn btn-primary" onclick="exportSpecJSON()">
+                  💾 spec.json をコピー
+                </button>
+                <button class="btn btn-secondary" onclick="exportPRDMarkdown()">
+                  📝 PRD.md をコピー
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <!-- Loading overlay -->
+  <div id="loading-overlay" class="loading-overlay hidden">
+    <div class="loading-spinner"></div>
+    <p id="loading-text">AIが分析中…</p>
+  </div>
+
+  <!-- Toast -->
+  <div id="toast" class="toast hidden"></div>
+
+  <script src="/app.js"></script>
+</body>
+</html>

@@ -147,6 +147,8 @@ const TRANSLATIONS = {
     'shared.tag': '共有済',
 
     // Next steps
+    'sidebar.campaign': 'キャンペーンURLを発行',
+    'toast.campaignUrl': 'キャンペーンURLをコピーしました',
     'next.title': '次のステップ：コーディングエージェントで実装を開始',
     'next.desc': 'エクスポートした spec.json / PRD.md をコーディングエージェントに渡すだけで、実装を開始できます。',
     'next.badge': 'おすすめ',
@@ -282,6 +284,8 @@ const TRANSLATIONS = {
     'shared.tag': 'Shared',
 
     // Next steps
+    'sidebar.campaign': 'Create campaign URL',
+    'toast.campaignUrl': 'Campaign URL copied',
     'next.title': 'Next: Start building with a coding agent',
     'next.desc': 'Just hand the exported spec.json / PRD.md to your coding agent to start implementation.',
     'next.badge': 'Recommended',
@@ -417,6 +421,8 @@ const TRANSLATIONS = {
     'shared.tag': 'Compartida',
 
     // Next steps
+    'sidebar.campaign': 'Crear URL de campaña',
+    'toast.campaignUrl': 'URL de campaña copiada',
     'next.title': 'Siguiente: Comienza a construir con un agente de código',
     'next.desc': 'Solo pasa el spec.json / PRD.md exportado a tu agente de código para comenzar la implementación.',
     'next.badge': 'Recomendado',

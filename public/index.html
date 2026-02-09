@@ -223,6 +223,9 @@
             <button class="btn btn-sm btn-secondary" style="width:100%;margin-top:12px" onclick="shareSession(currentSessionId)">
               <span data-i18n="sidebar.share">共有URLを発行</span>
             </button>
+            <button class="btn btn-sm btn-accent" style="width:100%;margin-top:8px" onclick="createCampaign(currentSessionId)">
+              <span data-i18n="sidebar.campaign">キャンペーンURLを発行</span>
+            </button>
           </div>
 
           <div class="interview-main">
@@ -373,7 +376,7 @@
                 <label data-i18n="shared.nameLabel">お名前（任意）</label>
                 <input type="text" id="shared-name" data-i18n="shared.namePlaceholder" placeholder="例：田中太郎">
               </div>
-              <button class="btn btn-primary btn-lg" onclick="startSharedInterview()" id="btn-shared-start">
+              <button class="btn btn-primary btn-lg" onclick="campaignToken ? startCampaignInterview() : startSharedInterview()" id="btn-shared-start">
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
                 <span data-i18n="shared.start">インタビューを始める</span>
               </button>
@@ -392,13 +395,13 @@
             <div class="chat-input-area">
               <textarea id="shared-chat-input" data-i18n="interview.placeholder" placeholder="回答を入力…" rows="2"
                 onkeydown="handleSharedKeydown(event)"></textarea>
-              <button class="btn btn-primary" onclick="sendSharedMessage()" id="btn-shared-send">
+              <button class="btn btn-primary" onclick="campaignToken ? sendCampaignMessage() : sendSharedMessage()" id="btn-shared-send">
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
               </button>
             </div>
             <div class="chat-hint" data-i18n="interview.hint">Shift + Enter で送信　・　Enter で改行</div>
             <div class="step-actions" id="shared-complete-actions" style="display:none">
-              <button class="btn btn-accent btn-lg" onclick="completeSharedInterview()">
+              <button class="btn btn-accent btn-lg" onclick="campaignToken ? completeCampaignInterview() : completeSharedInterview()">
                 <span data-i18n="shared.complete">インタビューを完了する →</span>
               </button>
             </div>
@@ -414,7 +417,7 @@
                 <label data-i18n="shared.feedbackLabel">フィードバック（任意）</label>
                 <textarea id="shared-feedback" data-i18n="shared.feedbackPlaceholder" placeholder="抽出内容への修正や追加コメントがあれば…" rows="3"></textarea>
               </div>
-              <button class="btn btn-primary btn-lg" onclick="submitSharedFeedback()" style="width:100%">
+              <button class="btn btn-primary btn-lg" onclick="campaignToken ? submitCampaignFeedback() : submitSharedFeedback()" style="width:100%">
                 <span data-i18n="shared.submit">送信して完了</span>
               </button>
             </div>

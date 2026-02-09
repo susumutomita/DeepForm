@@ -48,6 +48,20 @@ try { db.exec('ALTER TABLE sessions ADD COLUMN share_token TEXT'); } catch(e) {}
 try { db.exec('ALTER TABLE sessions ADD COLUMN respondent_name TEXT'); } catch(e) {}
 try { db.exec('ALTER TABLE sessions ADD COLUMN respondent_feedback TEXT'); } catch(e) {}
 try { db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_sessions_share_token ON sessions(share_token)'); } catch(e) {}
+try { db.exec('ALTER TABLE sessions ADD COLUMN campaign_id TEXT'); } catch(e) {}
+
+// Campaigns table: one theme, many respondent sessions
+db.exec(`
+  CREATE TABLE IF NOT EXISTS campaigns (
+    id TEXT PRIMARY KEY,
+    theme TEXT NOT NULL,
+    owner_session_id TEXT,
+    share_token TEXT UNIQUE NOT NULL,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (owner_session_id) REFERENCES sessions(id)
+  );
+`);
 
 // --- Middleware ---
 app.use(express.json({ limit: '10mb' }));
@@ -861,6 +875,288 @@ app.post('/api/shared/:token/feedback', (req, res) => {
     res.json({ ok: true });
   } catch (e) {
     console.error('Feedback error:', e);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// ==========================================
+// Campaign API (multi-respondent collection)
+// ==========================================
+
+// Create a campaign from a session
+app.post('/api/sessions/:id/campaign', (req, res) => {
+  try {
+    const session = db.prepare('SELECT * FROM sessions WHERE id = ?').get(req.params.id);
+    if (!session) return res.status(404).json({ error: 'Session not found' });
+
+    // Check if campaign already exists for this session
+    const existing = db.prepare('SELECT * FROM campaigns WHERE owner_session_id = ?').get(session.id);
+    if (existing) {
+      return res.json({
+        campaignId: existing.id,
+        shareToken: existing.share_token,
+        theme: existing.theme,
+      });
+    }
+
+    const campaignId = uuidv4();
+    const token = uuidv4().split('-')[0];
+    db.prepare('INSERT INTO campaigns (id, theme, owner_session_id, share_token) VALUES (?, ?, ?, ?)')
+      .run(campaignId, session.theme, session.id, token);
+
+    res.status(201).json({
+      campaignId,
+      shareToken: token,
+      theme: session.theme,
+    });
+  } catch (e) {
+    console.error('Create campaign error:', e);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// Get campaign info (public)
+app.get('/api/campaigns/:token', (req, res) => {
+  try {
+    const campaign = db.prepare('SELECT * FROM campaigns WHERE share_token = ?').get(req.params.token);
+    if (!campaign) return res.status(404).json({ error: 'Campaign not found' });
+
+    const respondents = db.prepare(`
+      SELECT s.id, s.respondent_name, s.status, s.created_at,
+        (SELECT COUNT(*) FROM messages WHERE session_id = s.id AND role = 'user') as message_count
+      FROM sessions s WHERE s.campaign_id = ? ORDER BY s.created_at DESC
+    `).all(campaign.id);
+
+    res.json({
+      campaignId: campaign.id,
+      theme: campaign.theme,
+      shareToken: campaign.share_token,
+      ownerSessionId: campaign.owner_session_id,
+      respondentCount: respondents.length,
+      respondents,
+      createdAt: campaign.created_at,
+    });
+  } catch (e) {
+    console.error('Get campaign error:', e);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// Join a campaign: create a new respondent session
+app.post('/api/campaigns/:token/join', async (req, res) => {
+  try {
+    const { respondentName } = req.body;
+    const campaign = db.prepare('SELECT * FROM campaigns WHERE share_token = ?').get(req.params.token);
+    if (!campaign) return res.status(404).json({ error: 'Campaign not found' });
+
+    // Create a new session for this respondent
+    const sessionId = uuidv4();
+    db.prepare(`
+      INSERT INTO sessions (id, theme, status, mode, respondent_name, campaign_id)
+      VALUES (?, ?, 'interviewing', 'campaign_respondent', ?, ?)
+    `).run(sessionId, campaign.theme, respondentName || null, campaign.id);
+
+    // Generate first interview question
+    const systemPrompt = `あなたは熟練のデプスインタビュアーです。これからユーザーの課題テーマについて深掘りインタビューを開始します。
+
+テーマ: 「${campaign.theme}」
+${respondentName ? `回答者: ${respondentName}さん` : ''}
+
+最初の質問を1つだけ聞いてください。テーマについて、まず現状の状況を理解するための質問をしてください。
+共感的で親しみやすいトーンで、日本語で話してください。200文字以内で。`;
+
+    const response = await callClaude(
+      [{ role: 'user', content: `テーマ「${campaign.theme}」についてインタビューを始めてください。` }],
+      systemPrompt,
+      512
+    );
+    const reply = extractText(response);
+
+    db.prepare('INSERT INTO messages (session_id, role, content) VALUES (?, ?, ?)').run(sessionId, 'assistant', reply);
+
+    res.status(201).json({ sessionId, reply, theme: campaign.theme });
+  } catch (e) {
+    console.error('Join campaign error:', e);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// Chat in campaign respondent session
+app.post('/api/campaigns/:token/sessions/:sessionId/chat', async (req, res) => {
+  try {
+    const { message } = req.body;
+    const campaign = db.prepare('SELECT * FROM campaigns WHERE share_token = ?').get(req.params.token);
+    if (!campaign) return res.status(404).json({ error: 'Campaign not found' });
+
+    const session = db.prepare('SELECT * FROM sessions WHERE id = ? AND campaign_id = ?').get(req.params.sessionId, campaign.id);
+    if (!session) return res.status(404).json({ error: 'Session not found' });
+
+    if (session.status === 'respondent_done') {
+      return res.status(400).json({ error: 'このインタビューは既に完了しています' });
+    }
+
+    db.prepare('INSERT INTO messages (session_id, role, content) VALUES (?, ?, ?)').run(session.id, 'user', message);
+    db.prepare('UPDATE sessions SET updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(session.id);
+
+    const allMessages = db.prepare('SELECT role, content FROM messages WHERE session_id = ? ORDER BY created_at').all(session.id);
+    const chatMessages = allMessages.map(m => ({ role: m.role, content: m.content }));
+    const turnCount = allMessages.filter(m => m.role === 'user').length;
+
+    const systemPrompt = `あなたは熟練のデプスインタビュアーです。ユーザーの課題テーマについて深掘りインタビューを行います。
+
+テーマ: 「${campaign.theme}」
+
+ルール：
+1. 一度に1つの質問だけ聞く
+2. 具体的なエピソードを引き出す
+3. 頻度・困り度・現在の回避策を必ず聞く
+4. 抽象的な回答には「具体的には？」で掘り下げる
+5. 共感を示しながら深掘りする
+6. 日本語で回答する
+7. 回答は簡潔に、200文字以内で
+
+${turnCount >= 5 ? '十分な情報が集まりました。最後にまとめの質問をして、回答の最後に「[INTERVIEW_COMPLETE]」タグを付けてください。' : ''}`;
+
+    const response = await callClaude(chatMessages, systemPrompt, 1024);
+    const reply = extractText(response);
+
+    db.prepare('INSERT INTO messages (session_id, role, content) VALUES (?, ?, ?)').run(session.id, 'assistant', reply);
+
+    const isComplete = reply.includes('[INTERVIEW_COMPLETE]') || turnCount >= 8;
+    const cleanReply = reply.replace('[INTERVIEW_COMPLETE]', '').trim();
+
+    res.json({ reply: cleanReply, turnCount, isComplete });
+  } catch (e) {
+    console.error('Campaign chat error:', e);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// Complete campaign respondent session
+app.post('/api/campaigns/:token/sessions/:sessionId/complete', async (req, res) => {
+  try {
+    const campaign = db.prepare('SELECT * FROM campaigns WHERE share_token = ?').get(req.params.token);
+    if (!campaign) return res.status(404).json({ error: 'Campaign not found' });
+
+    const session = db.prepare('SELECT * FROM sessions WHERE id = ? AND campaign_id = ?').get(req.params.sessionId, campaign.id);
+    if (!session) return res.status(404).json({ error: 'Session not found' });
+
+    const messages = db.prepare('SELECT role, content FROM messages WHERE session_id = ? ORDER BY created_at').all(session.id);
+    const transcript = messages.map(m => `${m.role === 'user' ? '回答者' : 'インタビュアー'}: ${m.content}`).join('\n\n');
+
+    const systemPrompt = `あなたは定性調査の分析エキスパートです。以下のデプスインタビュー記録からファクトを抽出してください。
+
+必ず以下のJSON形式で返してください。JSON以外のテキストは含めないでください。
+
+{
+  "facts": [
+    {
+      "id": "F1",
+      "type": "fact",
+      "content": "抽出した内容",
+      "evidence": "元の発話を引用",
+      "severity": "high"
+    }
+  ]
+}
+
+typeは "fact"（事実）, "pain"（困りごと）, "frequency"（頻度）, "workaround"（回避策）のいずれか。
+severityは "high", "medium", "low" のいずれか。
+最低5つ、最大15個のファクトを抽出してください。`;
+
+    const response = await callClaude(
+      [{ role: 'user', content: `以下のインタビュー記録を分析してください：\n\n${transcript}` }],
+      systemPrompt,
+      4096
+    );
+    const text = extractText(response);
+
+    let facts;
+    try {
+      const jsonMatch = text.match(/\{[\s\S]*\}/);
+      facts = JSON.parse(jsonMatch[0]);
+    } catch (e) {
+      facts = { facts: [{ id: 'F1', type: 'fact', content: text, evidence: '', severity: 'medium' }] };
+    }
+
+    const existingAnalysis = db.prepare('SELECT id FROM analysis_results WHERE session_id = ? AND type = ?').get(session.id, 'facts');
+    if (existingAnalysis) {
+      db.prepare('UPDATE analysis_results SET data = ?, created_at = CURRENT_TIMESTAMP WHERE id = ?').run(JSON.stringify(facts), existingAnalysis.id);
+    } else {
+      db.prepare('INSERT INTO analysis_results (session_id, type, data) VALUES (?, ?, ?)').run(session.id, 'facts', JSON.stringify(facts));
+    }
+
+    db.prepare('UPDATE sessions SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run('respondent_done', session.id);
+    db.prepare('UPDATE campaigns SET updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(campaign.id);
+
+    res.json(facts);
+  } catch (e) {
+    console.error('Campaign complete error:', e);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// Save feedback for campaign respondent
+app.post('/api/campaigns/:token/sessions/:sessionId/feedback', (req, res) => {
+  try {
+    const { feedback } = req.body;
+    const campaign = db.prepare('SELECT * FROM campaigns WHERE share_token = ?').get(req.params.token);
+    if (!campaign) return res.status(404).json({ error: 'Campaign not found' });
+
+    const session = db.prepare('SELECT * FROM sessions WHERE id = ? AND campaign_id = ?').get(req.params.sessionId, campaign.id);
+    if (!session) return res.status(404).json({ error: 'Session not found' });
+
+    db.prepare('UPDATE sessions SET respondent_feedback = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?')
+      .run(feedback, session.id);
+
+    res.json({ ok: true });
+  } catch (e) {
+    console.error('Campaign feedback error:', e);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// Aggregate all respondent facts for a campaign
+app.get('/api/campaigns/:token/aggregate', async (req, res) => {
+  try {
+    const campaign = db.prepare('SELECT * FROM campaigns WHERE share_token = ?').get(req.params.token);
+    if (!campaign) return res.status(404).json({ error: 'Campaign not found' });
+
+    const sessions = db.prepare(`
+      SELECT s.id, s.respondent_name, s.status, s.respondent_feedback,
+        ar.data as facts_data
+      FROM sessions s
+      LEFT JOIN analysis_results ar ON ar.session_id = s.id AND ar.type = 'facts'
+      WHERE s.campaign_id = ? AND s.status = 'respondent_done'
+      ORDER BY s.created_at
+    `).all(campaign.id);
+
+    const allFacts = [];
+    const respondents = [];
+    for (const s of sessions) {
+      const facts = s.facts_data ? JSON.parse(s.facts_data) : { facts: [] };
+      const factList = facts.facts || facts;
+      respondents.push({
+        sessionId: s.id,
+        name: s.respondent_name || '匿名',
+        factCount: factList.length,
+        feedback: s.respondent_feedback,
+      });
+      for (const f of factList) {
+        allFacts.push({ ...f, respondent: s.respondent_name || '匿名', sessionId: s.id });
+      }
+    }
+
+    res.json({
+      campaignId: campaign.id,
+      theme: campaign.theme,
+      totalRespondents: sessions.length,
+      totalFacts: allFacts.length,
+      respondents,
+      allFacts,
+    });
+  } catch (e) {
+    console.error('Aggregate error:', e);
     res.status(500).json({ error: e.message });
   }
 });

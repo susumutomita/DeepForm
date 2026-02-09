@@ -857,6 +857,14 @@ async function shareSession(sessionId) {
 
 // --- Init ---
 (function init() {
+  // Apply i18n translations and set active lang button
+  if (typeof applyTranslations === 'function') {
+    applyTranslations();
+    document.querySelectorAll('.lang-btn').forEach(b => {
+      b.classList.toggle('active', b.dataset.lang === currentLang);
+    });
+  }
+
   // Check if URL is a shared interview
   const pathMatch = window.location.pathname.match(/^\/i\/([a-z0-9]+)$/i);
   if (pathMatch) {

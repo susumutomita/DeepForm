@@ -145,6 +145,23 @@ const TRANSLATIONS = {
     // Typing
     'chat.thinking': '考え中',
     'shared.tag': '共有済',
+
+    // Next steps
+    'next.title': '次のステップ：コーディングエージェントで実装を開始',
+    'next.desc': 'エクスポートした spec.json / PRD.md をコーディングエージェントに渡すだけで、実装を開始できます。',
+    'next.badge': 'おすすめ',
+    'next.exe.title': 'exe.dev + Shelley',
+    'next.exe.desc': 'VM上のShelleyに spec.json を貼り付けるだけ。環境構築からデプロイまで一気に実行。',
+    'next.exe.code': 'spec.json を貼って「これを実装して」',
+    'next.claude.title': 'Claude Code',
+    'next.claude.desc': 'ローカル環境で PRD.md をリポジトリに置いて、Claude Code で実装を開始。',
+    'next.claude.code': 'PRD.md をリポジトリルートに配置',
+    'next.cursor.title': 'Cursor',
+    'next.cursor.desc': 'Cursor のチャットに spec.json を貼り付けて、対話しながら実装。',
+    'next.cursor.code': 'spec.json を Composer に貼り付け',
+    'next.other.title': 'その他のエージェント',
+    'next.other.desc': 'GitHub Copilot, Devin, Cline, Windsurf など、任意のコーディングエージェントで利用可能。',
+    'next.other.code': 'spec.json は標準JSON形式',
   },
 
   en: {
@@ -263,6 +280,23 @@ const TRANSLATIONS = {
     'hypo.feedback': 'Respondent feedback',
     'chat.thinking': 'Thinking',
     'shared.tag': 'Shared',
+
+    // Next steps
+    'next.title': 'Next: Start building with a coding agent',
+    'next.desc': 'Just hand the exported spec.json / PRD.md to your coding agent to start implementation.',
+    'next.badge': 'Recommended',
+    'next.exe.title': 'exe.dev + Shelley',
+    'next.exe.desc': 'Paste spec.json into Shelley on a VM. From setup to deploy, all in one shot.',
+    'next.exe.code': 'Paste spec.json and say "implement this"',
+    'next.claude.title': 'Claude Code',
+    'next.claude.desc': 'Place PRD.md in your repo and start implementing with Claude Code locally.',
+    'next.claude.code': 'Place PRD.md at repository root',
+    'next.cursor.title': 'Cursor',
+    'next.cursor.desc': 'Paste spec.json into Cursor\'s chat and build interactively.',
+    'next.cursor.code': 'Paste spec.json into Composer',
+    'next.other.title': 'Other agents',
+    'next.other.desc': 'Compatible with GitHub Copilot, Devin, Cline, Windsurf, and any coding agent.',
+    'next.other.code': 'spec.json is standard JSON',
   },
 
   es: {
@@ -381,6 +415,23 @@ const TRANSLATIONS = {
     'hypo.feedback': 'Retroalimentación del encuestado',
     'chat.thinking': 'Pensando',
     'shared.tag': 'Compartida',
+
+    // Next steps
+    'next.title': 'Siguiente: Comienza a construir con un agente de código',
+    'next.desc': 'Solo pasa el spec.json / PRD.md exportado a tu agente de código para comenzar la implementación.',
+    'next.badge': 'Recomendado',
+    'next.exe.title': 'exe.dev + Shelley',
+    'next.exe.desc': 'Pega spec.json en Shelley en una VM. Desde configuración hasta despliegue, todo de una vez.',
+    'next.exe.code': 'Pega spec.json y di "implementa esto"',
+    'next.claude.title': 'Claude Code',
+    'next.claude.desc': 'Coloca PRD.md en tu repositorio y comienza a implementar con Claude Code localmente.',
+    'next.claude.code': 'Coloca PRD.md en la raíz del repositorio',
+    'next.cursor.title': 'Cursor',
+    'next.cursor.desc': 'Pega spec.json en el chat de Cursor y construye interactivamente.',
+    'next.cursor.code': 'Pega spec.json en Composer',
+    'next.other.title': 'Otros agentes',
+    'next.other.desc': 'Compatible con GitHub Copilot, Devin, Cline, Windsurf y cualquier agente de código.',
+    'next.other.code': 'spec.json es JSON estándar',
   },
 };
 

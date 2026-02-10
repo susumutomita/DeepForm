@@ -1,18 +1,20 @@
-import { Hono } from 'hono';
+import { Hono, type Context } from 'hono';
 import crypto from 'node:crypto';
 import { db } from '../db.js';
 import { callClaude, extractText } from '../llm.js';
 import type { Session, Message, AnalysisResult, Campaign, User } from '../types.js';
 
-const sessionRoutes = new Hono<{ Variables: { user: User | null } }>();
+type AppEnv = { Variables: { user: User | null } };
+const sessionRoutes = new Hono<AppEnv>();
 
 // ---------------------------------------------------------------------------
 // Helper: ownership check for session-specific endpoints
 // ---------------------------------------------------------------------------
 
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-function getOwnedSession(c: any): Session | Response {
-  const user = c.get('user') as User | null;
+function getOwnedSession(c: Context<AppEnv, any>): Session | Response {
+  const user = c.get('user');
   if (!user) return c.json({ error: 'ログインが必要です' }, 401);
   const session = db.prepare('SELECT * FROM sessions WHERE id = ?').get(c.req.param('id')) as Session | undefined;
   if (!session) return c.json({ error: 'Session not found' }, 404);

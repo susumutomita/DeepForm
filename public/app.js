@@ -13,6 +13,45 @@ function handleChatKeydown(event) {
 let currentSessionId = null;
 let currentSession = null;
 
+// Auth state
+let currentUser = null;
+
+async function checkAuth() {
+  try {
+    const res = await fetch('/api/auth/me');
+    const data = await res.json();
+    currentUser = data.user;
+    updateAuthUI();
+  } catch (e) {
+    currentUser = null;
+    updateAuthUI();
+  }
+}
+
+function updateAuthUI() {
+  const loginBtn = document.getElementById('login-btn');
+  const userInfo = document.getElementById('user-info');
+  const userAvatar = document.getElementById('user-avatar');
+  const userName = document.getElementById('user-name');
+
+  if (currentUser) {
+    if (loginBtn) loginBtn.style.display = 'none';
+    if (userInfo) userInfo.style.display = 'flex';
+    if (userAvatar) userAvatar.src = currentUser.avatarUrl || '';
+    if (userName) userName.textContent = currentUser.githubLogin;
+  } else {
+    if (loginBtn) loginBtn.style.display = 'inline-flex';
+    if (userInfo) userInfo.style.display = 'none';
+  }
+}
+
+async function logout() {
+  await fetch('/api/auth/logout', { method: 'POST' });
+  currentUser = null;
+  updateAuthUI();
+  loadSessions();
+}
+
 // --- Navigation ---
 function showHome() {
   document.getElementById('page-home').classList.add('active');
@@ -51,6 +90,7 @@ async function loadSessions() {
           </div>
         </div>
         <div class="session-card-actions">
+          ${currentUser && s.user_id === currentUser.id ? `<button class="btn-visibility btn-sm" onclick="event.stopPropagation(); toggleVisibility('${s.id}', ${!s.is_public})">${s.is_public ? '\uD83D\uDD13 ' + t('session.public') : '\uD83D\uDD12 ' + t('session.private')}</button>` : ''}
           <span class="status-badge status-${s.display_status || s.status}">${statusLabel(s.display_status || s.status)}</span>
           <button class="btn btn-sm btn-secondary" onclick="event.stopPropagation(); shareSession('${s.id}')" title="共有URLをコピー">&#8599;</button>
         </div>
@@ -58,6 +98,19 @@ async function loadSessions() {
     `).join('');
   } catch (e) {
     console.error('Failed to load sessions:', e);
+  }
+}
+
+async function toggleVisibility(sessionId, newState) {
+  try {
+    await fetch(`/api/sessions/${sessionId}/visibility`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ is_public: newState }),
+    });
+    loadSessions();
+  } catch (e) {
+    showToast(e.message, true);
   }
 }
 
@@ -1116,6 +1169,9 @@ async function submitCampaignFeedback() {
       b.classList.toggle('active', b.dataset.lang === currentLang);
     });
   }
+
+  // Check auth state
+  checkAuth();
 
   // Check if URL is a shared interview or campaign
   const sharedMatch = window.location.pathname.match(/^\/i\/([a-z0-9]+)$/i);

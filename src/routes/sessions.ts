@@ -2,9 +2,27 @@ import { Hono } from 'hono';
 import crypto from 'node:crypto';
 import { db } from '../db.js';
 import { callClaude, extractText } from '../llm.js';
-import type { Session, Message, AnalysisResult, Campaign } from '../types.js';
+import type { Session, Message, AnalysisResult, Campaign, User } from '../types.js';
 
-const sessionRoutes = new Hono();
+const sessionRoutes = new Hono<{ Variables: { user: User | null } }>();
+
+// ---------------------------------------------------------------------------
+// Helper: ownership check for session-specific endpoints
+// ---------------------------------------------------------------------------
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function getOwnedSession(c: any): Session | Response {
+  const user = c.get('user') as User | null;
+  if (!user) return c.json({ error: 'ログインが必要です' }, 401);
+  const session = db.prepare('SELECT * FROM sessions WHERE id = ?').get(c.req.param('id')) as Session | undefined;
+  if (!session) return c.json({ error: 'Session not found' }, 404);
+  if (session.user_id !== user.id) return c.json({ error: 'アクセス権限がありません' }, 403);
+  return session;
+}
+
+function isResponse(result: Session | Response): result is Response {
+  return result instanceof Response;
+}
 
 // ---------------------------------------------------------------------------
 // Helper: generate PRD markdown
@@ -61,15 +79,18 @@ ${(prd.metrics || []).map((m: any) => `| ${m.name} | ${m.definition} | ${m.targe
 // Session CRUD
 // ---------------------------------------------------------------------------
 
-// 1. POST /sessions — Create session with theme
+// 1. POST /sessions — Create session with theme (requires login)
 sessionRoutes.post('/sessions', async (c) => {
   try {
+    const user = c.get('user');
+    if (!user) return c.json({ error: 'ログインが必要です' }, 401);
+
     const { theme } = await c.req.json<{ theme?: string }>();
     if (!theme || !theme.trim()) {
       return c.json({ error: 'テーマを入力してください' }, 400);
     }
     const id = crypto.randomUUID();
-    db.prepare('INSERT INTO sessions (id, theme) VALUES (?, ?)').run(id, theme.trim());
+    db.prepare('INSERT INTO sessions (id, theme, user_id) VALUES (?, ?, ?)').run(id, theme.trim(), user.id);
     return c.json({ sessionId: id, theme: theme.trim() });
   } catch (e) {
     console.error('Create session error:', e);
@@ -77,12 +98,20 @@ sessionRoutes.post('/sessions', async (c) => {
   }
 });
 
-// 2. GET /sessions — List all sessions with message counts
+// 2. GET /sessions — List sessions (own + public if logged in, public only otherwise)
 sessionRoutes.get('/sessions', (c) => {
   try {
-    const sessions = db.prepare(
-      'SELECT s.*, COUNT(m.id) as message_count FROM sessions s LEFT JOIN messages m ON s.id = m.session_id GROUP BY s.id ORDER BY s.updated_at DESC'
-    ).all() as (Session & { message_count: number; display_status?: string })[];
+    const user = c.get('user');
+    let sessions: (Session & { message_count: number; display_status?: string })[];
+    if (user) {
+      sessions = db.prepare(
+        'SELECT s.*, COUNT(m.id) as message_count FROM sessions s LEFT JOIN messages m ON s.id = m.session_id WHERE s.user_id = ? OR s.is_public = 1 GROUP BY s.id ORDER BY s.updated_at DESC'
+      ).all(user.id) as (Session & { message_count: number; display_status?: string })[];
+    } else {
+      sessions = db.prepare(
+        'SELECT s.*, COUNT(m.id) as message_count FROM sessions s LEFT JOIN messages m ON s.id = m.session_id WHERE s.is_public = 1 GROUP BY s.id ORDER BY s.updated_at DESC'
+      ).all() as (Session & { message_count: number; display_status?: string })[];
+    }
     sessions.forEach((s) => {
       if (s.status === 'respondent_done') s.display_status = 'analyzed';
     });
@@ -93,12 +122,18 @@ sessionRoutes.get('/sessions', (c) => {
   }
 });
 
-// 3. GET /sessions/:id — Get session with messages & analysis
+// 3. GET /sessions/:id — Get session with messages & analysis (owner or public)
 sessionRoutes.get('/sessions/:id', (c) => {
   try {
     const id = c.req.param('id');
+    const user = c.get('user');
     const session = db.prepare('SELECT * FROM sessions WHERE id = ?').get(id) as Session | undefined;
     if (!session) return c.json({ error: 'Session not found' }, 404);
+
+    // Access control: owner or public
+    const isOwner = user && session.user_id === user.id;
+    const isPublic = session.is_public === 1;
+    if (!isOwner && !isPublic) return c.json({ error: 'アクセス権限がありません' }, 403);
 
     const messages = db.prepare('SELECT * FROM messages WHERE session_id = ? ORDER BY created_at').all(id) as Message[];
     const analyses = db.prepare('SELECT * FROM analysis_results WHERE session_id = ? ORDER BY created_at').all(id) as AnalysisResult[];
@@ -115,10 +150,13 @@ sessionRoutes.get('/sessions/:id', (c) => {
   }
 });
 
-// 4. DELETE /sessions/:id — Delete session + related data
+// 4. DELETE /sessions/:id — Delete session + related data (owner only)
 sessionRoutes.delete('/sessions/:id', (c) => {
   try {
-    const id = c.req.param('id');
+    const result = getOwnedSession(c);
+    if (isResponse(result)) return result;
+
+    const id = result.id;
     db.prepare('DELETE FROM analysis_results WHERE session_id = ?').run(id);
     db.prepare('DELETE FROM messages WHERE session_id = ?').run(id);
     db.prepare('DELETE FROM sessions WHERE id = ?').run(id);
@@ -129,16 +167,35 @@ sessionRoutes.delete('/sessions/:id', (c) => {
   }
 });
 
+// 4b. PATCH /sessions/:id/visibility — Toggle public/private (owner only)
+sessionRoutes.patch('/sessions/:id/visibility', async (c) => {
+  try {
+    const result = getOwnedSession(c);
+    if (isResponse(result)) return result;
+
+    const { is_public } = await c.req.json<{ is_public: boolean }>();
+    const value = is_public ? 1 : 0;
+    db.prepare('UPDATE sessions SET is_public = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(value, result.id);
+
+    const updated = db.prepare('SELECT * FROM sessions WHERE id = ?').get(result.id) as Session;
+    return c.json(updated);
+  } catch (e) {
+    console.error('Visibility toggle error:', e);
+    return c.json({ error: (e as Error).message }, 500);
+  }
+});
+
 // ---------------------------------------------------------------------------
 // Interview Flow
 // ---------------------------------------------------------------------------
 
-// 5. POST /sessions/:id/start — Get first interview question from LLM
+// 5. POST /sessions/:id/start — Get first interview question from LLM (owner only)
 sessionRoutes.post('/sessions/:id/start', async (c) => {
   try {
-    const id = c.req.param('id');
-    const session = db.prepare('SELECT * FROM sessions WHERE id = ?').get(id) as Session | undefined;
-    if (!session) return c.json({ error: 'Session not found' }, 404);
+    const result = getOwnedSession(c);
+    if (isResponse(result)) return result;
+    const session = result;
+    const id = session.id;
 
     const existingMessages = db.prepare('SELECT COUNT(*) as count FROM messages WHERE session_id = ?').get(id) as { count: number };
     if (existingMessages.count > 0) {
@@ -168,13 +225,14 @@ sessionRoutes.post('/sessions/:id/start', async (c) => {
   }
 });
 
-// 6. POST /sessions/:id/chat — Send message, get AI reply
+// 6. POST /sessions/:id/chat — Send message, get AI reply (owner only)
 sessionRoutes.post('/sessions/:id/chat', async (c) => {
   try {
-    const id = c.req.param('id');
+    const result = getOwnedSession(c);
+    if (isResponse(result)) return result;
+    const session = result;
+    const id = session.id;
     const { message } = await c.req.json<{ message: string }>();
-    const session = db.prepare('SELECT * FROM sessions WHERE id = ?').get(id) as Session | undefined;
-    if (!session) return c.json({ error: 'Session not found' }, 404);
 
     // Save user message
     db.prepare('INSERT INTO messages (session_id, role, content) VALUES (?, ?, ?)').run(id, 'user', message);
@@ -217,12 +275,13 @@ ${turnCount >= 5 ? '十分な情報が集まりました。最後にまとめの
   }
 });
 
-// 7. POST /sessions/:id/analyze — Extract facts from transcript
+// 7. POST /sessions/:id/analyze — Extract facts from transcript (owner only)
 sessionRoutes.post('/sessions/:id/analyze', async (c) => {
   try {
-    const id = c.req.param('id');
-    const session = db.prepare('SELECT * FROM sessions WHERE id = ?').get(id) as Session | undefined;
-    if (!session) return c.json({ error: 'Session not found' }, 404);
+    const result = getOwnedSession(c);
+    if (isResponse(result)) return result;
+    const session = result;
+    const id = session.id;
 
     const messages = db.prepare('SELECT role, content FROM messages WHERE session_id = ? ORDER BY created_at').all(id) as { role: string; content: string }[];
     const transcript = messages.map((m) => `${m.role === 'user' ? '回答者' : 'インタビュアー'}: ${m.content}`).join('\n\n');
@@ -279,12 +338,13 @@ severityは "high", "medium", "low" のいずれか。
   }
 });
 
-// 8. POST /sessions/:id/hypotheses — Generate hypotheses from facts
+// 8. POST /sessions/:id/hypotheses — Generate hypotheses from facts (owner only)
 sessionRoutes.post('/sessions/:id/hypotheses', async (c) => {
   try {
-    const id = c.req.param('id');
-    const session = db.prepare('SELECT * FROM sessions WHERE id = ?').get(id) as Session | undefined;
-    if (!session) return c.json({ error: 'Session not found' }, 404);
+    const result = getOwnedSession(c);
+    if (isResponse(result)) return result;
+    const session = result;
+    const id = session.id;
 
     const factsRow = db.prepare('SELECT data FROM analysis_results WHERE session_id = ? AND type = ?').get(id, 'facts') as { data: string } | undefined;
     if (!factsRow) return c.json({ error: 'ファクト抽出を先に実行してください' }, 400);
@@ -344,12 +404,13 @@ sessionRoutes.post('/sessions/:id/hypotheses', async (c) => {
   }
 });
 
-// 9. POST /sessions/:id/prd — Generate PRD from facts & hypotheses
+// 9. POST /sessions/:id/prd — Generate PRD from facts & hypotheses (owner only)
 sessionRoutes.post('/sessions/:id/prd', async (c) => {
   try {
-    const id = c.req.param('id');
-    const session = db.prepare('SELECT * FROM sessions WHERE id = ?').get(id) as Session | undefined;
-    if (!session) return c.json({ error: 'Session not found' }, 404);
+    const result = getOwnedSession(c);
+    if (isResponse(result)) return result;
+    const session = result;
+    const id = session.id;
 
     const factsRow = db.prepare('SELECT data FROM analysis_results WHERE session_id = ? AND type = ?').get(id, 'facts') as { data: string } | undefined;
     const hypothesesRow = db.prepare('SELECT data FROM analysis_results WHERE session_id = ? AND type = ?').get(id, 'hypotheses') as { data: string } | undefined;
@@ -473,12 +534,13 @@ sessionRoutes.post('/sessions/:id/prd', async (c) => {
   }
 });
 
-// 10. POST /sessions/:id/spec — Generate spec from PRD (includes generatePRDMarkdown helper)
+// 10. POST /sessions/:id/spec — Generate spec from PRD (owner only)
 sessionRoutes.post('/sessions/:id/spec', async (c) => {
   try {
-    const id = c.req.param('id');
-    const session = db.prepare('SELECT * FROM sessions WHERE id = ?').get(id) as Session | undefined;
-    if (!session) return c.json({ error: 'Session not found' }, 404);
+    const result = getOwnedSession(c);
+    if (isResponse(result)) return result;
+    const session = result;
+    const id = session.id;
 
     const prdRow = db.prepare('SELECT data FROM analysis_results WHERE session_id = ? AND type = ?').get(id, 'prd') as { data: string } | undefined;
     if (!prdRow) return c.json({ error: '先にPRD生成を実行してください' }, 400);
@@ -577,12 +639,12 @@ sessionRoutes.post('/sessions/:id/spec', async (c) => {
 // Sharing
 // ---------------------------------------------------------------------------
 
-// 11. POST /sessions/:id/share — Generate share token
+// 11. POST /sessions/:id/share — Generate share token (owner only)
 sessionRoutes.post('/sessions/:id/share', (c) => {
   try {
-    const id = c.req.param('id');
-    const session = db.prepare('SELECT * FROM sessions WHERE id = ?').get(id) as Session | undefined;
-    if (!session) return c.json({ error: 'Session not found' }, 404);
+    const result = getOwnedSession(c);
+    if (isResponse(result)) return result;
+    const session = result;
 
     if (session.share_token) {
       return c.json({ shareToken: session.share_token, theme: session.theme });
@@ -590,7 +652,7 @@ sessionRoutes.post('/sessions/:id/share', (c) => {
 
     // Generate short readable token
     const token = crypto.randomUUID().split('-')[0];
-    db.prepare('UPDATE sessions SET share_token = ?, mode = ? WHERE id = ?').run(token, 'shared', id);
+    db.prepare('UPDATE sessions SET share_token = ?, mode = ? WHERE id = ?').run(token, 'shared', session.id);
 
     return c.json({ shareToken: token, theme: session.theme });
   } catch (e) {
@@ -802,12 +864,12 @@ sessionRoutes.post('/shared/:token/feedback', async (c) => {
 // Campaigns
 // ---------------------------------------------------------------------------
 
-// 17. POST /sessions/:id/campaign — Create campaign from session
+// 17. POST /sessions/:id/campaign — Create campaign from session (owner only)
 sessionRoutes.post('/sessions/:id/campaign', (c) => {
   try {
-    const id = c.req.param('id');
-    const session = db.prepare('SELECT * FROM sessions WHERE id = ?').get(id) as Session | undefined;
-    if (!session) return c.json({ error: 'Session not found' }, 404);
+    const result = getOwnedSession(c);
+    if (isResponse(result)) return result;
+    const session = result;
 
     // Check if campaign already exists for this session
     const existing = db.prepare('SELECT * FROM campaigns WHERE owner_session_id = ?').get(session.id) as Campaign | undefined;

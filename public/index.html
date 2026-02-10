@@ -29,6 +29,14 @@
             <button class="lang-btn" data-lang="es" onclick="setLang('es')">ES</button>
           </div>
           <a href="#how-it-works" class="nav-link" data-i18n="nav.howItWorks" onclick="document.getElementById('how-it-works')?.scrollIntoView({behavior:'smooth'}); return false;">How it works</a>
+          <div id="auth-container">
+            <button id="login-btn" class="btn-github" onclick="location.href='/api/auth/github'" data-i18n="auth.login">GitHub でログイン</button>
+            <div id="user-info" style="display:none">
+              <img id="user-avatar" class="avatar" />
+              <span id="user-name"></span>
+              <button id="logout-btn" class="btn-secondary btn-sm" onclick="logout()" data-i18n="auth.logout">ログアウト</button>
+            </div>
+          </div>
           <button class="btn btn-sm btn-primary" data-i18n="nav.start" onclick="document.getElementById('theme-input')?.focus(); document.getElementById('page-home')?.classList.add('active'); window.scrollTo({top:0,behavior:'smooth'});">始める</button>
         </nav>
       </div>

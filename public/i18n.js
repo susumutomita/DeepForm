@@ -146,6 +146,13 @@ const TRANSLATIONS = {
     'chat.thinking': '考え中',
     'shared.tag': '共有済',
 
+    // Auth
+    'auth.login': 'GitHub でログイン',
+    'auth.logout': 'ログアウト',
+    'auth.loginRequired': 'セッションを作成するにはログインしてください',
+    'session.public': '公開',
+    'session.private': '非公開',
+
     // Next steps
     'sidebar.campaign': 'キャンペーンURLを発行',
     'toast.campaignUrl': 'キャンペーンURLをコピーしました',
@@ -304,6 +311,13 @@ const TRANSLATIONS = {
     'chat.thinking': 'Thinking',
     'shared.tag': 'Shared',
 
+    // Auth
+    'auth.login': 'Sign in with GitHub',
+    'auth.logout': 'Sign out',
+    'auth.loginRequired': 'Please sign in to create sessions',
+    'session.public': 'Public',
+    'session.private': 'Private',
+
     // Next steps
     'sidebar.campaign': 'Create campaign URL',
     'toast.campaignUrl': 'Campaign URL copied',
@@ -456,6 +470,13 @@ const TRANSLATIONS = {
     'hypo.feedback': 'Retroalimentación del encuestado',
     'chat.thinking': 'Pensando',
     'shared.tag': 'Compartida',
+
+    // Auth
+    'auth.login': 'Iniciar sesión con GitHub',
+    'auth.logout': 'Cerrar sesión',
+    'auth.loginRequired': 'Inicie sesión para crear sesiones',
+    'session.public': 'Público',
+    'session.private': 'Privado',
 
     // Next steps
     'sidebar.campaign': 'Crear URL de campaña',

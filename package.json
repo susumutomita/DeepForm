@@ -16,7 +16,7 @@
     "@hono/oauth-providers": "^0.8.5",
     "better-sqlite3": "^11.0.0",
     "hono": "^4.11.9",
-    "uuid": "^9.0.0"
+    "uuid": "^13.0.0"
   },
   "devDependencies": {
     "@textlint-ja/textlint-rule-preset-ai-writing": "^1.6.1",

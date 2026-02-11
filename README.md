@@ -1,126 +1,167 @@
+<div align="center">
+
+<img src="https://img.shields.io/badge/AI-Depth_Interview-81a2be?style=for-the-badge" alt="AI Depth Interview">
+<img src="https://img.shields.io/badge/spec.json-Export-8c9440?style=for-the-badge" alt="spec.json Export">
+<img src="https://img.shields.io/badge/exe.dev-Powered-de935f?style=for-the-badge" alt="exe.dev Powered">
+
 # DeepForm
 
-AI デプスインタビューから実装仕様まで自動生成するツール。
+**From vague idea to deployable spec — in one sitting.**
 
-## 概要
+AI-powered depth interviews that extract requirements non-engineers miss,
+then generate production-ready PRDs and implementation specs.
 
-ふわっとした課題テーマを入力するだけで、AI がデプスインタビューを実施し、ファクト抽出、仮説生成、PRD、実装仕様 (spec.json) まで自動生成する。
+[Live Demo](https://deepform.exe.xyz:8000) · [日本語](./README.ja.md)
 
-### 主要フロー
+</div>
 
-1. テーマを入力してインタビューセッションを作成
-2. AI がデプスインタビューを実施 (5-8 ターン)
-3. インタビュー記録からファクト (事実・課題・頻度・回避策) を抽出
-4. ファクトから仮説を生成
-5. 仮説から PRD (プロダクト要件定義書) を生成
-6. PRD からコーディングエージェント向けの実装仕様 (spec.json) を生成
+---
 
-### キャンペーンモード
+## The Problem
 
-共有リンクを使って不特定多数からインタビュー回答を収集し、ファクトを集約分析できる。
+AI can build a PoC in minutes. But shipping requires more:
 
-## 技術スタック
+- Edge cases nobody thought of
+- Security & availability requirements
+- Acceptance criteria engineers can actually implement
+- Validation that users truly have this problem
 
-| カテゴリ | 技術 |
-|----------|------|
-| バックエンド | Hono (TypeScript) |
-| データベース | SQLite (`node:sqlite`, WAL モード) |
-| フロントエンド | Vanilla JS SPA |
-| 認証 | GitHub OAuth (@hono/oauth-providers) |
-| LLM | Claude API (LLM Gateway 経由) |
-| バリデーション | Zod |
-| テスト | Vitest |
-| リンター | Biome |
+**Non-engineers can't see what's missing. DeepForm bridges that gap.**
 
-## セットアップ
+## How It Works
 
-### 前提条件
-
-- Node.js 24 以上 (`node:sqlite` を使用)
-- bun (パッケージマネージャー)
-- GitHub OAuth App (認証機能を使う場合)
-
-### インストール
-
-```bash
-make install
+```
+Your idea → AI Depth Interview → Facts → Hypotheses → PRD → spec.json
+                                                              ↓
+                                              exe.dev + Shelley / Claude Code / Cursor
 ```
 
-### 環境変数
+### 5 Steps
 
-`.env` ファイルをプロジェクトルートに作成し、以下の変数を設定する。
+| Step | What happens | Output |
+|------|-------------|--------|
+| **1. AI Depth Interview** | AI interviewer probes for concrete examples, frequency, severity, workarounds | Structured conversation |
+| **2. Fact Extraction** | Extract facts, pains, frequencies with source evidence | Evidence-linked facts |
+| **3. Hypothesis Generation** | Generate hypotheses with supporting facts, counter-evidence, unknowns | Falsifiable hypotheses |
+| **4. PRD Generation** | MVP-scoped PRD with testable acceptance criteria (ISO 25010) | PRD.md |
+| **5. Spec Export** | API specs, DB schema, test cases | spec.json |
 
-| 変数名 | 説明 | 必須 |
-|--------|------|------|
-| GITHUB_CLIENT_ID | GitHub OAuth App の Client ID | はい |
-| GITHUB_CLIENT_SECRET | GitHub OAuth App の Client Secret | はい |
-| SESSION_SECRET | セッション Cookie の署名に使う秘密鍵 | はい (本番環境) |
-| NODE_ENV | 実行環境 (production で Secure Cookie が有効) | いいえ |
+## Key Differentiators
 
-LLM 呼び出しは LLM Gateway (`http://169.254.169.254/gateway/llm/anthropic/v1/messages`) 経由で行うため、Anthropic API キーは不要。
+- **Evidence-linked specs** — Every requirement traces back to actual user statements
+- **Counter-evidence on hypotheses** — Prevents confirmation bias with falsification patterns
+- **Purpose-built interview AI** — Not generic chat; specialized depth interview logic
+- **Agent-ready export** — `spec.json` drops directly into coding agents
 
-### 起動
+## Quick Start
+
+### Use the hosted version
+
+Visit [deepform.exe.xyz:8000](https://deepform.exe.xyz:8000) and sign in with your exe.dev account.
+
+### Self-host on exe.dev
 
 ```bash
-# 開発サーバー (ホットリロード)
-make dev
+# SSH into your exe.dev VM
+ssh your-vm.exe.xyz
 
-# 本番起動
-make start
+# Clone and setup
+git clone https://github.com/susumutomita/DeepForm.git
+cd DeepForm
+npm install
+cd frontend && npm install && npx vite build && cd ..
+
+# Start
+npx tsx src/index.ts
 ```
 
-サーバーは `http://localhost:8000` で起動する。
+### From spec.json to working app
 
-## 開発コマンド
+Once DeepForm generates your spec, hand it to a coding agent:
 
-| コマンド | 説明 |
-|----------|------|
-| `make start` | 依存インストール + 本番サーバー起動 |
-| `make dev` | 依存インストール + 開発サーバー起動 (ホットリロード) |
-| `make lint` | Biome によるリントチェック |
-| `make lint_text` | textlint による日本語テキストチェック |
-| `make typecheck` | 型チェック (tsc --noEmit) |
-| `make test` | Vitest でテスト実行 |
-| `make before-commit` | 全品質チェック (lint + lint_text + typecheck + test) |
+| Agent | How |
+|-------|-----|
+| **exe.dev + Shelley** ⭐ | Paste spec.json → Shelley builds & deploys on your VM |
+| **Claude Code** | Place PRD.md in repo root → `claude` |
+| **Cursor** | Paste spec.json into Composer |
+| **Any agent** | spec.json is standard JSON |
 
-## アーキテクチャ
+## Architecture
 
-```text
-src/
-  index.ts          # エントリポイント (Hono サーバー起動)
-  app.ts            # Hono アプリケーション設定 (ルーティング、ミドルウェア)
-  db.ts             # SQLite データベース接続、スキーマ定義 (`node:sqlite`)
-  llm.ts            # LLM Gateway クライアント (Claude API)
-  types.ts          # TypeScript 型定義
+```
+frontend/          Vite + TypeScript (vanilla)
+  src/
+    main.ts        Entry point
+    api.ts         Typed API client
+    auth.ts        exe.dev Login integration
+    i18n.ts        JA / EN / ES
+    interview.ts   Core interview & analysis flow
+    sessions.ts    Session list management
+    shared.ts      Shared & campaign interviews
+    ui.ts          UI utilities
+    pages/         Legal pages (privacy, terms, security)
+
+src/               Hono + TypeScript server
+  index.ts         Entry point
+  app.ts           Hono app with middleware
+  db.ts            SQLite (node:sqlite)
+  llm.ts           Claude API client
   routes/
-    auth.ts         # 認証 API (GitHub OAuth、ログアウト)
-    sessions.ts     # セッション CRUD、インタビュー、分析、共有、キャンペーン
+    auth.ts        exe.dev auth endpoints
+    sessions.ts    Session CRUD & AI pipeline
   middleware/
-    auth.ts         # 認証ミドルウェア (Cookie ベースセッション管理)
-public/             # フロントエンド静的ファイル (Vanilla JS SPA)
-data/               # SQLite データベースファイル
+    auth.ts        X-ExeDev-* header auth
 ```
 
-### データモデル
+## Auth: Login with exe.dev
 
-- **users** - GitHub OAuth で認証されたユーザー
-- **sessions** - インタビューセッション (テーマ、ステータス、モード)
-- **messages** - インタビューの会話履歴 (user/assistant)
-- **analysis_results** - 分析結果 (facts/hypotheses/prd/spec)
-- **campaigns** - キャンペーン (複数回答者からの集約)
+DeepForm uses [Login with exe](https://exe.dev/docs/login-with-exe.md) — zero OAuth setup required.
 
-### セッションのステータス遷移
+The exe.dev HTTPS proxy adds `X-ExeDev-UserID` and `X-ExeDev-Email` headers automatically. No passwords, no cookies, no client secrets.
 
-```text
-interviewing → analyzed → hypothesized → prd_generated → spec_generated
+## Tech Stack
+
+- **Runtime**: Node.js 22+ (experimental `node:sqlite`)
+- **Server**: [Hono](https://hono.dev) + TypeScript
+- **Frontend**: Vite + TypeScript (vanilla, no framework)
+- **Database**: SQLite (WAL mode)
+- **AI**: Claude API (Anthropic)
+- **Auth**: exe.dev proxy headers
+- **Hosting**: [exe.dev](https://exe.dev)
+
+## Roadmap
+
+- [ ] **Production readiness check** — AI-guided checklist for non-functional requirements (security, ops, legal)
+- [ ] **exe.dev deep integration** — "Deploy to exe.dev" button with spec.json pre-loaded
+- [ ] **Campaign analytics** — Aggregate insights from multiple user interviews
+- [ ] **Export to GitHub Issues** — Convert PRD into actionable issues
+
+## Contributing
+
+See [CLAUDE.md](./CLAUDE.md) for development guidelines.
+
+```bash
+# Development
+cd frontend && npx vite          # Frontend dev server (port 5173)
+npx tsx --watch src/index.ts     # Backend dev server (port 8000)
+
+# Checks
+npx biome check src/             # Lint
+npx tsc --noEmit                 # Type check
+npx vitest run                   # Tests
+cd frontend && npx vite build    # Build
 ```
 
-共有/キャンペーンの回答者は `respondent_done` に遷移する。
+## License
 
-## API ドキュメント
+See [LICENSE](./LICENSE).
 
-API の詳細な仕様は [docs/api.md](docs/api.md) を参照。
+---
 
-## ライセンス
+<div align="center">
 
-ISC
+**Built with Claude AI × [exe.dev](https://exe.dev)**
+
+*DeepForm is an [exe.dev](https://exe.dev) showcase project — demonstrating how AI agents can go from idea to production on exe.dev VMs.*
+
+</div>

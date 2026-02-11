@@ -8,9 +8,9 @@ import { DatabaseSync } from "node:sqlite";
 export const FULL_SCHEMA = `
   CREATE TABLE IF NOT EXISTS users (
     id TEXT PRIMARY KEY,
-    github_id INTEGER UNIQUE NOT NULL,
-    github_login TEXT NOT NULL,
-    avatar_url TEXT,
+    exe_user_id TEXT UNIQUE NOT NULL,
+    email TEXT NOT NULL,
+    display_name TEXT,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
   );

@@ -12,22 +12,23 @@ import type { User } from "../types.ts";
  */
 
 function upsertUser(exeUserId: string, email: string): User {
-  const existing = db
-    .prepare("SELECT * FROM users WHERE exe_user_id = ?")
-    .get(exeUserId) as unknown as User | undefined;
+  const existing = db.prepare("SELECT * FROM users WHERE exe_user_id = ?").get(exeUserId) as unknown as
+    | User
+    | undefined;
 
   if (existing) {
-    db.prepare(
-      "UPDATE users SET email = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
-    ).run(email, existing.id);
+    db.prepare("UPDATE users SET email = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?").run(email, existing.id);
     return { ...existing, email };
   }
 
   const id = crypto.randomUUID();
   const displayName = email.split("@")[0];
-  db.prepare(
-    "INSERT INTO users (id, exe_user_id, email, display_name) VALUES (?, ?, ?, ?)",
-  ).run(id, exeUserId, email, displayName);
+  db.prepare("INSERT INTO users (id, exe_user_id, email, display_name) VALUES (?, ?, ?, ?)").run(
+    id,
+    exeUserId,
+    email,
+    displayName,
+  );
 
   return {
     id,

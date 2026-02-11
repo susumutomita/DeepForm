@@ -28,12 +28,14 @@
           <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
         </button>
         <nav class="header-nav" id="header-nav">
+          <button id="theme-toggle" class="theme-toggle-btn" onclick="toggleTheme()" aria-label="ダークモード切替">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+          </button>
           <div class="lang-switcher">
             <button class="lang-btn" data-lang="ja" onclick="setLang('ja')">JA</button>
             <button class="lang-btn" data-lang="en" onclick="setLang('en')">EN</button>
             <button class="lang-btn" data-lang="es" onclick="setLang('es')">ES</button>
           </div>
-          <a href="#how-it-works" class="nav-link" data-i18n="nav.howItWorks" onclick="document.getElementById('how-it-works')?.scrollIntoView({behavior:'smooth'}); return false;">How it works</a>
           <div id="auth-container">
             <button id="login-btn" class="btn-github" onclick="location.href='/__exe.dev/login?redirect=/'" data-i18n="auth.login">exe.dev でログイン</button>
             <div id="user-info" style="display:none;align-items:center;gap:8px">
@@ -41,7 +43,7 @@
               <button id="logout-btn" class="btn-secondary btn-sm" onclick="logout()" data-i18n="auth.logout">ログアウト</button>
             </div>
           </div>
-          <button class="btn btn-sm btn-primary" data-i18n="nav.start" onclick="document.getElementById('theme-input')?.focus(); document.getElementById('page-home')?.classList.add('active'); window.scrollTo({top:0,behavior:'smooth'});">始める</button>
+
         </nav>
       </div>
     </header>

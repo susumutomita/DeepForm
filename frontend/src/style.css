@@ -1576,8 +1576,42 @@ a:hover { color: var(--primary-hover); }
 .footer-legal a:hover { color: var(--primary); }
 
 /* === Dark Mode === */
+/* Manual toggle via data-theme attribute */
+[data-theme="dark"] {
+  --bg: #1a1d21;
+  --bg-elevated: #22262b;
+  --bg-card: #22262b;
+  --bg-card-hover: #2a2f35;
+  --bg-input: #2a2f35;
+  --border: #3a3f45;
+  --border-subtle: #2f343a;
+  --border-focus: #81a2be;
+  --text: #c5c8c6;
+  --text-dim: #969896;
+  --text-bright: #e0e0e0;
+  --text-muted: #707880;
+  --shadow: 0 1px 3px rgba(0,0,0,0.3);
+  --shadow-sm: 0 1px 2px rgba(0,0,0,0.2);
+  color-scheme: dark;
+}
+[data-theme="dark"] .header { background: rgba(26, 29, 33, 0.85); }
+[data-theme="dark"] .chat-container { background: var(--bg-elevated); }
+[data-theme="dark"] .interview-sidebar { background: #1e2227; }
+[data-theme="dark"] .chat-msg.assistant { background: var(--bg-input); border-color: var(--border); }
+[data-theme="dark"] .code-block { background: #1e2227; border-color: var(--border); }
+[data-theme="dark"] .loading-overlay { background: rgba(26, 29, 33, 0.85); }
+[data-theme="dark"] .toast { background: var(--bg-card); }
+[data-theme="dark"] .comparison-item.bad { background: rgba(165,66,66,0.12); border-color: rgba(165,66,66,0.2); }
+[data-theme="dark"] .comparison-item.good { background: rgba(140,148,64,0.12); border-color: rgba(140,148,64,0.2); }
+[data-theme="dark"] .hypothesis-section.counter { background: rgba(165,66,66,0.12); border-color: rgba(165,66,66,0.2); }
+[data-theme="dark"] .hypothesis-section.unverified { background: rgba(222,147,95,0.12); border-color: rgba(222,147,95,0.2); }
+[data-theme="dark"] .btn-github { background: #3b4045; }
+[data-theme="dark"] .btn-github:hover { background: #4a4f55; }
+[data-theme="light"] { color-scheme: light; }
+
+/* System preference fallback (when no data-theme is set) */
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root:not([data-theme]) {
     --bg: #1a1d21;
     --bg-elevated: #22262b;
     --bg-card: #22262b;
@@ -3268,7 +3302,7 @@ a:hover { color: var(--primary-hover); }
    DARK MODE
    ============================================ */
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root:not([data-theme]) {
     --bg: #1a1d21;
     --bg-elevated: #22262b;
     --bg-card: #22262b;

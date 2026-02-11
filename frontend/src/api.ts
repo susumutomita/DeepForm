@@ -3,6 +3,7 @@ import type {
   ChatResponse, FactsData, HypothesesData, PRDData, SpecData,
   Session, SessionDetail, SharedInfo, SharedStartResponse,
   CampaignInfo, CampaignJoinResponse, User,
+  ExportIssuesRequest, ExportIssuesResponse,
 } from './types';
 
 async function request<T>(url: string, opts?: RequestInit): Promise<T> {
@@ -157,4 +158,9 @@ export function feedbackCampaign(token: string, sessionId: string, feedback: str
 // App feedback
 export function submitAppFeedback(type: string, message: string, page?: string): Promise<{ ok: boolean }> {
   return post('/api/feedback', { type, message, page });
+}
+
+// GitHub Issues export
+export function exportIssues(sessionId: string, data: ExportIssuesRequest): Promise<ExportIssuesResponse> {
+  return post(`/api/sessions/${sessionId}/export-issues`, data);
 }

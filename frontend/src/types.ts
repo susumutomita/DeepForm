@@ -218,6 +218,24 @@ export interface CampaignJoinResponse {
   error?: string;
 }
 
+export interface ExportIssuesRequest {
+  repoOwner: string;
+  repoName: string;
+  token: string;
+}
+
+export interface ExportedIssue {
+  number: number;
+  title: string;
+  url: string;
+}
+
+export interface ExportIssuesResponse {
+  created: ExportedIssue[];
+  errors: Array<{ feature: string; error: string }>;
+  error?: string;
+}
+
 /** All step names in the app (5 steps, no deploy). */
 export type StepName = 'interview' | 'facts' | 'hypotheses' | 'prd' | 'spec';
 
@@ -246,6 +264,7 @@ export interface DeepFormWindow extends Window {
   exportSpecJSON: () => void;
   exportPRDMarkdown: () => void;
   deployToExeDev: () => Promise<void>;
+  openExportIssuesModal: () => void;
 
   // Shared / Campaign
   startSharedInterview: () => Promise<void>;

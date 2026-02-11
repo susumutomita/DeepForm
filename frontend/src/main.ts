@@ -17,6 +17,7 @@ import {
 import { showToast, toggleTheme, initTheme } from './ui';
 import { openPolicy, closeModal } from './modal';
 import { openFeedbackModal, closeFeedbackModal } from './feedback';
+import { openExportIssuesModal } from './github-export';
 import { t } from './i18n';
 import { renderPrivacyPolicy } from './pages/privacy';
 import { renderTerms } from './pages/terms';
@@ -42,6 +43,7 @@ w.runSpec = doRunSpec;
 w.exportSpecJSON = exportSpecJSON;
 w.exportPRDMarkdown = exportPRDMarkdown;
 w.deployToExeDev = doDeployToExeDev;
+w.openExportIssuesModal = openExportIssuesModal;
 w.activateStep = activateStep;
 w.logout = doLogout;
 w.setLang = setLang;

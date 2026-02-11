@@ -1,3 +1,5 @@
+import fs from "node:fs";
+import path from "node:path";
 import { serveStatic } from "@hono/node-server/serve-static";
 import { Hono } from "hono";
 import { bodyLimit } from "hono/body-limit";
@@ -8,6 +10,11 @@ import { sessionRoutes } from "./routes/sessions.ts";
 
 const app = new Hono();
 
+// Determine static file root: prefer Vite build output, fall back to legacy public/
+const distDir = path.resolve("public_dist");
+const staticRoot = fs.existsSync(distDir) ? "./public_dist" : "./public";
+console.info(`Serving static files from: ${staticRoot}`);
+
 // Global error handler
 app.onError((err, c) => {
   console.error("Unhandled error:", err.message, err.stack);
@@ -17,10 +24,10 @@ app.onError((err, c) => {
   return c.json({ error: "Internal Server Error" }, 500);
 });
 
-// Body size limit (equivalent to Express's express.json({ limit: '10mb' }))
+// Body size limit
 app.use("/api/*", bodyLimit({ maxSize: 10 * 1024 * 1024 }));
 
-// Auth middleware (global) -- attach user info to context
+// Auth middleware (global) — exe.dev headers からユーザーを解決
 app.use("*", authMiddleware);
 
 // Auth routes
@@ -29,10 +36,10 @@ app.route("/api/auth", authRoutes);
 // Session routes
 app.route("/api", sessionRoutes);
 
-// Static file serving for public/ directory
-app.use("/*", serveStatic({ root: "./public" }));
+// Static file serving
+app.use("/*", serveStatic({ root: staticRoot }));
 
 // SPA fallback — serve index.html for any unmatched route
-app.get("/*", serveStatic({ root: "./public", path: "index.html" }));
+app.get("/*", serveStatic({ root: staticRoot, path: "index.html" }));
 
 export { app };

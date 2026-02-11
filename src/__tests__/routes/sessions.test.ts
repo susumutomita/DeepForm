@@ -1,4 +1,3 @@
-import crypto from "node:crypto";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 // Mock static file serving to avoid filesystem access in tests
@@ -25,34 +24,33 @@ import { db } from "../../db.ts";
 import { callClaude, extractText } from "../../llm.ts";
 
 // ---------------------------------------------------------------------------
-// Auth helpers
+// Auth helpers — exe.dev proxy header authentication
 // ---------------------------------------------------------------------------
-const SESSION_SECRET = "dev-secret-change-me";
-const COOKIE_NAME = "deepform_session";
 const TEST_USER_ID = "test-user-001";
+const TEST_EXE_USER_ID = "exe-test-001";
+const TEST_EMAIL = "testuser@example.com";
 const OTHER_USER_ID = "test-user-002";
+const OTHER_EXE_USER_ID = "exe-test-002";
+const OTHER_EMAIL = "otheruser@example.com";
 
-function signCookie(value: string): string {
-  return `${value}.${crypto.createHmac("sha256", SESSION_SECRET).update(value).digest("base64url")}`;
-}
-
-function authCookie(userId: string = TEST_USER_ID): string {
-  const payload = JSON.stringify({
-    userId,
-    expiry: Date.now() + 30 * 24 * 60 * 60 * 1000,
-  });
-  return `${COOKIE_NAME}=${encodeURIComponent(signCookie(payload))}`;
+function authHeaders(exeUserId: string = TEST_EXE_USER_ID, email: string = TEST_EMAIL): Record<string, string> {
+  return {
+    "x-exedev-userid": exeUserId,
+    "x-exedev-email": email,
+  };
 }
 
 async function authedRequest(path: string, options: RequestInit = {}): Promise<Response> {
   const headers = new Headers(options.headers);
-  headers.set("Cookie", authCookie());
+  headers.set("x-exedev-userid", TEST_EXE_USER_ID);
+  headers.set("x-exedev-email", TEST_EMAIL);
   return await app.request(path, { ...options, headers });
 }
 
 async function otherUserRequest(path: string, options: RequestInit = {}): Promise<Response> {
   const headers = new Headers(options.headers);
-  headers.set("Cookie", authCookie(OTHER_USER_ID));
+  headers.set("x-exedev-userid", OTHER_EXE_USER_ID);
+  headers.set("x-exedev-email", OTHER_EMAIL);
   return await app.request(path, { ...options, headers });
 }
 
@@ -69,17 +67,17 @@ describe("セッション API", () => {
     db.exec("DELETE FROM sessions");
     db.exec("DELETE FROM users");
     // Insert test users
-    db.prepare("INSERT INTO users (id, github_id, github_login, avatar_url) VALUES (?, ?, ?, ?)").run(
+    db.prepare("INSERT INTO users (id, exe_user_id, email, display_name) VALUES (?, ?, ?, ?)").run(
       TEST_USER_ID,
-      12345,
+      TEST_EXE_USER_ID,
+      TEST_EMAIL,
       "testuser",
-      null,
     );
-    db.prepare("INSERT INTO users (id, github_id, github_login, avatar_url) VALUES (?, ?, ?, ?)").run(
+    db.prepare("INSERT INTO users (id, exe_user_id, email, display_name) VALUES (?, ?, ?, ?)").run(
       OTHER_USER_ID,
-      67890,
+      OTHER_EXE_USER_ID,
+      OTHER_EMAIL,
       "otheruser",
-      null,
     );
   });
 

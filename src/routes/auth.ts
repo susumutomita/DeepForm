@@ -1,60 +1,12 @@
-import crypto from "node:crypto";
-import { githubAuth } from "@hono/oauth-providers/github";
 import { Hono } from "hono";
-import { db } from "../db.ts";
-import { clearSessionCookie, setSessionCookie } from "../middleware/auth.ts";
 import type { User } from "../types.ts";
 
 const auth = new Hono<{ Variables: { user: User | null } }>();
 
-// GitHub OAuth -- handles both redirect and callback on the same route
-auth.use(
-  "/github",
-  githubAuth({
-    client_id: process.env.GITHUB_CLIENT_ID,
-    client_secret: process.env.GITHUB_CLIENT_SECRET,
-    scope: ["read:user", "user:email"],
-    oauthApp: true,
-  }),
-);
-
-auth.get("/github", async (c) => {
-  const githubUser = c.get("user-github");
-  if (!githubUser || !githubUser.id || !githubUser.login) {
-    return c.json({ error: "GitHub \u8a8d\u8a3c\u306b\u5931\u6557\u3057\u307e\u3057\u305f" }, 401);
-  }
-
-  // Upsert user in database
-  const existingUser = db.prepare("SELECT * FROM users WHERE github_id = ?").get(githubUser.id) as unknown as
-    | User
-    | undefined;
-
-  let userId: string;
-  if (existingUser) {
-    userId = existingUser.id;
-    db.prepare("UPDATE users SET github_login = ?, avatar_url = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?").run(
-      githubUser.login,
-      githubUser.avatar_url ?? null,
-      existingUser.id,
-    );
-  } else {
-    userId = crypto.randomUUID();
-    db.prepare("INSERT INTO users (id, github_id, github_login, avatar_url) VALUES (?, ?, ?, ?)").run(
-      userId,
-      githubUser.id,
-      githubUser.login,
-      githubUser.avatar_url ?? null,
-    );
-  }
-
-  // Set session cookie
-  setSessionCookie(c, userId);
-
-  // Redirect to home page
-  return c.redirect("/");
-});
-
-// Get current user info
+/**
+ * GET /api/auth/me — 現在のユーザー情報を返す。
+ * exe.dev プロキシが付与するヘッダーから authMiddleware がユーザーを解決済み。
+ */
 auth.get("/me", (c) => {
   const user = c.get("user");
   if (!user) {
@@ -63,15 +15,17 @@ auth.get("/me", (c) => {
   return c.json({
     user: {
       id: user.id,
-      githubLogin: user.github_login,
-      avatarUrl: user.avatar_url,
+      email: user.email,
+      displayName: user.display_name,
     },
   });
 });
 
-// Logout
+/**
+ * POST /api/auth/logout — exe.dev 側のログアウトはクライアントが
+ * /__exe.dev/logout に POST する。ここは互換性のために残す。
+ */
 auth.post("/logout", (c) => {
-  clearSessionCookie(c);
   return c.json({ ok: true });
 });
 

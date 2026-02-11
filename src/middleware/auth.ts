@@ -1,72 +1,68 @@
 import crypto from "node:crypto";
-import { deleteCookie, getCookie, setCookie } from "hono/cookie";
 import { createMiddleware } from "hono/factory";
 import { db } from "../db.ts";
 import type { User } from "../types.ts";
 
-if (process.env.NODE_ENV === "production" && !process.env.SESSION_SECRET) {
-  throw new Error("SESSION_SECRET environment variable is required in production");
-}
-const SESSION_SECRET = process.env.SESSION_SECRET || "dev-secret-change-me";
-const COOKIE_NAME = "deepform_session";
-const MAX_AGE = 60 * 60 * 24 * 30; // 30 days
+/**
+ * exe.dev Login 認証ミドルウェア。
+ *
+ * exe.dev のリバースプロキシが認証済みユーザーに対して
+ * X-ExeDev-UserID / X-ExeDev-Email ヘッダーを付与する。
+ * ローカル開発では EXEDEV_DEV_USER / EXEDEV_DEV_EMAIL 環境変数で代替可能。
+ */
 
-function sign(value: string): string {
-  const signature = crypto.createHmac("sha256", SESSION_SECRET).update(value).digest("base64url");
-  return `${value}.${signature}`;
-}
+function upsertUser(exeUserId: string, email: string): User {
+  const existing = db.prepare("SELECT * FROM users WHERE exe_user_id = ?").get(exeUserId) as unknown as
+    | User
+    | undefined;
 
-function unsign(signed: string): string | null {
-  const lastDot = signed.lastIndexOf(".");
-  if (lastDot === -1) return null;
-  const value = signed.substring(0, lastDot);
-  const expected = sign(value);
-  if (signed !== expected) return null;
-  return value;
-}
+  if (existing) {
+    db.prepare("UPDATE users SET email = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?").run(email, existing.id);
+    return db.prepare("SELECT * FROM users WHERE id = ?").get(existing.id) as unknown as User;
+  }
 
-export function setSessionCookie(c: any, userId: string): void {
-  const expiry = Date.now() + MAX_AGE * 1000;
-  const payload = JSON.stringify({ userId, expiry });
-  setCookie(c, COOKIE_NAME, sign(payload), {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
-    sameSite: "Lax",
-    maxAge: MAX_AGE,
-    path: "/",
-  });
-}
+  const id = crypto.randomUUID();
+  const displayName = email.split("@")[0];
+  db.prepare("INSERT INTO users (id, exe_user_id, email, display_name) VALUES (?, ?, ?, ?)").run(
+    id,
+    exeUserId,
+    email,
+    displayName,
+  );
 
-export function clearSessionCookie(c: any): void {
-  deleteCookie(c, COOKIE_NAME, { path: "/" });
+  return {
+    id,
+    exe_user_id: exeUserId,
+    email,
+    display_name: displayName,
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  };
 }
 
 // Middleware: attach user info to Context (not required)
 export const authMiddleware = createMiddleware<{
   Variables: { user: User | null };
 }>(async (c, next) => {
-  const cookie = getCookie(c, COOKIE_NAME);
-  if (!cookie) {
-    c.set("user", null);
-    return next();
+  // exe.dev proxy headers
+  let exeUserId = c.req.header("x-exedev-userid");
+  let email = c.req.header("x-exedev-email");
+
+  // Local dev fallback (only in development mode)
+  if (!exeUserId && process.env.NODE_ENV === "development") {
+    exeUserId = process.env.EXEDEV_DEV_USER ?? undefined;
+    email = process.env.EXEDEV_DEV_EMAIL ?? undefined;
   }
 
-  const payload = unsign(cookie);
-  if (!payload) {
-    c.set("user", null);
-    return next();
-  }
-
-  try {
-    const { userId, expiry } = JSON.parse(payload) as { userId: string; expiry: number };
-    if (Date.now() > expiry) {
+  if (exeUserId && email) {
+    try {
+      const user = upsertUser(exeUserId, email);
+      c.set("user", user);
+    } catch (e) {
+      console.error("Auth upsert error:", e);
       c.set("user", null);
-      return next();
     }
-
-    const user = db.prepare("SELECT * FROM users WHERE id = ?").get(userId) as unknown as User | undefined;
-    c.set("user", user ?? null);
-  } catch {
+  } else {
     c.set("user", null);
   }
 

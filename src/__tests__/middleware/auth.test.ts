@@ -1,4 +1,3 @@
-import crypto from "node:crypto";
 import { Hono } from "hono";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -11,85 +10,58 @@ vi.mock("../../db.ts", async () => {
 import { db } from "../../db.ts";
 import { authMiddleware, requireAuth } from "../../middleware/auth.ts";
 
-// Replicate sign logic for creating test cookies
-const SESSION_SECRET = "dev-secret-change-me";
-const COOKIE_NAME = "deepform_session";
+const TEST_EXE_USER_ID = "exe-user-99999";
+const TEST_EMAIL = "testuser@example.com";
 
-function sign(value: string): string {
-  return `${value}.${crypto.createHmac("sha256", SESSION_SECRET).update(value).digest("base64url")}`;
+function authHeaders(exeUserId: string = TEST_EXE_USER_ID, email: string = TEST_EMAIL): Record<string, string> {
+  return {
+    "x-exedev-userid": exeUserId,
+    "x-exedev-email": email,
+  };
 }
-
-function createCookie(userId: string, expiry?: number): string {
-  const payload = JSON.stringify({
-    userId,
-    expiry: expiry ?? Date.now() + 30 * 24 * 60 * 60 * 1000,
-  });
-  return encodeURIComponent(sign(payload));
-}
-
-const TEST_USER = {
-  id: "test-user-auth-123",
-  github_id: 99999,
-  github_login: "testuser",
-  avatar_url: null,
-};
 
 describe("認証ミドルウェア", () => {
   beforeEach(() => {
     db.exec("DELETE FROM users");
-    db.prepare("INSERT INTO users (id, github_id, github_login, avatar_url) VALUES (?, ?, ?, ?)").run(
-      TEST_USER.id,
-      TEST_USER.github_id,
-      TEST_USER.github_login,
-      null,
-    );
   });
 
-  describe("署名の生成と検証", () => {
-    it("正しく署名された Cookie からユーザーを取得できるべき", async () => {
+  describe("ヘッダーベース認証", () => {
+    it("正しいヘッダーからユーザーを取得できるべき（自動作成）", async () => {
       const app = new Hono();
       app.use("*", authMiddleware);
       app.get("/test", (c) => c.json({ user: (c as any).get("user") }));
 
-      const cookie = createCookie(TEST_USER.id);
       const res = await app.request("/test", {
-        headers: { Cookie: `${COOKIE_NAME}=${cookie}` },
+        headers: authHeaders(),
       });
 
       expect(res.status).toBe(200);
       const data = (await res.json()) as any;
       expect(data.user).not.toBeNull();
-      expect(data.user.id).toBe(TEST_USER.id);
-      expect(data.user.github_login).toBe("testuser");
+      expect(data.user.exe_user_id).toBe(TEST_EXE_USER_ID);
+      expect(data.user.email).toBe(TEST_EMAIL);
+      expect(data.user.display_name).toBe("testuser");
     });
 
-    it("改ざんされた署名の場合にユーザーを null にすべき", async () => {
+    it("ヘッダーがない場合にユーザーを null にすべき", async () => {
       const app = new Hono();
       app.use("*", authMiddleware);
       app.get("/test", (c) => c.json({ user: (c as any).get("user") }));
 
-      const payload = JSON.stringify({
-        userId: TEST_USER.id,
-        expiry: Date.now() + 100000,
-      });
-      const tampered = encodeURIComponent(`${payload}.invalid-signature`);
-
-      const res = await app.request("/test", {
-        headers: { Cookie: `${COOKIE_NAME}=${tampered}` },
-      });
+      const res = await app.request("/test");
 
       expect(res.status).toBe(200);
       const data = (await res.json()) as any;
       expect(data.user).toBeNull();
     });
 
-    it("ドットを含まない Cookie 値の場合にユーザーを null にすべき", async () => {
+    it("x-exedev-userid のみでメールがない場合にユーザーを null にすべき", async () => {
       const app = new Hono();
       app.use("*", authMiddleware);
       app.get("/test", (c) => c.json({ user: (c as any).get("user") }));
 
       const res = await app.request("/test", {
-        headers: { Cookie: `${COOKIE_NAME}=${encodeURIComponent("no-dot-here")}` },
+        headers: { "x-exedev-userid": TEST_EXE_USER_ID },
       });
 
       expect(res.status).toBe(200);
@@ -107,19 +79,18 @@ describe("認証ミドルウェア", () => {
       app.get("/test", (c) => c.json({ user: (c as any).get("user") }));
     });
 
-    it("有効な Cookie がある場合にユーザー情報を設定すべき", async () => {
-      const cookie = createCookie(TEST_USER.id);
+    it("有効なヘッダーがある場合にユーザー情報を設定すべき", async () => {
       const res = await app.request("/test", {
-        headers: { Cookie: `${COOKIE_NAME}=${cookie}` },
+        headers: authHeaders(),
       });
 
       expect(res.status).toBe(200);
       const data = (await res.json()) as any;
-      expect(data.user.id).toBe(TEST_USER.id);
-      expect(data.user.github_login).toBe("testuser");
+      expect(data.user.exe_user_id).toBe(TEST_EXE_USER_ID);
+      expect(data.user.email).toBe(TEST_EMAIL);
     });
 
-    it("Cookie がない場合にユーザーを null に設定すべき", async () => {
+    it("ヘッダーがない場合にユーザーを null に設定すべき", async () => {
       const res = await app.request("/test");
 
       expect(res.status).toBe(200);
@@ -127,48 +98,36 @@ describe("認証ミドルウェア", () => {
       expect(data.user).toBeNull();
     });
 
-    it("期限切れの Cookie の場合にユーザーを null に設定すべき", async () => {
-      const cookie = createCookie(TEST_USER.id, Date.now() - 1000);
+    it("既存ユーザーのメールアドレスを更新すべき", async () => {
+      // First request creates the user
+      await app.request("/test", { headers: authHeaders() });
+
+      // Second request with updated email
       const res = await app.request("/test", {
-        headers: { Cookie: `${COOKIE_NAME}=${cookie}` },
+        headers: authHeaders(TEST_EXE_USER_ID, "newemail@example.com"),
       });
 
       expect(res.status).toBe(200);
       const data = (await res.json()) as any;
-      expect(data.user).toBeNull();
+      expect(data.user.email).toBe("newemail@example.com");
+      expect(data.user.exe_user_id).toBe(TEST_EXE_USER_ID);
     });
 
-    it("無効な署名の Cookie の場合にユーザーを null に設定すべき", async () => {
+    it("異なるユーザー ID に対して別のユーザーを作成すべき", async () => {
+      await app.request("/test", { headers: authHeaders() });
+
       const res = await app.request("/test", {
-        headers: { Cookie: `${COOKIE_NAME}=${encodeURIComponent("invalid.cookie.value")}` },
+        headers: authHeaders("other-exe-user", "other@example.com"),
       });
 
       expect(res.status).toBe(200);
       const data = (await res.json()) as any;
-      expect(data.user).toBeNull();
-    });
+      expect(data.user.exe_user_id).toBe("other-exe-user");
+      expect(data.user.email).toBe("other@example.com");
 
-    it("存在しないユーザー ID の Cookie の場合にユーザーを null に設定すべき", async () => {
-      const cookie = createCookie("nonexistent-user-id");
-      const res = await app.request("/test", {
-        headers: { Cookie: `${COOKIE_NAME}=${cookie}` },
-      });
-
-      expect(res.status).toBe(200);
-      const data = (await res.json()) as any;
-      expect(data.user).toBeNull();
-    });
-
-    it("不正な JSON ペイロードの Cookie の場合にユーザーを null に設定すべき", async () => {
-      const badPayload = "not-valid-json";
-      const cookie = encodeURIComponent(sign(badPayload));
-      const res = await app.request("/test", {
-        headers: { Cookie: `${COOKIE_NAME}=${cookie}` },
-      });
-
-      expect(res.status).toBe(200);
-      const data = (await res.json()) as any;
-      expect(data.user).toBeNull();
+      // Should have 2 users in the DB
+      const count = db.prepare("SELECT COUNT(*) as cnt FROM users").get() as any;
+      expect(count.cnt).toBe(2);
     });
   });
 
@@ -183,9 +142,8 @@ describe("認証ミドルウェア", () => {
     });
 
     it("認証済みユーザーの場合にアクセスを許可すべき", async () => {
-      const cookie = createCookie(TEST_USER.id);
       const res = await app.request("/protected/resource", {
-        headers: { Cookie: `${COOKIE_NAME}=${cookie}` },
+        headers: authHeaders(),
       });
 
       expect(res.status).toBe(200);
@@ -201,10 +159,9 @@ describe("認証ミドルウェア", () => {
       expect(data.error).toBe("ログインが必要です");
     });
 
-    it("期限切れ Cookie の場合に 401 を返すべき", async () => {
-      const cookie = createCookie(TEST_USER.id, Date.now() - 1000);
+    it("ヘッダーが不完全な場合に 401 を返すべき", async () => {
       const res = await app.request("/protected/resource", {
-        headers: { Cookie: `${COOKIE_NAME}=${cookie}` },
+        headers: { "x-exedev-userid": TEST_EXE_USER_ID },
       });
 
       expect(res.status).toBe(401);

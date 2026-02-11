@@ -51,9 +51,9 @@ db.exec(`
   );
   CREATE TABLE IF NOT EXISTS users (
     id TEXT PRIMARY KEY,
-    github_id INTEGER UNIQUE NOT NULL,
-    github_login TEXT NOT NULL,
-    avatar_url TEXT,
+    exe_user_id TEXT UNIQUE NOT NULL,
+    email TEXT NOT NULL,
+    display_name TEXT,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
   );
@@ -73,6 +73,37 @@ try {
 } catch (e: unknown) {
   const msg = e instanceof Error ? e.message : "";
   if (!msg.includes("duplicate column")) throw e;
+}
+
+// Migration: github_id → exe_user_id
+try {
+  db.exec("ALTER TABLE users ADD COLUMN exe_user_id TEXT");
+} catch (e: unknown) {
+  const msg = e instanceof Error ? e.message : "";
+  if (!msg.includes("duplicate column")) throw e;
+}
+try {
+  db.exec("ALTER TABLE users ADD COLUMN email TEXT");
+} catch (e: unknown) {
+  const msg = e instanceof Error ? e.message : "";
+  if (!msg.includes("duplicate column")) throw e;
+}
+try {
+  db.exec("ALTER TABLE users ADD COLUMN display_name TEXT");
+} catch (e: unknown) {
+  const msg = e instanceof Error ? e.message : "";
+  if (!msg.includes("duplicate column")) throw e;
+}
+
+// Backfill: populate exe_user_id for pre-existing rows (uses id as fallback)
+db.prepare("UPDATE users SET exe_user_id = id WHERE exe_user_id IS NULL").run();
+db.prepare("UPDATE users SET email = 'unknown@example.com' WHERE email IS NULL").run();
+
+// Ensure unique index on exe_user_id for consistency with CREATE TABLE schema
+try {
+  db.prepare("CREATE UNIQUE INDEX IF NOT EXISTS idx_users_exe_user_id ON users(exe_user_id)").run();
+} catch {
+  /* index may already exist */
 }
 
 export { db };

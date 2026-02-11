@@ -1,13 +1,22 @@
 .PHONY: install
 install:
 	bun install
+	cd frontend && bun install
 
 .PHONY: install_ci
 install_ci:
 	bun install --frozen-lockfile
 
+.PHONY: clean
+clean:
+	bunx rimraf public_dist frontend/dist public/app.js public/i18n.js public/style.css
+
+.PHONY: build
+build: install
+	cd frontend && bun run build
+
 .PHONY: start
-start: install
+start: install build
 	mkdir -p data
 	bun run start
 

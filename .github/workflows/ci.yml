@@ -25,6 +25,12 @@ jobs:
         with:
           submodules: true
 
+      - name: Setup Node.js
+        # actions/setup-node v4.4.0 — node:sqlite requires Node 22.5+
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: "24"
+
       - name: Setup Bun
         # oven-sh/setup-bun v2.0.2
         uses: oven-sh/setup-bun@735343b667d3e6f658f44d0eca948eb6282f2b76

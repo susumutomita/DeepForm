@@ -11,6 +11,7 @@ ExecStart=/home/exedev/DeepForm/node_modules/.bin/tsx src/index.ts
 Restart=on-failure
 RestartSec=3
 Environment=NODE_ENV=production
+EnvironmentFile=/home/exedev/DeepForm/.env
 
 [Install]
 WantedBy=multi-user.target

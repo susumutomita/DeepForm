@@ -13,7 +13,7 @@ auth.use(
   githubAuth({
     client_id: process.env.GITHUB_CLIENT_ID,
     client_secret: process.env.GITHUB_CLIENT_SECRET,
-    scope: ['read:user'],
+    scope: ['read:user', 'user:email'],
     oauthApp: true,
   })
 );
@@ -21,7 +21,7 @@ auth.use(
 auth.get('/github', async (c) => {
   const githubUser = c.get('user-github');
   if (!githubUser || !githubUser.id || !githubUser.login) {
-    return c.json({ error: 'GitHub 認証に失敗しました' }, 401);
+    return c.json({ error: 'GitHub \u8a8d\u8a3c\u306b\u5931\u6557\u3057\u307e\u3057\u305f' }, 401);
   }
 
   // Upsert user in database

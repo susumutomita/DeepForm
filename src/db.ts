@@ -51,9 +51,9 @@ db.exec(`
   );
   CREATE TABLE IF NOT EXISTS users (
     id TEXT PRIMARY KEY,
-    github_id INTEGER UNIQUE NOT NULL,
-    github_login TEXT NOT NULL,
-    avatar_url TEXT,
+    exe_user_id TEXT UNIQUE NOT NULL,
+    email TEXT NOT NULL,
+    display_name TEXT,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
   );
@@ -70,6 +70,26 @@ try {
 }
 try {
   db.exec("ALTER TABLE sessions ADD COLUMN is_public INTEGER DEFAULT 0");
+} catch (e: unknown) {
+  const msg = e instanceof Error ? e.message : "";
+  if (!msg.includes("duplicate column")) throw e;
+}
+
+// Migration: github_id → exe_user_id
+try {
+  db.exec("ALTER TABLE users ADD COLUMN exe_user_id TEXT");
+} catch (e: unknown) {
+  const msg = e instanceof Error ? e.message : "";
+  if (!msg.includes("duplicate column")) throw e;
+}
+try {
+  db.exec("ALTER TABLE users ADD COLUMN email TEXT");
+} catch (e: unknown) {
+  const msg = e instanceof Error ? e.message : "";
+  if (!msg.includes("duplicate column")) throw e;
+}
+try {
+  db.exec("ALTER TABLE users ADD COLUMN display_name TEXT");
 } catch (e: unknown) {
   const msg = e instanceof Error ? e.message : "";
   if (!msg.includes("duplicate column")) throw e;

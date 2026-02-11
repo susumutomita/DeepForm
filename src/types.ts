@@ -40,9 +40,9 @@ export interface Campaign {
 
 export interface User {
   id: string;
-  github_id: number;
-  github_login: string;
-  avatar_url: string | null;
+  exe_user_id: string;
+  email: string;
+  display_name: string | null;
   created_at: string;
   updated_at: string;
 }

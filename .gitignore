@@ -140,3 +140,5 @@ data/*.db-shm
 *.db
 *.db-wal
 *.db-shm
+public_dist/
+frontend/node_modules/

@@ -7,7 +7,7 @@ Type=simple
 User=exedev
 Group=exedev
 WorkingDirectory=/home/exedev/DeepForm
-ExecStart=/home/exedev/DeepForm/node_modules/.bin/tsx src/index.ts
+ExecStart=/usr/bin/node --experimental-sqlite --import file:///home/exedev/DeepForm/node_modules/tsx/dist/loader.mjs --require /home/exedev/DeepForm/node_modules/tsx/dist/preflight.cjs src/index.ts
 Restart=on-failure
 RestartSec=3
 Environment=NODE_ENV=production

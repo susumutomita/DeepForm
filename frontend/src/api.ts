@@ -83,6 +83,64 @@ export function sendChat(sessionId: string, message: string): Promise<ChatRespon
   return post(`/api/sessions/${sessionId}/chat`, { message });
 }
 
+// Streaming versions
+export interface StreamCallbacks {
+  onDelta: (text: string) => void;
+  onMeta?: (data: { turnCount: number }) => void;
+  onDone: (data: { readyForAnalysis?: boolean; turnCount?: number }) => void;
+  onError: (error: string) => void;
+}
+
+export async function startInterviewStream(sessionId: string, cb: StreamCallbacks): Promise<void> {
+  const res = await fetch(`/api/sessions/${sessionId}/start`, {
+    method: 'POST',
+    headers: { 'Accept': 'text/event-stream', 'Content-Type': 'application/json' },
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error((data as any).error || `HTTP ${res.status}`);
+  }
+  await consumeSSE(res, cb);
+}
+
+export async function sendChatStream(sessionId: string, message: string, cb: StreamCallbacks): Promise<void> {
+  const res = await fetch(`/api/sessions/${sessionId}/chat`, {
+    method: 'POST',
+    headers: { 'Accept': 'text/event-stream', 'Content-Type': 'application/json' },
+    body: JSON.stringify({ message }),
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error((data as any).error || `HTTP ${res.status}`);
+  }
+  await consumeSSE(res, cb);
+}
+
+async function consumeSSE(res: Response, cb: StreamCallbacks): Promise<void> {
+  const reader = res.body?.getReader();
+  if (!reader) throw new Error('No response body');
+  const decoder = new TextDecoder();
+  let buffer = '';
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    const lines = buffer.split('\n');
+    buffer = lines.pop() || '';
+    for (const line of lines) {
+      if (!line.startsWith('data: ')) continue;
+      try {
+        const data = JSON.parse(line.slice(6));
+        if (data.type === 'delta') cb.onDelta(data.text);
+        else if (data.type === 'meta') cb.onMeta?.(data);
+        else if (data.type === 'done') cb.onDone(data);
+        else if (data.type === 'error') cb.onError(data.error);
+      } catch { /* skip */ }
+    }
+  }
+}
+
 // Analysis
 export function runAnalysis(sessionId: string): Promise<FactsData> {
   return post(`/api/sessions/${sessionId}/analyze`);

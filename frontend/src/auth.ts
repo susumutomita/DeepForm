@@ -49,5 +49,19 @@ export async function doLogout(): Promise<void> {
 }
 
 export function redirectToLogin(): void {
-  window.location.href = '/__exe.dev/login?redirect=' + encodeURIComponent(window.location.pathname);
+  // exe.dev 環境: プロキシのログインページへリダイレクト
+  // ローカル環境: /__exe.dev/login が存在しないため案内を表示
+  const isExeDev = window.location.hostname.endsWith('.exe.xyz')
+    || window.location.hostname.endsWith('.exe.dev');
+  if (isExeDev) {
+    window.location.href = '/__exe.dev/login?redirect=' + encodeURIComponent(window.location.pathname);
+  } else {
+    alert(
+      'ローカル環境ではexe.dev認証が使えません。\n\n'
+      + '以下の環境変数を設定してサーバーを起動してください:\n'
+      + '  EXEDEV_DEV_USER=dev-user-1\n'
+      + '  EXEDEV_DEV_EMAIL=dev@example.com\n\n'
+      + '例: EXEDEV_DEV_USER=dev-user-1 EXEDEV_DEV_EMAIL=dev@example.com npx tsx src/index.ts'
+    );
+  }
 }

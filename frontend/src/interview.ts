@@ -4,7 +4,8 @@ import { t } from './i18n';
 import type { Fact, Hypothesis, PRD, Spec, ReadinessCategory, Message, StepName } from './types';
 import {
   showLoading, hideLoading, showToast, escapeHtml, factTypeLabel,
-  addMessageToContainer, showTypingIndicator, removeTypingIndicator,
+  addMessageToContainer, addStreamingBubble, appendToStreamingBubble,
+  finalizeStreamingBubble,
 } from './ui';
 
 let currentSessionId: string | null = null;
@@ -77,13 +78,18 @@ export async function openSession(sessionId: string, isNew = false): Promise<voi
 // --- Interview Chat ---
 async function startInterviewChat(): Promise<void> {
   if (!currentSessionId) return;
-  showTypingIndicator('chat-container');
+  const bubble = addStreamingBubble('chat-container');
   try {
-    const data = await api.startInterview(currentSessionId);
-    removeTypingIndicator('chat-container');
-    addMessageToContainer('chat-container', 'assistant', data.reply);
+    await api.startInterviewStream(currentSessionId, {
+      onDelta: (text) => appendToStreamingBubble(bubble, text),
+      onDone: () => finalizeStreamingBubble(bubble),
+      onError: (err) => {
+        finalizeStreamingBubble(bubble);
+        showToast(err, true);
+      },
+    });
   } catch (e: any) {
-    removeTypingIndicator('chat-container');
+    finalizeStreamingBubble(bubble);
     showToast(e.message, true);
   }
 }
@@ -99,18 +105,26 @@ export async function sendMessage(): Promise<void> {
 
   const btnSend = document.getElementById('btn-send') as HTMLButtonElement | null;
   if (btnSend) btnSend.disabled = true;
-  showTypingIndicator('chat-container');
+  const bubble = addStreamingBubble('chat-container');
 
   try {
-    const data = await api.sendChat(currentSessionId, message);
-    removeTypingIndicator('chat-container');
-    addMessageToContainer('chat-container', 'assistant', data.reply);
-    if (data.readyForAnalysis || (data.turnCount && data.turnCount >= 3)) {
-      const btn = document.getElementById('btn-analyze') as HTMLButtonElement | null;
-      if (btn) btn.disabled = false;
-    }
+    await api.sendChatStream(currentSessionId, message, {
+      onDelta: (text) => appendToStreamingBubble(bubble, text),
+      onMeta: () => {},
+      onDone: (data) => {
+        finalizeStreamingBubble(bubble);
+        if (data.readyForAnalysis || (data.turnCount && data.turnCount >= 3)) {
+          const btn = document.getElementById('btn-analyze') as HTMLButtonElement | null;
+          if (btn) btn.disabled = false;
+        }
+      },
+      onError: (err) => {
+        finalizeStreamingBubble(bubble);
+        showToast(err, true);
+      },
+    });
   } catch (e: any) {
-    removeTypingIndicator('chat-container');
+    finalizeStreamingBubble(bubble);
     showToast(e.message, true);
   } finally {
     if (btnSend) btnSend.disabled = false;

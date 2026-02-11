@@ -2,7 +2,7 @@ import crypto from "node:crypto";
 import { type Context, Hono } from "hono";
 import { ZodError } from "zod";
 import { db } from "../db.ts";
-import { callClaude, extractText } from "../llm.ts";
+import { callClaude, callClaudeStream, extractText } from "../llm.ts";
 import type { AnalysisResult, Campaign, CampaignAnalytics, Message, Session, User } from "../types.ts";
 import {
   chatMessageSchema,
@@ -262,11 +262,45 @@ sessionRoutes.post("/sessions/:id/start", async (c) => {
 最初の質問を1つだけ聞いてください。テーマについて、まず現状の状況を理解するための質問をしてください。
 共感的で親しみやすいトーンで、日本語で話してください。200文字以内で。`;
 
-    const response = await callClaude(
-      [{ role: "user", content: `テーマ「${session.theme}」についてインタビューを始めてください。` }],
-      systemPrompt,
-      512,
-    );
+    const startMessages = [{ role: "user" as const, content: `テーマ「${session.theme}」についてインタビューを始めてください。` }];
+
+    // Streaming response
+    const wantsStream = c.req.header("accept")?.includes("text/event-stream");
+
+    if (wantsStream) {
+      const { stream, getFullText } = callClaudeStream(startMessages, systemPrompt, 512);
+
+      return new Response(
+        new ReadableStream({
+          start(controller) {
+            const encoder = new TextEncoder();
+            stream.on("data", (chunk: string) => {
+              controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: "delta", text: chunk })}\n\n`));
+            });
+            stream.on("end", () => {
+              const fullText = getFullText();
+              db.prepare("INSERT INTO messages (session_id, role, content) VALUES (?, ?, ?)").run(id, "assistant", fullText);
+              controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: "done" })}\n\n`));
+              controller.close();
+            });
+            stream.on("error", (err: Error) => {
+              controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: "error", error: err.message })}\n\n`));
+              controller.close();
+            });
+          },
+        }),
+        {
+          headers: {
+            "Content-Type": "text/event-stream",
+            "Cache-Control": "no-cache",
+            Connection: "keep-alive",
+          },
+        },
+      );
+    }
+
+    // Non-streaming fallback
+    const response = await callClaude(startMessages, systemPrompt, 512);
     const reply = extractText(response);
 
     db.prepare("INSERT INTO messages (session_id, role, content) VALUES (?, ?, ?)").run(id, "assistant", reply);
@@ -315,6 +349,47 @@ sessionRoutes.post("/sessions/:id/chat", async (c) => {
 
 ${turnCount >= 5 ? "十分な情報が集まりました。最後にまとめの質問をして、回答の最後に「[READY_FOR_ANALYSIS]」タグを付けてください。ただし、ユーザーがまだ話したそうなら続けてください。" : ""}`;
 
+    // Streaming response
+    const wantsStream = c.req.header("accept")?.includes("text/event-stream");
+
+    if (wantsStream) {
+      const { stream, getFullText } = callClaudeStream(chatMessages, systemPrompt, 1024);
+
+      return new Response(
+        new ReadableStream({
+          start(controller) {
+            const encoder = new TextEncoder();
+            // Send turnCount metadata first
+            controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: "meta", turnCount })}\n\n`));
+
+            stream.on("data", (chunk: string) => {
+              controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: "delta", text: chunk })}\n\n`));
+            });
+            stream.on("end", () => {
+              const fullText = getFullText();
+              // Save to DB
+              db.prepare("INSERT INTO messages (session_id, role, content) VALUES (?, ?, ?)").run(id, "assistant", fullText);
+              const readyForAnalysis = fullText.includes("[READY_FOR_ANALYSIS]") || turnCount >= 8;
+              controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: "done", readyForAnalysis, turnCount })}\n\n`));
+              controller.close();
+            });
+            stream.on("error", (err: Error) => {
+              controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: "error", error: err.message })}\n\n`));
+              controller.close();
+            });
+          },
+        }),
+        {
+          headers: {
+            "Content-Type": "text/event-stream",
+            "Cache-Control": "no-cache",
+            Connection: "keep-alive",
+          },
+        },
+      );
+    }
+
+    // Non-streaming fallback
     const response = await callClaude(chatMessages, systemPrompt, 1024);
     const reply = extractText(response);
 

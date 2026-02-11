@@ -56,6 +56,35 @@ export function addMessageToContainer(containerId: string, role: string, content
   container.scrollTop = container.scrollHeight;
 }
 
+/** Create an empty assistant bubble for streaming, returns the element */
+export function addStreamingBubble(containerId: string): HTMLElement {
+  const container = document.getElementById(containerId);
+  const msg = document.createElement('div');
+  msg.className = 'chat-msg assistant streaming';
+  msg.textContent = '';
+  if (container) {
+    container.appendChild(msg);
+    container.scrollTop = container.scrollHeight;
+  }
+  return msg;
+}
+
+/** Append text to a streaming bubble */
+export function appendToStreamingBubble(el: HTMLElement, text: string): void {
+  el.textContent = (el.textContent || '') + text;
+  const container = el.parentElement;
+  if (container) container.scrollTop = container.scrollHeight;
+}
+
+/** Finalize streaming bubble (remove streaming class) */
+export function finalizeStreamingBubble(el: HTMLElement): void {
+  el.classList.remove('streaming');
+  // Strip [READY_FOR_ANALYSIS] tag
+  if (el.textContent) {
+    el.textContent = el.textContent.replace('[READY_FOR_ANALYSIS]', '').trim();
+  }
+}
+
 export function showTypingIndicator(containerId: string): void {
   const container = document.getElementById(containerId);
   if (!container) return;

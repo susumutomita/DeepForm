@@ -48,8 +48,8 @@ export const authMiddleware = createMiddleware<{
   let exeUserId = c.req.header("x-exedev-userid");
   let email = c.req.header("x-exedev-email");
 
-  // Local dev fallback (only in development mode)
-  if (!exeUserId && process.env.NODE_ENV === "development") {
+  // Local dev fallback (any non-production environment)
+  if (!exeUserId && process.env.NODE_ENV !== "production") {
     exeUserId = process.env.EXEDEV_DEV_USER ?? undefined;
     email = process.env.EXEDEV_DEV_EMAIL ?? undefined;
   }

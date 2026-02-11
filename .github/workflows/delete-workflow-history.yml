@@ -8,6 +8,10 @@ on:
         required: true
         type: string
 
+permissions:
+  actions: write
+  contents: read
+
 jobs:
   delete-history:
     runs-on: ubuntu-latest

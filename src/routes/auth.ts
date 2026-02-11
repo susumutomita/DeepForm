@@ -16,8 +16,10 @@ const SESSION_MAX_AGE_DAYS = 30;
 auth.get("/github", (c) => {
   const state = crypto.randomUUID();
   const proto = c.req.header("x-forwarded-proto") || "http";
-  const host = c.req.header("host") || "localhost:3000";
-  const callbackUrl = `${proto}://${host}/api/auth/github/callback`;
+  const host = c.req.header("x-forwarded-host") || c.req.header("host") || "localhost:8000";
+  // Strip port for standard HTTPS (GitHub callback URL must match exactly)
+  const cleanHost = proto === "https" ? host.replace(/:443$/, "") : host.replace(/:80$/, "");
+  const callbackUrl = `${proto}://${cleanHost}/api/auth/github/callback`;
 
   const params = new URLSearchParams({
     client_id: GITHUB_CLIENT_ID,

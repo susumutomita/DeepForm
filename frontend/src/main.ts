@@ -7,6 +7,7 @@ import {
   showHome, openSession, sendMessage, handleChatKeydown,
   doRunAnalysis, doRunHypotheses, doRunPRD, doRunSpec, doRunReadiness,
   exportSpecJSON, exportPRDMarkdown, doDeployToExeDev, activateStep,
+  getCurrentSessionId,
 } from './interview';
 import {
   initSharedInterview, initCampaignInterview,
@@ -35,6 +36,7 @@ w.loadSessions = loadSessions;
 w.toggleVisibility = doToggleVisibility;
 w.shareSession = doShareSession;
 w.createCampaign = doCreateCampaign;
+w.getCurrentSessionId = getCurrentSessionId;
 w.sendMessage = sendMessage;
 w.handleChatKeydown = handleChatKeydown;
 w.runAnalysis = doRunAnalysis;

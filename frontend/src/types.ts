@@ -340,6 +340,7 @@ export interface DeepFormWindow extends Window {
   toggleVisibility: (sessionId: string, newState: boolean) => Promise<void>;
   shareSession: (sessionId: string) => Promise<void>;
   createCampaign: (sessionId: string) => Promise<void>;
+  getCurrentSessionId: () => string | null;
   startNewSession: () => Promise<void>;
   deleteSession: (sessionId: string) => Promise<void>;
 

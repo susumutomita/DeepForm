@@ -245,6 +245,7 @@ export interface DeepFormWindow extends Window {
   runSpec: () => Promise<void>;
   exportSpecJSON: () => void;
   exportPRDMarkdown: () => void;
+  deployToExeDev: () => Promise<void>;
 
   // Shared / Campaign
   startSharedInterview: () => Promise<void>;

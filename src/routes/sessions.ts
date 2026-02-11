@@ -760,6 +760,41 @@ sessionRoutes.post("/sessions/:id/spec", async (c) => {
 });
 
 // ---------------------------------------------------------------------------
+// Spec Export (for exe.dev integration)
+// ---------------------------------------------------------------------------
+
+// GET /sessions/:id/spec-export — Return formatted spec.json for external tools
+sessionRoutes.get("/sessions/:id/spec-export", (c) => {
+  try {
+    const id = c.req.param("id");
+    const user = c.get("user");
+    const session = db.prepare("SELECT * FROM sessions WHERE id = ?").get(id) as unknown as Session | undefined;
+    if (!session) return c.json({ error: "Session not found" }, 404);
+
+    // Access control: owner or public
+    const isOwner = user && session.user_id === user.id;
+    const isPublic = session.is_public === 1;
+    if (!isOwner && !isPublic) return c.json({ error: "アクセス権限がありません" }, 403);
+
+    const specRow = db
+      .prepare("SELECT data FROM analysis_results WHERE session_id = ? AND type = ?")
+      .get(id, "spec") as unknown as { data: string } | undefined;
+    if (!specRow) return c.json({ error: "Spec が未生成です。先に実装仕様を生成してください" }, 400);
+
+    const spec = JSON.parse(specRow.data);
+    return c.json({
+      theme: session.theme,
+      spec: spec.spec || spec,
+      prdMarkdown: spec.prdMarkdown || null,
+      exportedAt: new Date().toISOString(),
+    });
+  } catch (e) {
+    console.error("Spec export error:", e);
+    return c.json({ error: (e as Error).message }, 500);
+  }
+});
+
+// ---------------------------------------------------------------------------
 // Sharing
 // ---------------------------------------------------------------------------
 

@@ -792,6 +792,84 @@ describe("セッション API", () => {
   });
 
   // -------------------------------------------------------------------------
+  // GET /api/sessions/:id/spec-export
+  // -------------------------------------------------------------------------
+  describe("GET /api/sessions/:id/spec-export", () => {
+    const mockSpecData = {
+      spec: {
+        projectName: "テストプロジェクト",
+        techStack: { frontend: "React", backend: "Hono" },
+        apiEndpoints: [],
+      },
+      prdMarkdown: "# PRD\n\nテスト",
+    };
+
+    beforeEach(() => {
+      insertSession("sexport", "エクスポートテーマ", TEST_USER_ID);
+      insertAnalysis("sexport", "spec", mockSpecData);
+    });
+
+    it("自分のセッションの spec をエクスポートできること", async () => {
+      // Given: spec 生成済みの自分のセッション
+      // When: GET spec-export
+      const res = await authedRequest("/api/sessions/sexport/spec-export");
+      // Then: フォーマットされた spec が返る
+      expect(res.status).toBe(200);
+      const data = (await res.json()) as any;
+      expect(data.theme).toBe("エクスポートテーマ");
+      expect(data.spec.projectName).toBe("テストプロジェクト");
+      expect(data.prdMarkdown).toBe("# PRD\n\nテスト");
+      expect(data.exportedAt).toBeDefined();
+    });
+
+    it("公開セッションの spec を未認証でエクスポートできること", async () => {
+      // Given: 公開セッション
+      db.prepare("UPDATE sessions SET is_public = 1 WHERE id = ?").run("sexport");
+      // When: 認証なしで GET
+      const res = await app.request("/api/sessions/sexport/spec-export");
+      // Then: 200
+      expect(res.status).toBe(200);
+      const data = (await res.json()) as any;
+      expect(data.spec.projectName).toBe("テストプロジェクト");
+    });
+
+    it("他人の非公開セッションにはアクセスできないべき", async () => {
+      // Given: 他人の非公開セッション
+      // When: GET
+      const res = await otherUserRequest("/api/sessions/sexport/spec-export");
+      // Then: 403
+      expect(res.status).toBe(403);
+    });
+
+    it("存在しないセッションの場合に 404 を返すべき", async () => {
+      // Given: 存在しない ID
+      // When: GET
+      const res = await authedRequest("/api/sessions/nonexistent/spec-export");
+      // Then: 404
+      expect(res.status).toBe(404);
+    });
+
+    it("spec が未生成の場合に 400 を返すべき", async () => {
+      // Given: spec なしのセッション
+      insertSession("sexport-nospec", "テーマ", TEST_USER_ID);
+      // When: GET
+      const res = await authedRequest("/api/sessions/sexport-nospec/spec-export");
+      // Then: 400
+      expect(res.status).toBe(400);
+      const data = (await res.json()) as any;
+      expect(data.error).toContain("Spec");
+    });
+
+    it("未認証で非公開セッションにはアクセスできないべき", async () => {
+      // Given: 非公開セッション（認証なし）
+      // When: GET
+      const res = await app.request("/api/sessions/sexport/spec-export");
+      // Then: 403
+      expect(res.status).toBe(403);
+    });
+  });
+
+  // -------------------------------------------------------------------------
   // POST /api/sessions/:id/share
   // -------------------------------------------------------------------------
   describe("POST /api/sessions/:id/share", () => {

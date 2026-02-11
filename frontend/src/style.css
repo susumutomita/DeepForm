@@ -2184,3 +2184,128 @@ a:hover { color: var(--primary-hover); }
     grid-template-columns: repeat(2, 1fr);
   }
 }
+
+/* === Inline Edit Popup === */
+.inline-edit-popup {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: 0 4px 16px rgba(0,0,0,0.12);
+  min-width: 180px;
+  max-width: 300px;
+  overflow: hidden;
+  animation: inlineEditFadeIn 0.15s var(--ease);
+}
+
+@keyframes inlineEditFadeIn {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.inline-edit-loading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 16px;
+  color: var(--text-dim);
+  font-size: 0.875rem;
+}
+
+.inline-edit-spinner {
+  width: 16px;
+  height: 16px;
+  border: 2px solid var(--border);
+  border-top-color: var(--primary);
+  border-radius: 50%;
+  animation: spin 0.6s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.inline-edit-list {
+  list-style: none;
+  margin: 0;
+  padding: 4px 0;
+}
+
+.inline-edit-option {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 16px;
+  cursor: pointer;
+  font-size: 0.9rem;
+  transition: background var(--transition);
+}
+
+.inline-edit-option:hover {
+  background: var(--bg-card-hover);
+}
+
+.inline-edit-option.current {
+  color: var(--primary);
+  font-weight: 500;
+}
+
+.inline-edit-check {
+  color: var(--primary);
+  font-weight: bold;
+  margin-left: 8px;
+}
+
+.inline-edit-custom {
+  border-top: 1px solid var(--border-subtle);
+  padding: 8px 12px;
+}
+
+.inline-edit-input {
+  width: 100%;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 6px 10px;
+  font-size: 0.85rem;
+  background: var(--bg-input);
+  color: var(--text);
+  outline: none;
+  transition: border-color var(--transition);
+}
+
+.inline-edit-input:focus {
+  border-color: var(--border-focus);
+}
+
+.inline-edit-input::placeholder {
+  color: var(--text-muted);
+}
+
+.inline-edit-error {
+  padding: 12px 16px;
+  color: var(--accent-red);
+  font-size: 0.875rem;
+}
+
+.inline-edit-updated {
+  animation: highlightUpdate 2s ease-out;
+}
+
+@keyframes highlightUpdate {
+  0% { background-color: rgba(129, 162, 190, 0.3); }
+  100% { background-color: transparent; }
+}
+
+/* Make PRD text selectable with cursor hint */
+#prd-container .quality-item li,
+#prd-container .feature-card li,
+#prd-container .feature-card p,
+#prd-container .quality-desc,
+#prd-container td,
+#prd-container .prd-section p {
+  cursor: text;
+}
+
+#prd-container ::selection {
+  background: var(--primary);
+  color: white;
+}

@@ -8,6 +8,7 @@ import { authMiddleware } from "./middleware/auth.ts";
 import { authRoutes } from "./routes/auth.ts";
 import { feedbackRoutes } from "./routes/feedback.ts";
 import { githubExportRoutes } from "./routes/github-export.ts";
+import { prdEditRoutes } from "./routes/prd-edit.ts";
 import { sessionRoutes } from "./routes/sessions.ts";
 
 const app = new Hono();
@@ -43,6 +44,9 @@ app.route("/api/feedback", feedbackRoutes);
 
 // GitHub export routes
 app.route("/api", githubExportRoutes);
+
+// PRD inline edit routes
+app.route("", prdEditRoutes);
 
 // Static file serving
 app.use("/*", serveStatic({ root: staticRoot }));

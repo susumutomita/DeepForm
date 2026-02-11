@@ -24,9 +24,18 @@ export interface Message {
 export interface AnalysisResult {
   id: number;
   session_id: string;
-  type: "facts" | "hypotheses" | "prd" | "spec";
+  type: "facts" | "hypotheses" | "prd" | "spec" | "campaign_analytics";
   data: string;
   created_at: string;
+}
+
+export interface CampaignAnalytics {
+  totalSessions: number;
+  completedSessions: number;
+  commonFacts: Array<{ content: string; count: number; type: string; severity: string }>;
+  painPoints: Array<{ content: string; count: number; severity: string }>;
+  frequencyAnalysis: Array<{ content: string; count: number }>;
+  keywordCounts: Record<string, number>;
 }
 
 export interface Campaign {

@@ -208,7 +208,55 @@ export interface SharedStartResponse {
 
 export interface CampaignInfo {
   theme: string;
+  campaignId?: string;
+  ownerSessionId?: string;
+  respondentCount?: number;
   error?: string;
+}
+
+export interface CampaignAnalytics {
+  totalSessions: number;
+  completedSessions: number;
+  commonFacts: Array<{ content: string; count: number; type: string; severity: string }>;
+  painPoints: Array<{ content: string; count: number; severity: string }>;
+  frequencyAnalysis: Array<{ content: string; count: number }>;
+  keywordCounts: Record<string, number>;
+}
+
+export interface CampaignAIAnalysis {
+  summary?: string;
+  patterns?: Array<{
+    id: string;
+    title: string;
+    description: string;
+    frequency: string;
+    severity: string;
+  }>;
+  insights?: Array<{
+    id: string;
+    content: string;
+    supportingPatterns: string[];
+  }>;
+  recommendations?: string[];
+}
+
+export interface CampaignExport {
+  campaign: {
+    id: string;
+    theme: string;
+    createdAt: string;
+    exportedAt: string;
+  };
+  analytics: CampaignAnalytics;
+  aiAnalysis: CampaignAIAnalysis | null;
+  respondents: Array<{
+    sessionId: string;
+    name: string;
+    status: string;
+    feedback: string | null;
+    createdAt: string;
+    facts: unknown;
+  }>;
 }
 
 export interface CampaignJoinResponse {
@@ -276,6 +324,9 @@ export interface DeepFormWindow extends Window {
   sendCampaignMessage: () => Promise<void>;
   completeCampaignInterview: () => Promise<void>;
   submitCampaignFeedback: () => Promise<void>;
+
+  // Campaign Analytics
+  showCampaignAnalytics: (campaignId: string) => Promise<void>;
 
   // Auth
   logout: () => Promise<void>;

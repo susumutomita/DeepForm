@@ -2,7 +2,8 @@
 import type {
   ChatResponse, FactsData, HypothesesData, PRDData, SpecData,
   Session, SessionDetail, SharedInfo, SharedStartResponse,
-  CampaignInfo, CampaignJoinResponse, User,
+  CampaignInfo, CampaignJoinResponse, CampaignAnalytics,
+  CampaignAIAnalysis, CampaignExport, User,
   ExportIssuesRequest, ExportIssuesResponse,
 } from './types';
 
@@ -163,4 +164,17 @@ export function submitAppFeedback(type: string, message: string, page?: string):
 // GitHub Issues export
 export function exportIssues(sessionId: string, data: ExportIssuesRequest): Promise<ExportIssuesResponse> {
   return post(`/api/sessions/${sessionId}/export-issues`, data);
+}
+
+// Campaign Analytics
+export function getCampaignAnalytics(campaignId: string): Promise<CampaignAnalytics> {
+  return request(`/api/campaigns/${campaignId}/analytics`);
+}
+
+export function generateCampaignAnalytics(campaignId: string): Promise<CampaignAIAnalysis> {
+  return post(`/api/campaigns/${campaignId}/analytics/generate`);
+}
+
+export function exportCampaignAnalytics(campaignId: string): Promise<CampaignExport> {
+  return request(`/api/campaigns/${campaignId}/export`);
 }

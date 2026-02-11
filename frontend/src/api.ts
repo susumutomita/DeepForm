@@ -133,7 +133,7 @@ async function consumeSSE(res: Response, cb: StreamCallbacks): Promise<void> {
       if (!line.startsWith('data: ')) continue;
       try {
         const data = JSON.parse(line.slice(6));
-        if (data.type === 'delta') cb.onDelta(data.text);
+        if (data.type === 'delta') cb.onDelta(typeof data.text === 'string' ? data.text : String(data.text ?? ''));
         else if (data.type === 'meta') cb.onMeta?.(data);
         else if (data.type === 'done') cb.onDone(data);
         else if (data.type === 'error') cb.onError(data.error);

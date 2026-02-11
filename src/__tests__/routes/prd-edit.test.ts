@@ -51,13 +51,11 @@ function setupUserAndSession(): { userId: string; sessionId: string } {
   const sessionId = `sess-${Date.now()}`;
 
   (db.prepare("INSERT INTO users (id, exe_user_id, email) VALUES (?, ?, ?)") as any).run(
-    ...[userId, TEST_EXE_USER_ID, TEST_EMAIL] as SQLInputValue[],
+    ...([userId, TEST_EXE_USER_ID, TEST_EMAIL] as SQLInputValue[]),
   );
 
-  (db.prepare(
-    "INSERT INTO sessions (id, theme, status, mode, user_id) VALUES (?, ?, ?, ?, ?)",
-  ) as any).run(
-    ...[sessionId, "テスト課題", "prd_generated", "self", userId] as SQLInputValue[],
+  (db.prepare("INSERT INTO sessions (id, theme, status, mode, user_id) VALUES (?, ?, ?, ?, ?)") as any).run(
+    ...([sessionId, "テスト課題", "prd_generated", "self", userId] as SQLInputValue[]),
   );
 
   // Insert PRD data
@@ -83,16 +81,12 @@ function setupUserAndSession(): { userId: string; sessionId: string } {
           acceptanceCriteria: ["月次レポートが自動生成されること"],
         },
       ],
-      metrics: [
-        { name: "処理速度", definition: "API応答時間", target: "2秒以内" },
-      ],
+      metrics: [{ name: "処理速度", definition: "API応答時間", target: "2秒以内" }],
     },
   });
 
-  (db.prepare(
-    "INSERT INTO analysis_results (session_id, type, data) VALUES (?, ?, ?)",
-  ) as any).run(
-    ...[sessionId, "prd", prdData] as SQLInputValue[],
+  (db.prepare("INSERT INTO analysis_results (session_id, type, data) VALUES (?, ?, ?)") as any).run(
+    ...([sessionId, "prd", prdData] as SQLInputValue[]),
   );
 
   return { userId, sessionId };
@@ -157,7 +151,7 @@ describe("POST /api/sessions/:id/prd/suggest", () => {
 
     // Create other user
     (db.prepare("INSERT INTO users (id, exe_user_id, email) VALUES (?, ?, ?)") as any).run(
-      ...["other-user", OTHER_EXE_USER_ID, OTHER_EMAIL] as SQLInputValue[],
+      ...(["other-user", OTHER_EXE_USER_ID, OTHER_EMAIL] as SQLInputValue[]),
     );
 
     const res = await otherUserRequest(`/api/sessions/${sessionId}/prd/suggest`, {
@@ -251,9 +245,10 @@ describe("POST /api/sessions/:id/prd/apply", () => {
     expect(data.updatedText).toBe("PDFレポート生成が5秒以内に完了");
 
     // Verify DB was updated
-    const prdRow = (db.prepare(
-      "SELECT data FROM analysis_results WHERE session_id = ? AND type = ?",
-    ) as any).get(sessionId, "prd") as { data: string };
+    const prdRow = (db.prepare("SELECT data FROM analysis_results WHERE session_id = ? AND type = ?") as any).get(
+      sessionId,
+      "prd",
+    ) as { data: string };
     const prdData = JSON.parse(prdRow.data);
     expect(prdData.prd.qualityRequirements.performanceEfficiency.criteria[1]).toContain("5秒以内");
   });
@@ -298,7 +293,9 @@ describe("POST /api/sessions/:id/prd/apply", () => {
     const { sessionId } = setupUserAndSession();
 
     (callClaude as any).mockResolvedValue({
-      content: [{ type: "text", text: '{"relevant": false, "reason": "入力された内容は性能に関する要件と関連がありません。"}' }],
+      content: [
+        { type: "text", text: '{"relevant": false, "reason": "入力された内容は性能に関する要件と関連がありません。"}' },
+      ],
     });
     (extractText as any).mockReturnValue(
       '{"relevant": false, "reason": "入力された内容は性能に関する要件と関連がありません。"}',
@@ -373,9 +370,10 @@ describe("POST /api/sessions/:id/prd/apply", () => {
       }),
     });
 
-    const prdRow = (db.prepare(
-      "SELECT data FROM analysis_results WHERE session_id = ? AND type = ?",
-    ) as any).get(sessionId, "prd") as { data: string };
+    const prdRow = (db.prepare("SELECT data FROM analysis_results WHERE session_id = ? AND type = ?") as any).get(
+      sessionId,
+      "prd",
+    ) as { data: string };
     const prdData = JSON.parse(prdRow.data);
     expect(prdData.prd.qualityRequirements.performanceEfficiency.criteria[0]).toContain("15秒以内");
     expect(prdData.prd.qualityRequirements.performanceEfficiency.criteria[0]).not.toContain("30秒以内");
@@ -416,9 +414,10 @@ describe("POST /api/sessions/:id/prd/apply", () => {
     expect(data2.updatedText).toBe("PDFレポート生成が3秒以内に完了");
 
     // Verify DB reflects latest edit
-    const prdRow = (db.prepare(
-      "SELECT data FROM analysis_results WHERE session_id = ? AND type = ?",
-    ) as any).get(sessionId, "prd") as { data: string };
+    const prdRow = (db.prepare("SELECT data FROM analysis_results WHERE session_id = ? AND type = ?") as any).get(
+      sessionId,
+      "prd",
+    ) as { data: string };
     const prdData = JSON.parse(prdRow.data);
     expect(prdData.prd.qualityRequirements.performanceEfficiency.criteria[1]).toContain("3秒以内");
   });

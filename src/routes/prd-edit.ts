@@ -11,13 +11,7 @@ const prdEditRoutes = new Hono<AppEnv>();
 // Zod schemas
 // ---------------------------------------------------------------------------
 
-const sectionTypeEnum = z.enum([
-  "qualityRequirements",
-  "acceptanceCriteria",
-  "metrics",
-  "edgeCases",
-  "other",
-]);
+const sectionTypeEnum = z.enum(["qualityRequirements", "acceptanceCriteria", "metrics", "edgeCases", "other"]);
 
 const suggestSchema = z.object({
   selectedText: z.string().min(1, "選択テキストは必須です"),
@@ -91,7 +85,7 @@ prdEditRoutes.post("/api/sessions/:id/prd/suggest", async (c) => {
     "- 各代替案は簡潔で、選択されたテキストと同じ粒度・形式にすること",
     "- 代替案は文脈上意味が通るものにすること",
     "- 元のテキストとは異なる値や表現にすること",
-    "- JSON配列形式で回答すること（例: [\"案1\", \"案2\", \"案3\"]）",
+    '- JSON配列形式で回答すること（例: ["案1", "案2", "案3"]）',
     "- JSON以外のテキストは一切出力しないこと",
   ].join("\n");
 
@@ -104,11 +98,7 @@ prdEditRoutes.post("/api/sessions/:id/prd/suggest", async (c) => {
   ].join("\n");
 
   try {
-    const response = await callClaude(
-      [{ role: "user", content: userMessage }],
-      systemPrompt,
-      1024,
-    );
+    const response = await callClaude([{ role: "user", content: userMessage }], systemPrompt, 1024);
     const text = extractText(response);
 
     // Parse the JSON array from Claude's response
@@ -171,7 +161,7 @@ prdEditRoutes.post("/api/sessions/:id/prd/apply", async (c) => {
         "- 入力が文脈と全く関連性がない場合は却下すること",
         "- 入力が技術的に意味不明な場合は却下すること",
         "- 多少の変更や異なるアプローチでも、文脈に関連していれば許可すること",
-        "- JSON形式で回答: {\"relevant\": true} または {\"relevant\": false, \"reason\": \"却下理由\"}",
+        '- JSON形式で回答: {"relevant": true} または {"relevant": false, "reason": "却下理由"}',
         "- JSON以外のテキストは一切出力しないこと",
       ].join("\n");
 
@@ -223,12 +213,10 @@ prdEditRoutes.post("/api/sessions/:id/prd/apply", async (c) => {
         "上記の元の文で「${selectedText}」を「${newText}」の意味を反映させて自然に書き換えた文を出力してください。",
       ].join("\n");
 
-      const rewriteResponse = await callClaude(
-        [{ role: "user", content: rewriteMessage }],
-        rewriteSystemPrompt,
-        1024,
-      );
-      const updatedText = extractText(rewriteResponse).trim().replace(/^[「『]|[」』]$/g, "");
+      const rewriteResponse = await callClaude([{ role: "user", content: rewriteMessage }], rewriteSystemPrompt, 1024);
+      const updatedText = extractText(rewriteResponse)
+        .trim()
+        .replace(/^[「『]|[」』]$/g, "");
 
       // Persist the change
       updatePrdInDb(session.id, sectionType, context, updatedText);
@@ -255,12 +243,7 @@ prdEditRoutes.post("/api/sessions/:id/prd/apply", async (c) => {
 // DB helper: update PRD content in analysis_results
 // ---------------------------------------------------------------------------
 
-function updatePrdInDb(
-  sessionId: string,
-  sectionType: string,
-  oldContext: string,
-  newContext: string,
-): void {
+function updatePrdInDb(sessionId: string, sectionType: string, oldContext: string, newContext: string): void {
   // Try to find existing PRD data
   const prdRow = db
     .prepare("SELECT id, data FROM analysis_results WHERE session_id = ? AND type = ?")

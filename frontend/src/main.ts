@@ -7,6 +7,7 @@ import {
   showHome, openSession, sendMessage, handleChatKeydown,
   doRunAnalysis, doRunHypotheses, doRunPRD, doRunSpec, doRunReadiness,
   exportSpecJSON, exportPRDMarkdown, doDeployToExeDev, activateStep,
+  getCurrentSessionId,
 } from './interview';
 import { initInlineEdit, destroyInlineEdit } from './inline-edit';
 import {
@@ -36,6 +37,7 @@ w.loadSessions = loadSessions;
 w.toggleVisibility = doToggleVisibility;
 w.shareSession = doShareSession;
 w.createCampaign = doCreateCampaign;
+w.getCurrentSessionId = getCurrentSessionId;
 w.sendMessage = sendMessage;
 w.handleChatKeydown = handleChatKeydown;
 w.runAnalysis = doRunAnalysis;
@@ -49,7 +51,7 @@ w.deployToExeDev = doDeployToExeDev;
 w.openExportIssuesModal = openExportIssuesModal;
 w.activateStep = activateStep;
 w.logout = doLogout;
-w.setLang = setLang;
+w.setLang = (lang: string) => { setLang(lang); loadSessions(); };
 
 // Navigation / Delete
 w.showInterview = (sessionId: string) => openSession(sessionId);

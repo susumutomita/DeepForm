@@ -269,4 +269,8 @@ export interface DeepFormWindow extends Window {
   openPolicy: (key: string) => void;
   closeModal: () => void;
   activateStep: (stepName: string) => void;
+
+  // Feedback
+  openFeedbackModal: () => void;
+  closeFeedbackModal: () => void;
 }

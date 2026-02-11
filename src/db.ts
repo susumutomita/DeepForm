@@ -99,6 +99,19 @@ try {
 db.prepare("UPDATE users SET exe_user_id = id WHERE exe_user_id IS NULL").run();
 db.prepare("UPDATE users SET email = 'unknown@example.com' WHERE email IS NULL").run();
 
+// Migration: feedback table
+db.exec(`
+  CREATE TABLE IF NOT EXISTS feedback (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id TEXT REFERENCES users(id),
+    type TEXT NOT NULL,
+    message TEXT NOT NULL,
+    page TEXT,
+    ip_address TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  );
+`);
+
 // Ensure unique index on exe_user_id for consistency with CREATE TABLE schema
 try {
   db.prepare("CREATE UNIQUE INDEX IF NOT EXISTS idx_users_exe_user_id ON users(exe_user_id)").run();

@@ -144,6 +144,19 @@ const ja: TranslationMap = {
   'legal.privacy': 'プライバシーポリシー',
   'legal.terms': '利用規約',
   'legal.security': 'セキュリティポリシー',
+  'feedback.link': 'フィードバック',
+  'feedback.title': 'フィードバックを送る',
+  'feedback.typeLabel': '種別',
+  'feedback.typeBug': 'バグ報告',
+  'feedback.typeFeature': '機能要望',
+  'feedback.typeOther': 'その他',
+  'feedback.messageLabel': 'メッセージ',
+  'feedback.messagePlaceholder': 'ご意見・ご要望をお聞かせください…',
+  'feedback.submit': '送信',
+  'feedback.cancel': 'キャンセル',
+  'feedback.success': 'フィードバックを送信しました。ありがとうございます！',
+  'feedback.error': 'フィードバックの送信に失敗しました',
+  'feedback.rateLimit': '送信は60秒に1回までです',
 };
 
 const en: TranslationMap = {
@@ -288,6 +301,19 @@ const en: TranslationMap = {
   'legal.privacy': 'Privacy Policy',
   'legal.terms': 'Terms of Service',
   'legal.security': 'Security Policy',
+  'feedback.link': 'Feedback',
+  'feedback.title': 'Send Feedback',
+  'feedback.typeLabel': 'Type',
+  'feedback.typeBug': 'Bug Report',
+  'feedback.typeFeature': 'Feature Request',
+  'feedback.typeOther': 'Other',
+  'feedback.messageLabel': 'Message',
+  'feedback.messagePlaceholder': 'Tell us what you think…',
+  'feedback.submit': 'Submit',
+  'feedback.cancel': 'Cancel',
+  'feedback.success': 'Feedback sent. Thank you!',
+  'feedback.error': 'Failed to send feedback',
+  'feedback.rateLimit': 'Please wait 60 seconds between submissions',
 };
 
 const es: TranslationMap = {
@@ -432,6 +458,19 @@ const es: TranslationMap = {
   'legal.privacy': 'Política de Privacidad',
   'legal.terms': 'Términos de Servicio',
   'legal.security': 'Política de Seguridad',
+  'feedback.link': 'Comentarios',
+  'feedback.title': 'Enviar comentarios',
+  'feedback.typeLabel': 'Tipo',
+  'feedback.typeBug': 'Reporte de error',
+  'feedback.typeFeature': 'Solicitud de función',
+  'feedback.typeOther': 'Otro',
+  'feedback.messageLabel': 'Mensaje',
+  'feedback.messagePlaceholder': 'Cuéntanos tu opinión…',
+  'feedback.submit': 'Enviar',
+  'feedback.cancel': 'Cancelar',
+  'feedback.success': 'Comentario enviado. ¡Gracias!',
+  'feedback.error': 'Error al enviar comentarios',
+  'feedback.rateLimit': 'Espera 60 segundos entre envíos',
 };
 
 const TRANSLATIONS: Record<string, TranslationMap> = { ja, en, es };

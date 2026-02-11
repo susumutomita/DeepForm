@@ -9,6 +9,7 @@ import {
   exportSpecJSON, exportPRDMarkdown, doDeployToExeDev, activateStep,
   getCurrentSessionId,
 } from './interview';
+import { initInlineEdit, destroyInlineEdit } from './inline-edit';
 import {
   initSharedInterview, initCampaignInterview,
   startSharedInterview, sendSharedMessage, completeSharedInterview, submitSharedFeedback,
@@ -138,7 +139,15 @@ async function init(): Promise<void> {
   document.querySelectorAll('.step-nav .step').forEach(el => {
     el.addEventListener('click', () => {
       const step = (el as HTMLElement).dataset.step;
-      if (step) activateStep(step);
+      if (step) {
+        activateStep(step);
+        // Initialize/destroy inline edit based on active step
+        if (step === 'prd') {
+          initInlineEdit();
+        } else {
+          destroyInlineEdit();
+        }
+      }
     });
   });
 

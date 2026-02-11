@@ -7,6 +7,7 @@ import {
   addMessageToContainer, addStreamingBubble, appendToStreamingBubble,
   finalizeStreamingBubble,
 } from './ui';
+import { initInlineEdit, destroyInlineEdit } from './inline-edit';
 
 let currentSessionId: string | null = null;
 
@@ -17,6 +18,7 @@ export function showHome(): void {
   document.getElementById('page-home')?.classList.add('active');
   document.getElementById('page-interview')?.classList.remove('active');
   currentSessionId = null;
+  destroyInlineEdit();
   history.pushState(null, '', '/');
 }
 
@@ -57,7 +59,14 @@ export async function openSession(sessionId: string, isNew = false): Promise<voi
       'hypothesized': 'hypotheses', 'prd_generated': 'prd', 'spec_generated': 'spec',
       'readiness_checked': 'readiness',
     };
-    activateStep(stepMap[session.status] || 'interview');
+    const activeStep = stepMap[session.status] || 'interview';
+    activateStep(activeStep);
+    // Enable inline editing when PRD content is visible
+    if (activeStep === 'prd' || session.analysis?.prd) {
+      initInlineEdit();
+    } else {
+      destroyInlineEdit();
+    }
 
     if (isNew) {
       hideLoading();
@@ -188,6 +197,7 @@ export async function doRunPRD(): Promise<void> {
     renderPRD(data.prd ?? data as any);
     updateStepNav('prd_generated');
     activateStep('prd');
+    initInlineEdit();
     showToast(t('toast.prdDone'));
   } catch (e: any) {
     showToast(e.message, true);

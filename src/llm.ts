@@ -210,7 +210,7 @@ export function callClaudeStream(
     messages,
   });
 
-  const readable = new Readable({ read() {}, encoding: 'utf8' });
+  const readable = new Readable({ read() {}, encoding: "utf8" });
   let fullText = "";
 
   const { url, apiKey } = endpoint;

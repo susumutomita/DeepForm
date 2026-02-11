@@ -14,7 +14,7 @@ import {
   startCampaignInterview, sendCampaignMessage, completeCampaignInterview, submitCampaignFeedback,
   handleSharedKeydown,
 } from './shared';
-import { showToast } from './ui';
+import { showToast, toggleTheme, initTheme } from './ui';
 import { t } from './i18n';
 import { renderPrivacyPolicy } from './pages/privacy';
 import { renderTerms } from './pages/terms';
@@ -42,6 +42,7 @@ w.exportPRDMarkdown = exportPRDMarkdown;
 w.activateStep = activateStep;
 w.logout = doLogout;
 w.setLang = setLang;
+w.toggleTheme = toggleTheme;
 
 // Navigation / Delete
 w.showInterview = (sessionId: string) => openSession(sessionId);
@@ -103,6 +104,9 @@ w.toggleMobileMenu = () => {
 
 // --- Init ---
 async function init(): Promise<void> {
+  // Theme
+  initTheme();
+
   // i18n
   applyTranslations();
   document.querySelectorAll<HTMLElement>('.lang-btn').forEach(b => {

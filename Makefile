@@ -1,40 +1,36 @@
 .PHONY: install
 install:
-	npm install
+	bun install
 
 .PHONY: install_ci
 install_ci:
-	npm ci
+	bun install --frozen-lockfile
 
 .PHONY: start
 start: install
 	mkdir -p data
-	npx tsx src/index.ts
+	bun run start
 
 .PHONY: dev
 dev: install
 	mkdir -p data
-	npx tsx --watch src/index.ts
+	bun run dev
 
 .PHONY: lint
 lint:
-	npx biome check src/
+	bun run lint
 
 .PHONY: lint_text
 lint_text:
-	npx textlint README.md README.ja.md || true
+	bun run lint:text
 
 .PHONY: typecheck
 typecheck:
-	npx tsc --noEmit
+	bun run typecheck
 
 .PHONY: test
 test:
-	npx vitest run
-
-.PHONY: build
-build:
-	cd frontend && npx vite build
+	bun run test
 
 .PHONY: before-commit
-before-commit: lint typecheck test build
+before-commit: lint lint_text typecheck test

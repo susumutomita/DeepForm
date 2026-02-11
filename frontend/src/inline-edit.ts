@@ -14,18 +14,25 @@ interface ApplyResponse {
 }
 
 let activePopup: HTMLElement | null = null;
+let selectionChangeTimer: ReturnType<typeof setTimeout> | null = null;
 
-// Initialize: attach mouseup listener to PRD container
+// Initialize: attach listeners for both mouse and touch
 export function initInlineEdit(): void {
-  // Listen for text selection on the PRD container
+  // Mouse (desktop)
   document.addEventListener('mouseup', handleTextSelection);
-  // Close popup on click outside
   document.addEventListener('mousedown', handleClickOutside);
+  // Touch (mobile) — selectionchange fires after long-press selection
+  document.addEventListener('selectionchange', handleSelectionChange);
+  // Close popup on touch outside
+  document.addEventListener('touchstart', handleTouchOutside);
 }
 
 export function destroyInlineEdit(): void {
   document.removeEventListener('mouseup', handleTextSelection);
   document.removeEventListener('mousedown', handleClickOutside);
+  document.removeEventListener('selectionchange', handleSelectionChange);
+  document.removeEventListener('touchstart', handleTouchOutside);
+  if (selectionChangeTimer) clearTimeout(selectionChangeTimer);
   closePopup();
 }
 
@@ -33,6 +40,22 @@ function handleClickOutside(e: MouseEvent): void {
   if (activePopup && !activePopup.contains(e.target as Node)) {
     closePopup();
   }
+}
+
+function handleTouchOutside(e: TouchEvent): void {
+  if (activePopup && !activePopup.contains(e.target as Node)) {
+    closePopup();
+  }
+}
+
+// Debounced selectionchange handler for mobile touch selection
+function handleSelectionChange(): void {
+  if (selectionChangeTimer) clearTimeout(selectionChangeTimer);
+  selectionChangeTimer = setTimeout(() => {
+    // Only trigger on touch devices (avoid double-firing on desktop)
+    if (!('ontouchstart' in window)) return;
+    handleTextSelection();
+  }, 500);
 }
 
 function handleTextSelection(_e: MouseEvent): void {

@@ -3,7 +3,7 @@ import { type Context, Hono } from "hono";
 import { ZodError } from "zod";
 import { db } from "../db.ts";
 import { callClaude, extractText } from "../llm.ts";
-import type { AnalysisResult, Campaign, Message, Session, User } from "../types.ts";
+import type { AnalysisResult, Campaign, CampaignAnalytics, Message, Session, User } from "../types.ts";
 import {
   chatMessageSchema,
   createSessionSchema,
@@ -1371,6 +1371,317 @@ sessionRoutes.post("/campaigns/:token/sessions/:sessionId/feedback", async (c) =
   } catch (e) {
     if (e instanceof ZodError) return c.json({ error: formatZodError(e) }, 400);
     console.error("Campaign feedback error:", e);
+    return c.json({ error: (e as Error).message }, 500);
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Helper: ownership check for campaign-by-id endpoints
+// ---------------------------------------------------------------------------
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function getOwnedCampaignById(c: Context<AppEnv, any>): Campaign | Response {
+  const user = c.get("user");
+  if (!user) return c.json({ error: "ログインが必要です" }, 401);
+  const campaignId = c.req.param("id");
+  const campaign = db.prepare("SELECT * FROM campaigns WHERE id = ?").get(campaignId) as unknown as
+    | Campaign
+    | undefined;
+  if (!campaign) return c.json({ error: "Campaign not found" }, 404);
+  // Check ownership via owner_session_id
+  if (campaign.owner_session_id) {
+    const ownerSession = db
+      .prepare("SELECT user_id FROM sessions WHERE id = ?")
+      .get(campaign.owner_session_id) as unknown as { user_id: string | null } | undefined;
+    if (!ownerSession || ownerSession.user_id !== user.id) {
+      return c.json({ error: "アクセス権限がありません" }, 403);
+    }
+  } else {
+    return c.json({ error: "アクセス権限がありません" }, 403);
+  }
+  return campaign;
+}
+
+// ---------------------------------------------------------------------------
+// Helper: build campaign analytics from facts
+// ---------------------------------------------------------------------------
+
+function buildCampaignAnalytics(campaignId: string): CampaignAnalytics {
+  const allSessions = db
+    .prepare("SELECT id, status FROM sessions WHERE campaign_id = ?")
+    .all(campaignId) as unknown as { id: string; status: string }[];
+
+  const completedSessions = allSessions.filter((s) => s.status === "respondent_done");
+
+  const allFacts: Array<{ type: string; content: string; severity: string }> = [];
+  for (const s of completedSessions) {
+    const factsRow = db
+      .prepare("SELECT data FROM analysis_results WHERE session_id = ? AND type = ?")
+      .get(s.id, "facts") as unknown as { data: string } | undefined;
+    if (factsRow) {
+      const parsed = JSON.parse(factsRow.data);
+      const factList = (parsed.facts || parsed) as Array<Record<string, unknown>>;
+      for (const f of factList) {
+        allFacts.push({
+          type: (f.type as string) || "fact",
+          content: (f.content as string) || "",
+          severity: (f.severity as string) || "medium",
+        });
+      }
+    }
+  }
+
+  // Common facts: group by content similarity (exact match for simplicity)
+  const contentMap = new Map<string, { count: number; type: string; severity: string }>();
+  for (const f of allFacts) {
+    const key = f.content.toLowerCase().trim();
+    const existing = contentMap.get(key);
+    if (existing) {
+      existing.count++;
+    } else {
+      contentMap.set(key, { count: 1, type: f.type, severity: f.severity });
+    }
+  }
+  const commonFacts = Array.from(contentMap.entries())
+    .map(([content, v]) => ({ content, count: v.count, type: v.type, severity: v.severity }))
+    .sort((a, b) => b.count - a.count);
+
+  // Pain points: filter by type === "pain"
+  const painPoints = allFacts
+    .filter((f) => f.type === "pain")
+    .reduce(
+      (acc, f) => {
+        const key = f.content.toLowerCase().trim();
+        const existing = acc.find((p) => p.content === key);
+        if (existing) {
+          existing.count++;
+        } else {
+          acc.push({ content: key, count: 1, severity: f.severity });
+        }
+        return acc;
+      },
+      [] as Array<{ content: string; count: number; severity: string }>,
+    )
+    .sort((a, b) => b.count - a.count);
+
+  // Frequency analysis: filter by type === "frequency"
+  const frequencyAnalysis = allFacts
+    .filter((f) => f.type === "frequency")
+    .reduce(
+      (acc, f) => {
+        const key = f.content.toLowerCase().trim();
+        const existing = acc.find((p) => p.content === key);
+        if (existing) {
+          existing.count++;
+        } else {
+          acc.push({ content: key, count: 1 });
+        }
+        return acc;
+      },
+      [] as Array<{ content: string; count: number }>,
+    )
+    .sort((a, b) => b.count - a.count);
+
+  // Keyword counts: simple word frequency across all fact contents
+  const keywordCounts: Record<string, number> = {};
+  for (const f of allFacts) {
+    const words = f.content
+      .replace(/[。、！？（）「」\s]+/g, " ")
+      .split(" ")
+      .filter((w) => w.length >= 2);
+    for (const word of words) {
+      const key = word.toLowerCase();
+      keywordCounts[key] = (keywordCounts[key] || 0) + 1;
+    }
+  }
+
+  return {
+    totalSessions: allSessions.length,
+    completedSessions: completedSessions.length,
+    commonFacts,
+    painPoints,
+    frequencyAnalysis,
+    keywordCounts,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Campaign Analytics
+// ---------------------------------------------------------------------------
+
+// 24. GET /campaigns/:id/analytics — Aggregate analytics (owner only)
+sessionRoutes.get("/campaigns/:id/analytics", (c) => {
+  try {
+    const result = getOwnedCampaignById(c);
+    if (result instanceof Response) return result;
+    const campaign = result;
+
+    const analytics = buildCampaignAnalytics(campaign.id);
+    return c.json(analytics);
+  } catch (e) {
+    console.error("Campaign analytics error:", e);
+    return c.json({ error: (e as Error).message }, 500);
+  }
+});
+
+// 25. POST /campaigns/:id/analytics/generate — AI cross-analysis (owner only)
+sessionRoutes.post("/campaigns/:id/analytics/generate", async (c) => {
+  try {
+    const result = getOwnedCampaignById(c);
+    if (result instanceof Response) return result;
+    const campaign = result;
+
+    const analytics = buildCampaignAnalytics(campaign.id);
+
+    if (analytics.completedSessions === 0) {
+      return c.json({ error: "完了済みセッションがありません" }, 400);
+    }
+
+    const systemPrompt = `あなたは定性調査の横断分析エキスパートです。複数のデプスインタビューから抽出されたファクトを分析し、パターンを検出してください。
+
+必ず以下のJSON形式で返してください。JSON以外のテキストは含めないでください。
+
+{
+  "summary": "全体の傾向サマリー（200文字以内）",
+  "patterns": [
+    {
+      "id": "P1",
+      "title": "パターンタイトル",
+      "description": "パターンの説明",
+      "frequency": "該当セッション数/全セッション数",
+      "severity": "high"
+    }
+  ],
+  "insights": [
+    {
+      "id": "I1",
+      "content": "横断的インサイト",
+      "supportingPatterns": ["P1"]
+    }
+  ],
+  "recommendations": [
+    "アクション推奨1",
+    "アクション推奨2"
+  ]
+}
+
+ルール：
+- 複数インタビューに共通するパターンを優先的に抽出
+- 具体的な数値や頻度に基づいた分析
+- 抽象的な表現は避け、アクショナブルな推奨を記述`;
+
+    const factsInput = JSON.stringify({
+      totalSessions: analytics.totalSessions,
+      completedSessions: analytics.completedSessions,
+      commonFacts: analytics.commonFacts.slice(0, 30),
+      painPoints: analytics.painPoints.slice(0, 20),
+      keywordCounts: analytics.keywordCounts,
+    });
+
+    const response = await callClaude(
+      [{ role: "user", content: `以下のキャンペーン横断データを分析してください：\n\n${factsInput}` }],
+      systemPrompt,
+      4096,
+    );
+    const text = extractText(response);
+
+    let analysisData: unknown;
+    try {
+      const jsonMatch = text.match(/\{[\s\S]*\}/);
+      analysisData = JSON.parse(jsonMatch?.[0] as string);
+    } catch {
+      analysisData = { summary: text, patterns: [], insights: [], recommendations: [] };
+    }
+
+    // Save to analysis_results using campaign's owner_session_id
+    // owner_session_id is guaranteed non-null here because getOwnedCampaignById checks it
+    const sessionId = campaign.owner_session_id as string;
+    const existing = db
+      .prepare("SELECT id FROM analysis_results WHERE session_id = ? AND type = ?")
+      .get(sessionId, "campaign_analytics") as unknown as { id: number } | undefined;
+    if (existing) {
+      db.prepare("UPDATE analysis_results SET data = ?, created_at = CURRENT_TIMESTAMP WHERE id = ?").run(
+        JSON.stringify(analysisData),
+        existing.id,
+      );
+    } else {
+      db.prepare("INSERT INTO analysis_results (session_id, type, data) VALUES (?, ?, ?)").run(
+        sessionId,
+        "campaign_analytics",
+        JSON.stringify(analysisData),
+      );
+    }
+
+    return c.json(analysisData);
+  } catch (e) {
+    console.error("Campaign analytics generate error:", e);
+    return c.json({ error: (e as Error).message }, 500);
+  }
+});
+
+// 26. GET /campaigns/:id/export — Export analytics as JSON (owner only)
+sessionRoutes.get("/campaigns/:id/export", (c) => {
+  try {
+    const result = getOwnedCampaignById(c);
+    if (result instanceof Response) return result;
+    const campaign = result;
+
+    const analytics = buildCampaignAnalytics(campaign.id);
+
+    // Include AI-generated analysis if available
+    let aiAnalysis: unknown = null;
+    if (campaign.owner_session_id) {
+      const aiRow = db
+        .prepare("SELECT data FROM analysis_results WHERE session_id = ? AND type = ?")
+        .get(campaign.owner_session_id, "campaign_analytics") as unknown as { data: string } | undefined;
+      if (aiRow) {
+        aiAnalysis = JSON.parse(aiRow.data);
+      }
+    }
+
+    // Collect respondent details
+    const respondents = db
+      .prepare(`
+      SELECT s.id, s.respondent_name, s.status, s.respondent_feedback, s.created_at,
+        ar.data as facts_data
+      FROM sessions s
+      LEFT JOIN analysis_results ar ON ar.session_id = s.id AND ar.type = 'facts'
+      WHERE s.campaign_id = ?
+      ORDER BY s.created_at
+    `)
+      .all(campaign.id) as unknown as {
+      id: string;
+      respondent_name: string | null;
+      status: string;
+      respondent_feedback: string | null;
+      created_at: string;
+      facts_data: string | null;
+    }[];
+
+    const exportData = {
+      campaign: {
+        id: campaign.id,
+        theme: campaign.theme,
+        createdAt: campaign.created_at,
+        exportedAt: new Date().toISOString(),
+      },
+      analytics,
+      aiAnalysis,
+      respondents: respondents.map((r) => ({
+        sessionId: r.id,
+        name: r.respondent_name || "匿名",
+        status: r.status,
+        feedback: r.respondent_feedback,
+        createdAt: r.created_at,
+        facts: r.facts_data ? JSON.parse(r.facts_data) : null,
+      })),
+    };
+
+    c.header("Content-Type", "application/json");
+    c.header("Content-Disposition", `attachment; filename="campaign-${campaign.id}-analytics.json"`);
+    return c.json(exportData);
+  } catch (e) {
+    console.error("Campaign export error:", e);
     return c.json({ error: (e as Error).message }, 500);
   }
 });

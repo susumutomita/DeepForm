@@ -1858,3 +1858,245 @@ a:hover { color: var(--primary-hover); }
     }
   }
 }
+
+/* === Campaign Analytics Dashboard === */
+.analytics-dashboard {
+  max-width: 900px;
+  margin: 0 auto;
+  padding: 1.5rem;
+}
+
+.analytics-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1.5rem;
+  flex-wrap: wrap;
+  gap: 1rem;
+}
+
+.analytics-header h2 {
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: var(--text-bright);
+}
+
+.analytics-actions {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.analytics-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 1rem;
+  margin-bottom: 2rem;
+}
+
+.stat-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius);
+  padding: 1.25rem;
+  text-align: center;
+  box-shadow: var(--shadow-sm);
+}
+
+.stat-value {
+  font-size: 2rem;
+  font-weight: 700;
+  color: var(--primary);
+  line-height: 1.2;
+}
+
+.stat-label {
+  font-size: 0.8rem;
+  color: var(--text-dim);
+  margin-top: 0.25rem;
+}
+
+.analytics-section {
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius);
+  padding: 1.25rem;
+  margin-bottom: 1.5rem;
+  box-shadow: var(--shadow-sm);
+}
+
+.analytics-section h3 {
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--text-bright);
+  margin-bottom: 1rem;
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.analytics-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.875rem;
+}
+
+.analytics-table th,
+.analytics-table td {
+  padding: 0.5rem 0.75rem;
+  text-align: left;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.analytics-table th {
+  font-weight: 600;
+  color: var(--text-dim);
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+
+.analytics-count {
+  text-align: center;
+  font-weight: 600;
+  color: var(--primary);
+}
+
+.severity-badge {
+  display: inline-block;
+  padding: 0.15em 0.5em;
+  border-radius: var(--radius-sm);
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.severity-high {
+  background: rgba(165, 66, 66, 0.12);
+  color: var(--accent-red);
+}
+
+.severity-medium {
+  background: rgba(222, 147, 95, 0.12);
+  color: var(--accent-yellow);
+}
+
+.severity-low {
+  background: rgba(140, 148, 64, 0.12);
+  color: var(--accent-green);
+}
+
+.pain-list {
+  list-style: none;
+  padding: 0;
+}
+
+.pain-item {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.6rem 0;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.pain-item:last-child {
+  border-bottom: none;
+}
+
+.pain-content {
+  flex: 1;
+  font-size: 0.875rem;
+}
+
+.pain-count {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--primary);
+  white-space: nowrap;
+}
+
+.analytics-empty {
+  color: var(--text-dim);
+  font-size: 0.875rem;
+  text-align: center;
+  padding: 1rem;
+}
+
+.analytics-loading {
+  text-align: center;
+  padding: 3rem;
+  color: var(--text-dim);
+}
+
+.analytics-error {
+  text-align: center;
+  padding: 2rem;
+  color: var(--accent-red);
+}
+
+/* AI Analysis Section */
+.ai-summary {
+  background: var(--primary-dim);
+  border-radius: var(--radius-sm);
+  padding: 1rem;
+  margin-bottom: 1rem;
+}
+
+.ai-summary p {
+  font-size: 0.9rem;
+  line-height: 1.6;
+  color: var(--text);
+}
+
+.pattern-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+
+.pattern-card {
+  background: var(--bg-input);
+  border-radius: var(--radius-sm);
+  padding: 0.75rem 1rem;
+}
+
+.pattern-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.4rem;
+  flex-wrap: wrap;
+}
+
+.pattern-freq {
+  font-size: 0.8rem;
+  color: var(--text-dim);
+}
+
+.pattern-card p {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+}
+
+.insight-list,
+.recommendation-list {
+  padding-left: 1.25rem;
+  font-size: 0.875rem;
+  line-height: 1.7;
+}
+
+.analytics-section h4 {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--text);
+  margin: 1rem 0 0.5rem;
+}
+
+@media (max-width: 600px) {
+  .analytics-header {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  .analytics-stats {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}

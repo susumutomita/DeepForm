@@ -18,6 +18,7 @@ import { showToast, toggleTheme, initTheme } from './ui';
 import { openPolicy, closeModal } from './modal';
 import { openFeedbackModal, closeFeedbackModal } from './feedback';
 import { openExportIssuesModal } from './github-export';
+import { showCampaignAnalytics } from './campaign-analytics';
 import { t } from './i18n';
 import { renderPrivacyPolicy } from './pages/privacy';
 import { renderTerms } from './pages/terms';
@@ -59,6 +60,9 @@ w.deleteSession = async (sessionId: string) => {
     showToast(e.message, true);
   }
 };
+
+// Campaign Analytics
+w.showCampaignAnalytics = showCampaignAnalytics;
 
 // Shared / Campaign
 w.startSharedInterview = startSharedInterview;

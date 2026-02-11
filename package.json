@@ -2,25 +2,33 @@
   "name": "deepform",
   "version": "1.0.0",
   "description": "AI Depth Interview → Hypothesis → PRD → Coding Agent Spec",
+  "type": "module",
   "main": "src/index.ts",
   "scripts": {
-    "start": "tsx src/index.ts",
-    "dev": "tsx --watch src/index.ts",
+    "start": "node --env-file=.env --experimental-strip-types src/index.ts",
+    "dev": "node --env-file=.env --experimental-strip-types --watch src/index.ts",
+    "build": "tsc",
     "typecheck": "tsc --noEmit",
-    "lint:text": "bunx textlint ./README.md",
+    "lint": "biome check src/",
+    "lint:fix": "biome check --write src/",
+    "lint:text": "textlint ./README.md",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
     "lint-staged": "lint-staged",
     "prepare": "husky"
   },
   "dependencies": {
     "@hono/node-server": "^1.19.9",
     "@hono/oauth-providers": "^0.8.5",
-    "better-sqlite3": "^11.0.0",
     "hono": "^4.11.9",
-    "uuid": "^9.0.0"
+    "uuid": "^9.0.0",
+    "zod": "^4.3.6"
   },
   "devDependencies": {
+    "@biomejs/biome": "^2.3.14",
     "@textlint-ja/textlint-rule-preset-ai-writing": "^1.6.1",
-    "@types/better-sqlite3": "^7.6.13",
+    "@vitest/coverage-v8": "^4.0.18",
     "husky": "^9.1.7",
     "lint-staged": "^16.2.7",
     "oxfmt": "^0.28.0",
@@ -34,7 +42,7 @@
     "textlint-rule-preset-ja-spacing": "^2.2.0",
     "textlint-rule-preset-ja-technical-writing": "^12.0.2",
     "textlint-rule-spellcheck-tech-word": "^5.0.0",
-    "tsx": "^4.21.0",
-    "typescript": "^5.9.3"
+    "typescript": "^5.9.3",
+    "vitest": "^4.0.18"
   }
 }

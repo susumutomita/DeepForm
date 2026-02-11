@@ -11,6 +11,7 @@ const TRANSLATIONS = {
     'hero.title2': 'リリースできる仕様まで、一直線。',
     'hero.sub': 'AIがあればPoCは作れる。でも、その先がない。\nエッジケース、非機能要件、受け入れ基準——\nサービスにするために必要なことを、AIがインタビューから全部引き出します。',
     'hero.placeholder': '例：研究室の週末オペを楽にしたい…',
+    'hero.inputLabel': '課題テーマを入力',
     'hero.cta': 'インタビューを開始',
 
     // Problem
@@ -65,6 +66,7 @@ const TRANSLATIONS = {
     // Interview
     'interview.title': 'AI デプスインタビュー',
     'interview.desc': '課題について、AIが具体的なエピソードを深掘りします',
+    'interview.minAnswers': '3 回以上回答するとファクト抽出に進めます',
     'interview.placeholder': '回答を入力…',
     'interview.hint': 'Shift + Enter で送信　・　Enter で改行',
     'interview.next': 'ファクト抽出に進む →',
@@ -202,6 +204,7 @@ const TRANSLATIONS = {
     'hero.title2': 'Ship-ready specs, end to end.',
     'hero.sub': 'AI can build a PoC. But what comes next?\nEdge cases, non-functional requirements, acceptance criteria—\nDeepForm extracts everything you need through AI-driven interviews.',
     'hero.placeholder': 'e.g. Make weekend lab operations easier…',
+    'hero.inputLabel': 'Enter your challenge theme',
     'hero.cta': 'Start interview',
     'problem.title': 'You can build a PoC. But then what?',
     'problem.desc': 'AI made it fast to turn ideas into working prototypes.\nBut in reality, most projects stall at the PoC stage.',
@@ -244,6 +247,7 @@ const TRANSLATIONS = {
     'footer.credit': 'Built with Claude AI × exe.dev',
     'interview.title': 'AI Depth Interview',
     'interview.desc': 'AI will dig into specific episodes about your challenge',
+    'interview.minAnswers': 'Answer at least 3 times to unlock fact extraction',
     'interview.placeholder': 'Type your answer…',
     'interview.hint': 'Shift + Enter to send · Enter for new line',
     'interview.next': 'Extract facts →',
@@ -362,6 +366,7 @@ const TRANSLATIONS = {
     'hero.title2': 'Specs listas para producción, de punta a punta.',
     'hero.sub': 'Con IA puedes crear un PoC. Pero ¿qué viene después?\nCasos límite, requisitos no funcionales, criterios de aceptación—\nDeepForm extrae todo lo necesario a través de entrevistas con IA.',
     'hero.placeholder': 'Ej: Simplificar las operaciones de fin de semana del laboratorio…',
+    'hero.inputLabel': 'Ingresa el tema de tu desafío',
     'hero.cta': 'Iniciar entrevista',
     'problem.title': 'Puedes crear un PoC. ¿Y luego?',
     'problem.desc': 'La IA aceleró la creación de prototipos funcionales.\nPero en la realidad, la mayoría de proyectos se estancan en el PoC.',
@@ -404,6 +409,7 @@ const TRANSLATIONS = {
     'footer.credit': 'Hecho con Claude AI × exe.dev',
     'interview.title': 'Entrevista en profundidad con IA',
     'interview.desc': 'La IA profundizará en episodios específicos sobre tu desafío',
+    'interview.minAnswers': 'Responde al menos 3 veces para desbloquear la extracción de hechos',
     'interview.placeholder': 'Escribe tu respuesta…',
     'interview.hint': 'Shift + Enter para enviar · Enter para nueva línea',
     'interview.next': 'Extraer hechos →',
@@ -526,6 +532,7 @@ function setLang(lang) {
   if (!TRANSLATIONS[lang]) return;
   currentLang = lang;
   localStorage.setItem('deepform-lang', lang);
+  document.documentElement.lang = lang;
   applyTranslations();
   // Update active state on lang buttons
   document.querySelectorAll('.lang-btn').forEach(b => {

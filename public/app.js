@@ -273,7 +273,7 @@ async function sendMessage() {
 
     addMessage('assistant', data.reply);
 
-    if (data.readyForAnalysis || data.turnCount >= 5) {
+    if (data.readyForAnalysis || data.turnCount >= 3) {
       document.getElementById('btn-analyze').disabled = false;
     }
   } catch (e) {
@@ -290,6 +290,7 @@ function addMessage(role, content) {
   const msg = document.createElement('div');
   msg.className = `chat-msg ${role}`;
   msg.textContent = content;
+  msg.setAttribute('aria-label', role === 'assistant' ? 'AI: ' + content : content);
   container.appendChild(msg);
   container.scrollTop = container.scrollHeight;
 }
@@ -726,15 +727,23 @@ function activateStep(stepName) {
   if (stepEl) stepEl.classList.add('active');
 
   // Update sidebar
-  document.querySelectorAll('.step-nav .step').forEach(el => el.classList.remove('active'));
+  document.querySelectorAll('.step-nav .step').forEach(el => {
+    el.classList.remove('active');
+    el.setAttribute('aria-selected', 'false');
+    el.setAttribute('tabindex', '-1');
+  });
   const navStep = document.querySelector(`.step-nav .step[data-step="${stepName}"]`);
-  if (navStep) navStep.classList.add('active');
+  if (navStep) {
+    navStep.classList.add('active');
+    navStep.setAttribute('aria-selected', 'true');
+    navStep.setAttribute('tabindex', '0');
+  }
 }
 
 function updateStepNav(status) {
   const order = ['interviewing', 'analyzed', 'respondent_done', 'hypothesized', 'prd_generated', 'spec_generated', 'deployed'];
   // Normalize: respondent_done counts same as analyzed
-  if (status === 'respondent_done') status = 'respondent_done';
+  if (status === 'respondent_done') status = 'analyzed';
   const stepNames = ['interview', 'facts', 'hypotheses', 'prd', 'spec', 'deploy'];
   const currentIndex = order.indexOf(status);
 
@@ -954,6 +963,7 @@ function addSharedMessage(role, content) {
   const msg = document.createElement('div');
   msg.className = `chat-msg ${role}`;
   msg.textContent = content;
+  msg.setAttribute('aria-label', role === 'assistant' ? 'AI: ' + content : content);
   container.appendChild(msg);
   container.scrollTop = container.scrollHeight;
 }
@@ -1083,8 +1093,8 @@ async function startCampaignInterview() {
     document.getElementById('shared-chat-theme').textContent = data.theme;
 
     const container = document.getElementById('shared-chat-container');
-    container.innerHTML = '';
-    appendChatBubble(container, 'assistant', data.reply);
+    container.textContent = '';
+    addSharedMessage('assistant', data.reply);
   } catch (e) {
     hideLoading();
     showToast(e.message, true);
@@ -1097,9 +1107,8 @@ async function sendCampaignMessage() {
   if (!message) return;
   input.value = '';
 
-  const container = document.getElementById('shared-chat-container');
-  appendChatBubble(container, 'user', message);
-  showTypingIndicator('shared-chat-container');
+  addSharedMessage('user', message);
+  showTypingInContainer('shared-chat-container');
 
   try {
     const res = await fetch(`/api/campaigns/${campaignToken}/sessions/${campaignSessionId}/chat`, {
@@ -1108,10 +1117,10 @@ async function sendCampaignMessage() {
       body: JSON.stringify({ message }),
     });
     const data = await res.json();
-    removeTypingIndicator('shared-chat-container');
+    removeTypingFromContainer('shared-chat-container');
     if (data.error) throw new Error(data.error);
 
-    appendChatBubble(container, 'assistant', data.reply);
+    addSharedMessage('assistant', data.reply);
 
     if (data.isComplete) {
       document.getElementById('shared-complete-actions').style.display = 'block';
@@ -1121,7 +1130,7 @@ async function sendCampaignMessage() {
     const bar = document.getElementById('shared-progress-bar');
     if (bar) bar.style.width = `${Math.min(100, (data.turnCount / 6) * 100)}%`;
   } catch (e) {
-    removeTypingIndicator('shared-chat-container');
+    removeTypingFromContainer('shared-chat-container');
     showToast(e.message, true);
   }
 }
@@ -1160,6 +1169,16 @@ async function submitCampaignFeedback() {
   document.getElementById('shared-thanks').classList.add('active');
 }
 
+// --- Mobile Menu ---
+function toggleMobileMenu() {
+  const nav = document.getElementById('header-nav');
+  const btn = document.querySelector('.hamburger-btn');
+  if (!nav || !btn) return;
+  const isOpen = nav.classList.toggle('open');
+  btn.setAttribute('aria-expanded', String(isOpen));
+  btn.setAttribute('aria-label', isOpen ? 'メニューを閉じる' : 'メニューを開く');
+}
+
 // --- Init ---
 (function init() {
   // Apply i18n translations and set active lang button
@@ -1168,6 +1187,11 @@ async function submitCampaignFeedback() {
     document.querySelectorAll('.lang-btn').forEach(b => {
       b.classList.toggle('active', b.dataset.lang === currentLang);
     });
+  }
+
+  // Set lang attribute on html element
+  if (typeof currentLang !== 'undefined') {
+    document.documentElement.lang = currentLang;
   }
 
   // Check auth state

@@ -1,8 +1,8 @@
 export interface Session {
   id: string;
   theme: string;
-  status: 'interviewing' | 'analyzed' | 'respondent_done' | 'hypothesized' | 'prd_generated' | 'spec_generated';
-  mode: 'self' | 'shared' | 'campaign_respondent';
+  status: "interviewing" | "analyzed" | "respondent_done" | "hypothesized" | "prd_generated" | "spec_generated";
+  mode: "self" | "shared" | "campaign_respondent";
   share_token: string | null;
   respondent_name: string | null;
   respondent_feedback: string | null;
@@ -16,7 +16,7 @@ export interface Session {
 export interface Message {
   id: number;
   session_id: string;
-  role: 'user' | 'assistant';
+  role: "user" | "assistant";
   content: string;
   created_at: string;
 }
@@ -24,7 +24,7 @@ export interface Message {
 export interface AnalysisResult {
   id: number;
   session_id: string;
-  type: 'facts' | 'hypotheses' | 'prd' | 'spec';
+  type: "facts" | "hypotheses" | "prd" | "spec";
   data: string;
   created_at: string;
 }
@@ -49,10 +49,10 @@ export interface User {
 
 export interface Fact {
   id: string;
-  type: 'fact' | 'pain' | 'frequency' | 'workaround';
+  type: "fact" | "pain" | "frequency" | "workaround";
   content: string;
   evidence: string;
-  severity: 'high' | 'medium' | 'low';
+  severity: "high" | "medium" | "low";
 }
 
 export interface Hypothesis {

@@ -1,17 +1,19 @@
-import path from "node:path";
+/**
+ * テスト用データベースヘルパー
+ * node:sqlite の DatabaseSync を使い、better-sqlite3 互換の API を提供する。
+ * ネイティブバイナリ不要で動作する。
+ */
 import { DatabaseSync } from "node:sqlite";
-import { fileURLToPath } from "node:url";
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-
-const DB_PATH = path.join(__dirname, "..", "data", "deepform.db");
-
-const db = new DatabaseSync(DB_PATH);
-db.exec("PRAGMA journal_mode = WAL");
-db.exec("PRAGMA foreign_keys = ON");
-
-db.exec(`
+export const FULL_SCHEMA = `
+  CREATE TABLE IF NOT EXISTS users (
+    id TEXT PRIMARY KEY,
+    github_id INTEGER UNIQUE NOT NULL,
+    github_login TEXT NOT NULL,
+    avatar_url TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  );
   CREATE TABLE IF NOT EXISTS sessions (
     id TEXT PRIMARY KEY,
     theme TEXT NOT NULL,
@@ -22,7 +24,9 @@ db.exec(`
     respondent_feedback TEXT,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    campaign_id TEXT
+    campaign_id TEXT,
+    user_id TEXT REFERENCES users(id),
+    is_public INTEGER DEFAULT 0
   );
   CREATE TABLE IF NOT EXISTS messages (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -49,30 +53,11 @@ db.exec(`
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (owner_session_id) REFERENCES sessions(id)
   );
-  CREATE TABLE IF NOT EXISTS users (
-    id TEXT PRIMARY KEY,
-    github_id INTEGER UNIQUE NOT NULL,
-    github_login TEXT NOT NULL,
-    avatar_url TEXT,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
-  );
-`);
+`;
 
-// Migration: ensure indexes exist
-db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_sessions_share_token ON sessions(share_token)");
-
-try {
-  db.exec("ALTER TABLE sessions ADD COLUMN user_id TEXT REFERENCES users(id)");
-} catch (e: unknown) {
-  const msg = e instanceof Error ? e.message : "";
-  if (!msg.includes("duplicate column")) throw e;
+export function createTestDb() {
+  const db = new DatabaseSync(":memory:");
+  db.exec("PRAGMA foreign_keys = ON");
+  db.exec(FULL_SCHEMA);
+  return db;
 }
-try {
-  db.exec("ALTER TABLE sessions ADD COLUMN is_public INTEGER DEFAULT 0");
-} catch (e: unknown) {
-  const msg = e instanceof Error ? e.message : "";
-  if (!msg.includes("duplicate column")) throw e;
-}
-
-export { db };

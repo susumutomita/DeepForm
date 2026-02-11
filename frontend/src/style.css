@@ -1667,6 +1667,74 @@ a:hover { color: var(--primary-hover); }
   .modal-content { max-height: 90vh; margin: 8px; border-radius: var(--radius); }
 }
 
+/* === Feedback Modal === */
+.feedback-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.5);
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+.feedback-card {
+  background: var(--bg-elevated);
+  border-radius: var(--radius-lg);
+  max-width: 500px;
+  width: 100%;
+  padding: 28px;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+}
+.feedback-title {
+  font-size: 1.2rem;
+  font-weight: 600;
+  margin: 0 0 20px;
+}
+.feedback-label {
+  display: block;
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: var(--text-dim);
+  margin-bottom: 6px;
+  margin-top: 14px;
+}
+.feedback-select {
+  width: 100%;
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg);
+  color: var(--text);
+  font-size: 0.9rem;
+}
+.feedback-textarea {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg);
+  color: var(--text);
+  font-size: 0.9rem;
+  resize: vertical;
+  font-family: inherit;
+}
+.feedback-textarea:focus,
+.feedback-select:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px rgba(129, 162, 190, 0.2);
+}
+.feedback-buttons {
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+  margin-top: 20px;
+}
+@media (max-width: 768px) {
+  .feedback-card { margin: 8px; padding: 20px; }
+}
+
 /* === Dark Mode === */
 /* Manual toggle via data-theme attribute */
 [data-theme="dark"] {

@@ -53,6 +53,15 @@ export const FULL_SCHEMA = `
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (owner_session_id) REFERENCES sessions(id)
   );
+  CREATE TABLE IF NOT EXISTS feedback (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id TEXT REFERENCES users(id),
+    type TEXT NOT NULL,
+    message TEXT NOT NULL,
+    page TEXT,
+    ip_address TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  );
 `;
 
 export function createTestDb() {

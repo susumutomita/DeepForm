@@ -153,3 +153,8 @@ export function completeCampaign(token: string, sessionId: string): Promise<Fact
 export function feedbackCampaign(token: string, sessionId: string, feedback: string | null): Promise<void> {
   return post(`/api/campaigns/${token}/sessions/${sessionId}/feedback`, { feedback });
 }
+
+// App feedback
+export function submitAppFeedback(type: string, message: string, page?: string): Promise<{ ok: boolean }> {
+  return post('/api/feedback', { type, message, page });
+}

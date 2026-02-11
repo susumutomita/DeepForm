@@ -6,6 +6,7 @@ import { bodyLimit } from "hono/body-limit";
 import { HTTPException } from "hono/http-exception";
 import { authMiddleware } from "./middleware/auth.ts";
 import { authRoutes } from "./routes/auth.ts";
+import { feedbackRoutes } from "./routes/feedback.ts";
 import { sessionRoutes } from "./routes/sessions.ts";
 
 const app = new Hono();
@@ -35,6 +36,9 @@ app.route("/api/auth", authRoutes);
 
 // Session routes
 app.route("/api", sessionRoutes);
+
+// Feedback routes
+app.route("/api/feedback", feedbackRoutes);
 
 // Static file serving
 app.use("/*", serveStatic({ root: staticRoot }));

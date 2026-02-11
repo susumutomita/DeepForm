@@ -16,6 +16,7 @@ import {
 } from './shared';
 import { showToast, toggleTheme, initTheme } from './ui';
 import { openPolicy, closeModal } from './modal';
+import { openFeedbackModal, closeFeedbackModal } from './feedback';
 import { t } from './i18n';
 import { renderPrivacyPolicy } from './pages/privacy';
 import { renderTerms } from './pages/terms';
@@ -98,6 +99,8 @@ w.startNewSession = async () => {
 w.toggleTheme = toggleTheme;
 w.openPolicy = openPolicy;
 w.closeModal = closeModal;
+w.openFeedbackModal = openFeedbackModal;
+w.closeFeedbackModal = closeFeedbackModal;
 
 w.toggleMobileMenu = () => {
   const nav = document.getElementById('header-nav');

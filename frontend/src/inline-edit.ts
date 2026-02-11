@@ -144,13 +144,37 @@ async function showSuggestionPopup(
     </div>
   `;
 
-  // Position popup below the selection
+  // Position popup
   const scrollTop = window.scrollY || document.documentElement.scrollTop;
   const scrollLeft = window.scrollX || document.documentElement.scrollLeft;
+  const isMobile = 'ontouchstart' in window || window.innerWidth < 768;
   popup.style.position = 'absolute';
-  popup.style.top = `${rect.bottom + scrollTop + 4}px`;
-  popup.style.left = `${rect.left + scrollLeft}px`;
   popup.style.zIndex = '9999';
+
+  if (isMobile) {
+    // Mobile: place opposite to OS context menu
+    // OS menu appears toward screen center, so we go toward the edge
+    const selectionCenterY = rect.top + rect.height / 2;
+    const isUpperHalf = selectionCenterY < window.innerHeight / 2;
+
+    if (isUpperHalf) {
+      // Selection in upper half → OS menu below → DeepForm above
+      popup.classList.add('inline-edit-popup--mobile-above');
+      popup.style.top = `${rect.top + scrollTop - 8}px`; // temp, adjusted after render
+    } else {
+      // Selection in lower half → OS menu above → DeepForm below
+      popup.classList.add('inline-edit-popup--mobile-below');
+      popup.style.top = `${rect.bottom + scrollTop + 40}px`; // below OS menu area
+    }
+    // Horizontally center on screen for mobile
+    popup.style.left = `${scrollLeft + 16}px`;
+    popup.style.right = '16px';
+    popup.style.maxWidth = `${window.innerWidth - 32}px`;
+  } else {
+    // Desktop: show below the selection
+    popup.style.top = `${rect.bottom + scrollTop + 4}px`;
+    popup.style.left = `${rect.left + scrollLeft}px`;
+  }
 
   document.body.appendChild(popup);
   activePopup = popup;
@@ -302,23 +326,38 @@ function repositionPopup(popup: HTMLElement, triggerRect: DOMRect): void {
   const popupRect = popup.getBoundingClientRect();
   const viewportWidth = window.innerWidth;
   const viewportHeight = window.innerHeight;
+  const scrollTop = window.scrollY || document.documentElement.scrollTop;
+  const scrollLeft = window.scrollX || document.documentElement.scrollLeft;
+  const isMobileAbove = popup.classList.contains('inline-edit-popup--mobile-above');
+  const isMobileBelow = popup.classList.contains('inline-edit-popup--mobile-below');
 
-  // Adjust horizontal position if going off-screen to the right
-  if (popupRect.right > viewportWidth - 16) {
-    const scrollLeft = window.scrollX || document.documentElement.scrollLeft;
-    popup.style.left = `${viewportWidth - popupRect.width - 16 + scrollLeft}px`;
-  }
+  if (isMobileAbove) {
+    // Place popup so its bottom is just above the selection
+    popup.style.top = `${triggerRect.top + scrollTop - popupRect.height - 12}px`;
 
-  // Adjust horizontal position if going off-screen to the left
-  if (popupRect.left < 16) {
-    const scrollLeft = window.scrollX || document.documentElement.scrollLeft;
-    popup.style.left = `${16 + scrollLeft}px`;
-  }
-
-  // If popup would go below viewport, show above the selection instead
-  if (popupRect.bottom > viewportHeight - 16) {
-    const scrollTop = window.scrollY || document.documentElement.scrollTop;
-    popup.style.top = `${triggerRect.top + scrollTop - popupRect.height - 4}px`;
+    // If that goes above viewport, flip to below
+    const newTop = triggerRect.top - popupRect.height - 12;
+    if (newTop < 0) {
+      popup.classList.remove('inline-edit-popup--mobile-above');
+      popup.classList.add('inline-edit-popup--mobile-below');
+      popup.style.top = `${triggerRect.bottom + scrollTop + 40}px`;
+    }
+  } else if (isMobileBelow) {
+    // If popup goes below viewport, shift up
+    if (popupRect.bottom > viewportHeight - 12) {
+      popup.style.top = `${viewportHeight - popupRect.height - 12 + scrollTop}px`;
+    }
+  } else {
+    // Desktop: adjust if off-screen
+    if (popupRect.right > viewportWidth - 16) {
+      popup.style.left = `${viewportWidth - popupRect.width - 16 + scrollLeft}px`;
+    }
+    if (popupRect.left < 16) {
+      popup.style.left = `${16 + scrollLeft}px`;
+    }
+    if (popupRect.bottom > viewportHeight - 16) {
+      popup.style.top = `${triggerRect.top + scrollTop - popupRect.height - 4}px`;
+    }
   }
 }
 

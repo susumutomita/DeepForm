@@ -2193,12 +2193,82 @@ a:hover { color: var(--primary-hover); }
   box-shadow: 0 4px 16px rgba(0,0,0,0.12);
   min-width: 180px;
   max-width: 300px;
-  overflow: hidden;
+  overflow: visible;
   animation: inlineEditFadeIn 0.15s var(--ease);
 }
 
 @keyframes inlineEditFadeIn {
   from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* Mobile: popup above selection (arrow pointing down toward selection) */
+.inline-edit-popup--mobile-above {
+  animation: inlineEditSlideDown 0.15s var(--ease);
+}
+
+.inline-edit-popup--mobile-above::after {
+  content: '';
+  position: absolute;
+  bottom: -8px;
+  left: 24px;
+  width: 0;
+  height: 0;
+  border-left: 8px solid transparent;
+  border-right: 8px solid transparent;
+  border-top: 8px solid var(--bg-card);
+  filter: drop-shadow(0 2px 2px rgba(0,0,0,0.08));
+}
+
+.inline-edit-popup--mobile-above::before {
+  content: '';
+  position: absolute;
+  bottom: -9px;
+  left: 23px;
+  width: 0;
+  height: 0;
+  border-left: 9px solid transparent;
+  border-right: 9px solid transparent;
+  border-top: 9px solid var(--border);
+}
+
+@keyframes inlineEditSlideDown {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* Mobile: popup below selection (arrow pointing up toward selection) */
+.inline-edit-popup--mobile-below {
+  animation: inlineEditSlideUp 0.15s var(--ease);
+}
+
+.inline-edit-popup--mobile-below::after {
+  content: '';
+  position: absolute;
+  top: -8px;
+  left: 24px;
+  width: 0;
+  height: 0;
+  border-left: 8px solid transparent;
+  border-right: 8px solid transparent;
+  border-bottom: 8px solid var(--bg-card);
+  filter: drop-shadow(0 -2px 2px rgba(0,0,0,0.08));
+}
+
+.inline-edit-popup--mobile-below::before {
+  content: '';
+  position: absolute;
+  top: -9px;
+  left: 23px;
+  width: 0;
+  height: 0;
+  border-left: 9px solid transparent;
+  border-right: 9px solid transparent;
+  border-bottom: 9px solid var(--border);
+}
+
+@keyframes inlineEditSlideUp {
+  from { opacity: 0; transform: translateY(-8px); }
   to { opacity: 1; transform: translateY(0); }
 }
 
@@ -2228,6 +2298,8 @@ a:hover { color: var(--primary-hover); }
   list-style: none;
   margin: 0;
   padding: 4px 0;
+  overflow: hidden;
+  border-radius: var(--radius) var(--radius) 0 0;
 }
 
 .inline-edit-option {

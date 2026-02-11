@@ -13,10 +13,7 @@ import { authMiddleware, requireAuth } from "../../middleware/auth.ts";
 const TEST_EXE_USER_ID = "exe-user-99999";
 const TEST_EMAIL = "testuser@example.com";
 
-function authHeaders(
-  exeUserId: string = TEST_EXE_USER_ID,
-  email: string = TEST_EMAIL,
-): Record<string, string> {
+function authHeaders(exeUserId: string = TEST_EXE_USER_ID, email: string = TEST_EMAIL): Record<string, string> {
   return {
     "x-exedev-userid": exeUserId,
     "x-exedev-email": email,

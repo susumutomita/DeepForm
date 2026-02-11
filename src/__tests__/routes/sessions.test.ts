@@ -54,7 +54,10 @@ function insertSession(id: string, theme: string, userId: string, extra: Record<
   const cols = ["id", "theme", "user_id", ...Object.keys(extra)];
   const placeholders = cols.map(() => "?").join(", ");
   db.prepare(`INSERT INTO sessions (${cols.join(", ")}) VALUES (${placeholders})`).run(
-    id, theme, userId, ...Object.values(extra),
+    id,
+    theme,
+    userId,
+    ...Object.values(extra),
   );
 }
 
@@ -64,7 +67,9 @@ function insertMessage(sessionId: string, role: string, content: string): void {
 
 function insertAnalysis(sessionId: string, type: string, data: unknown): void {
   db.prepare("INSERT INTO analysis_results (session_id, type, data) VALUES (?, ?, ?)").run(
-    sessionId, type, JSON.stringify(data),
+    sessionId,
+    type,
+    JSON.stringify(data),
   );
 }
 
@@ -82,10 +87,16 @@ describe("セッション API", () => {
     db.exec("DELETE FROM users");
     // Insert test users
     db.prepare("INSERT INTO users (id, exe_user_id, email, display_name) VALUES (?, ?, ?, ?)").run(
-      TEST_USER_ID, TEST_EXE_USER_ID, TEST_EMAIL, "testuser",
+      TEST_USER_ID,
+      TEST_EXE_USER_ID,
+      TEST_EMAIL,
+      "testuser",
     );
     db.prepare("INSERT INTO users (id, exe_user_id, email, display_name) VALUES (?, ?, ?, ?)").run(
-      OTHER_USER_ID, OTHER_EXE_USER_ID, OTHER_EMAIL, "otheruser",
+      OTHER_USER_ID,
+      OTHER_EXE_USER_ID,
+      OTHER_EMAIL,
+      "otheruser",
     );
   });
 
@@ -109,6 +120,23 @@ describe("セッション API", () => {
       const row = db.prepare("SELECT * FROM sessions WHERE id = ?").get(data.sessionId) as any;
       expect(row).toBeDefined();
       expect(row.user_id).toBe(TEST_USER_ID);
+    });
+
+    it("セッション数が上限に達した場合に 429 を返すべき", async () => {
+      // Given: 50 件のセッションが既に存在
+      for (let i = 0; i < 50; i++) {
+        insertSession(`limit-${i}`, `テーマ${i}`, TEST_USER_ID);
+      }
+      // When: 51 件目を作成
+      const res = await authedRequest("/api/sessions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ theme: "超過テーマ" }),
+      });
+      // Then: 429 で拒否
+      expect(res.status).toBe(429);
+      const data = (await res.json()) as any;
+      expect(data.error).toContain("上限");
     });
 
     it("テーマが空の場合に 400 を返すべき", async () => {
@@ -563,7 +591,9 @@ describe("セッション API", () => {
       expect(data.facts).toBeDefined();
       expect(data.facts[0].id).toBe("F1");
       // DB に保存される
-      const row = db.prepare("SELECT * FROM analysis_results WHERE session_id = ? AND type = ?").get("sanalyze", "facts") as any;
+      const row = db
+        .prepare("SELECT * FROM analysis_results WHERE session_id = ? AND type = ?")
+        .get("sanalyze", "facts") as any;
       expect(row).toBeDefined();
       // ステータスが updated
       const session = db.prepare("SELECT status FROM sessions WHERE id = ?").get("sanalyze") as any;
@@ -577,7 +607,9 @@ describe("セッション API", () => {
       const res = await authedRequest("/api/sessions/sanalyze/analyze", { method: "POST" });
       // Then: 上書きされる
       expect(res.status).toBe(200);
-      const rows = db.prepare("SELECT * FROM analysis_results WHERE session_id = ? AND type = ?").all("sanalyze", "facts") as any[];
+      const rows = db
+        .prepare("SELECT * FROM analysis_results WHERE session_id = ? AND type = ?")
+        .all("sanalyze", "facts") as any[];
       expect(rows).toHaveLength(1);
       const parsed = JSON.parse(rows[0].data);
       expect(parsed.facts[0].id).toBe("F1");
@@ -608,7 +640,14 @@ describe("セッション API", () => {
   describe("POST /api/sessions/:id/hypotheses", () => {
     const mockHypotheses = {
       hypotheses: [
-        { id: "H1", title: "仮説1", description: "説明", supportingFacts: ["F1"], counterEvidence: "反証", unverifiedPoints: ["未検証"] },
+        {
+          id: "H1",
+          title: "仮説1",
+          description: "説明",
+          supportingFacts: ["F1"],
+          counterEvidence: "反証",
+          unverifiedPoints: ["未検証"],
+        },
       ],
     };
 
@@ -649,7 +688,9 @@ describe("セッション API", () => {
       const res = await authedRequest("/api/sessions/shyp/hypotheses", { method: "POST" });
       // Then: 上書きされる
       expect(res.status).toBe(200);
-      const rows = db.prepare("SELECT * FROM analysis_results WHERE session_id = ? AND type = ?").all("shyp", "hypotheses") as any[];
+      const rows = db
+        .prepare("SELECT * FROM analysis_results WHERE session_id = ? AND type = ?")
+        .all("shyp", "hypotheses") as any[];
       expect(rows).toHaveLength(1);
     });
   });
@@ -794,7 +835,11 @@ describe("セッション API", () => {
   describe("GET /api/shared/:token", () => {
     beforeEach(() => {
       insertSession("sshared", "共有セッション", TEST_USER_ID);
-      db.prepare("UPDATE sessions SET share_token = ?, mode = ? WHERE id = ?").run("share-token-123", "shared", "sshared");
+      db.prepare("UPDATE sessions SET share_token = ?, mode = ? WHERE id = ?").run(
+        "share-token-123",
+        "shared",
+        "sshared",
+      );
       insertMessage("sshared", "assistant", "質問");
       insertMessage("sshared", "user", "回答");
     });

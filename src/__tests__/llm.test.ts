@@ -40,10 +40,7 @@ interface TransportLike {
   request: ReturnType<typeof vi.fn>;
 }
 
-function setupTransportMock(
-  transport: TransportLike,
-  responseData: string,
-) {
+function setupTransportMock(transport: TransportLike, responseData: string) {
   const reqHandlers: Record<string, Function> = {};
   const mockReq = {
     on: vi.fn((event: string, handler: Function) => {
@@ -139,10 +136,7 @@ describe("LLM モジュール", () => {
         setupTransportMock(http, JSON.stringify(expected));
 
         // When:
-        const result = await callClaude(
-          [{ role: "user", content: "テスト" }],
-          "システム",
-        );
+        const result = await callClaude([{ role: "user", content: "テスト" }], "システム");
 
         // Then:
         expect(result).toEqual(expected);
@@ -165,15 +159,12 @@ describe("LLM モジュール", () => {
       it("APIエラーレスポンスのメッセージでリジェクトすべき", async () => {
         // Given:
         const { callClaude, http } = await freshImport();
-        setupTransportMock(
-          http,
-          JSON.stringify({ error: { message: "Rate limit exceeded" } }),
-        );
+        setupTransportMock(http, JSON.stringify({ error: { message: "Rate limit exceeded" } }));
 
         // When / Then:
-        await expect(
-          callClaude([{ role: "user", content: "テスト" }], "プロンプト"),
-        ).rejects.toThrow("Rate limit exceeded");
+        await expect(callClaude([{ role: "user", content: "テスト" }], "プロンプト")).rejects.toThrow(
+          "Rate limit exceeded",
+        );
       });
 
       it("エラーメッセージが空の場合でもリジェクトすべき", async () => {
@@ -182,9 +173,7 @@ describe("LLM モジュール", () => {
         setupTransportMock(http, JSON.stringify({ error: {} }));
 
         // When / Then:
-        await expect(
-          callClaude([{ role: "user", content: "テスト" }], "プロンプト"),
-        ).rejects.toThrow();
+        await expect(callClaude([{ role: "user", content: "テスト" }], "プロンプト")).rejects.toThrow();
       });
 
       it("不正なJSONレスポンスの場合にパースエラーでリジェクトすべき", async () => {
@@ -193,9 +182,9 @@ describe("LLM モジュール", () => {
         setupTransportMock(http, "this is not json");
 
         // When / Then:
-        await expect(
-          callClaude([{ role: "user", content: "テスト" }], "プロンプト"),
-        ).rejects.toThrow("Failed to parse LLM response");
+        await expect(callClaude([{ role: "user", content: "テスト" }], "プロンプト")).rejects.toThrow(
+          "Failed to parse LLM response",
+        );
       });
 
       it("ネットワークエラーの場合にリジェクトすべき", async () => {
@@ -204,9 +193,7 @@ describe("LLM モジュール", () => {
         setupTransportError(http, new Error("ECONNREFUSED"));
 
         // When / Then:
-        await expect(
-          callClaude([{ role: "user", content: "テスト" }], "プロンプト"),
-        ).rejects.toThrow("ECONNREFUSED");
+        await expect(callClaude([{ role: "user", content: "テスト" }], "プロンプト")).rejects.toThrow("ECONNREFUSED");
       });
 
       it("タイムアウト時にリクエストを破棄すべき", async () => {
@@ -218,12 +205,10 @@ describe("LLM モジュール", () => {
             reqHandlers[event] = handler;
             return mockReq;
           }),
-          setTimeout: vi.fn(
-            (_ms: number, cb: Function) => {
-              // fire the timeout callback immediately
-              Promise.resolve().then(() => cb());
-            },
-          ),
+          setTimeout: vi.fn((_ms: number, cb: Function) => {
+            // fire the timeout callback immediately
+            Promise.resolve().then(() => cb());
+          }),
           write: vi.fn(),
           end: vi.fn(),
           destroy: vi.fn((err: Error) => {
@@ -234,9 +219,9 @@ describe("LLM モジュール", () => {
         http.request.mockImplementation((_options: any, _callback: any) => mockReq as any);
 
         // When / Then:
-        await expect(
-          callClaude([{ role: "user", content: "テスト" }], "プロンプト"),
-        ).rejects.toThrow("LLM request timed out after 180s");
+        await expect(callClaude([{ role: "user", content: "テスト" }], "プロンプト")).rejects.toThrow(
+          "LLM request timed out after 180s",
+        );
       });
     });
 
@@ -281,14 +266,19 @@ describe("LLM モジュール", () => {
             return mockReq;
           }),
           setTimeout: vi.fn(),
-          write: vi.fn((b: string) => { writtenBody = b; }),
+          write: vi.fn((b: string) => {
+            writtenBody = b;
+          }),
           end: vi.fn(),
           destroy: vi.fn(),
         };
         https.request.mockImplementation((_options: any, callback: any) => {
           const handlers: Record<string, Function> = {};
           const mockRes = {
-            on: (event: string, handler: Function) => { handlers[event] = handler; return mockRes; },
+            on: (event: string, handler: Function) => {
+              handlers[event] = handler;
+              return mockRes;
+            },
           };
           callback(mockRes);
           handlers.data?.(JSON.stringify({ content: [] }));
@@ -318,9 +308,7 @@ describe("LLM モジュール", () => {
         // Then:
         const opts = https.request.mock.calls[0][0];
         expect(opts.headers.Authorization).toBe("Bearer sk-ant-oat-test-oauth-token");
-        expect(opts.headers["anthropic-beta"]).toBe(
-          "oauth-2025-04-20,interleaved-thinking-2025-05-14",
-        );
+        expect(opts.headers["anthropic-beta"]).toBe("oauth-2025-04-20,interleaved-thinking-2025-05-14");
         expect(opts.headers["User-Agent"]).toBe("claude-cli/2.1.2 (external, cli)");
       });
 
@@ -350,14 +338,19 @@ describe("LLM モジュール", () => {
             return mockReq;
           }),
           setTimeout: vi.fn(),
-          write: vi.fn((b: string) => { writtenBody = b; }),
+          write: vi.fn((b: string) => {
+            writtenBody = b;
+          }),
           end: vi.fn(),
           destroy: vi.fn(),
         };
         https.request.mockImplementation((_options: any, callback: any) => {
           const handlers: Record<string, Function> = {};
           const mockRes = {
-            on: (event: string, handler: Function) => { handlers[event] = handler; return mockRes; },
+            on: (event: string, handler: Function) => {
+              handlers[event] = handler;
+              return mockRes;
+            },
           };
           callback(mockRes);
           handlers.data?.(JSON.stringify({ content: [] }));
@@ -551,10 +544,7 @@ describe("LLM モジュール", () => {
         });
 
         // When:
-        const result = await mods.callClaude(
-          [{ role: "user", content: "テスト" }],
-          "システム",
-        );
+        const result = await mods.callClaude([{ role: "user", content: "テスト" }], "システム");
 
         // Then:
         expect(result.content[0].text).toBe("成功");
@@ -598,24 +588,19 @@ describe("LLM モジュール", () => {
         });
 
         // When / Then:
-        await expect(
-          mods.callClaude([{ role: "user", content: "テスト" }], "システム"),
-        ).rejects.toThrow("OAuth token expired and refresh failed");
+        await expect(mods.callClaude([{ role: "user", content: "テスト" }], "システム")).rejects.toThrow(
+          "OAuth token expired and refresh failed",
+        );
       });
 
       it("非OAuthトークンの401エラーはリトライせずに再スローすべき", async () => {
         // Given: regular (non-OAuth) API key
         process.env.ANTHROPIC_API_KEY = "sk-ant-api01-regular-key";
         const { callClaude, https } = await freshImport();
-        setupTransportMock(
-          https,
-          JSON.stringify({ error: { message: "401 Unauthorized" } }),
-        );
+        setupTransportMock(https, JSON.stringify({ error: { message: "401 Unauthorized" } }));
 
         // When / Then:
-        await expect(
-          callClaude([{ role: "user", content: "テスト" }], "システム"),
-        ).rejects.toThrow("401 Unauthorized");
+        await expect(callClaude([{ role: "user", content: "テスト" }], "システム")).rejects.toThrow("401 Unauthorized");
         // Only one call — no retry
         expect(https.request).toHaveBeenCalledTimes(1);
       });

@@ -131,6 +131,9 @@ dist
 
 .DS_Store
 
+# npm lockfile (bun を使用)
+package-lock.json
+
 # DeepForm
 data/*.db
 data/*.db-wal

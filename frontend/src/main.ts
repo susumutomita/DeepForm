@@ -48,7 +48,7 @@ w.deployToExeDev = doDeployToExeDev;
 w.openExportIssuesModal = openExportIssuesModal;
 w.activateStep = activateStep;
 w.logout = doLogout;
-w.setLang = setLang;
+w.setLang = (lang: string) => { setLang(lang); loadSessions(); };
 
 // Navigation / Delete
 w.showInterview = (sessionId: string) => openSession(sessionId);

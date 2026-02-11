@@ -276,8 +276,9 @@ sessionRoutes.post("/sessions/:id/start", async (c) => {
         new ReadableStream({
           start(controller) {
             const encoder = new TextEncoder();
-            stream.on("data", (chunk: string) => {
-              controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: "delta", text: chunk })}\n\n`));
+            stream.on("data", (chunk: Buffer | string) => {
+              const text = typeof chunk === "string" ? chunk : chunk.toString("utf8");
+              controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: "delta", text })}\n\n`));
             });
             stream.on("end", () => {
               const fullText = getFullText();
@@ -368,8 +369,9 @@ ${turnCount >= 5 ? "十分な情報が集まりました。最後にまとめの
             // Send turnCount metadata first
             controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: "meta", turnCount })}\n\n`));
 
-            stream.on("data", (chunk: string) => {
-              controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: "delta", text: chunk })}\n\n`));
+            stream.on("data", (chunk: Buffer | string) => {
+              const text = typeof chunk === "string" ? chunk : chunk.toString("utf8");
+              controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: "delta", text })}\n\n`));
             });
             stream.on("end", () => {
               const fullText = getFullText();

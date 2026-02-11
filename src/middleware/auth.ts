@@ -1,14 +1,14 @@
 import crypto from "node:crypto";
+import { getCookie } from "hono/cookie";
 import { createMiddleware } from "hono/factory";
 import { db } from "../db.ts";
 import type { User } from "../types.ts";
 
 /**
- * exe.dev Login 認証ミドルウェア。
- *
- * exe.dev のリバースプロキシが認証済みユーザーに対して
- * X-ExeDev-UserID / X-ExeDev-Email ヘッダーを付与する。
- * ローカル開発では EXEDEV_DEV_USER / EXEDEV_DEV_EMAIL 環境変数で代替可能。
+ * Authentication middleware with 3-tier fallback:
+ * 1. Cookie session (deepform_session) → auth_sessions table → user
+ * 2. exe.dev proxy headers (X-ExeDev-UserID / X-ExeDev-Email)
+ * 3. Dev env var fallback (EXEDEV_DEV_USER)
  */
 
 function upsertUser(exeUserId: string, email: string): User {
@@ -40,15 +40,40 @@ function upsertUser(exeUserId: string, email: string): User {
   };
 }
 
+function getUserFromSession(sessionId: string): User | null {
+  const row = db
+    .prepare(
+      `SELECT u.* FROM users u
+       JOIN auth_sessions s ON s.user_id = u.id
+       WHERE s.id = ? AND s.expires_at > datetime('now')`,
+    )
+    .get(sessionId) as unknown as User | undefined;
+  return row ?? null;
+}
+
 // Middleware: attach user info to Context (not required)
 export const authMiddleware = createMiddleware<{
   Variables: { user: User | null };
 }>(async (c, next) => {
-  // exe.dev proxy headers
+  // 1. Cookie-based session
+  const sessionId = getCookie(c, "deepform_session");
+  if (sessionId) {
+    try {
+      const user = getUserFromSession(sessionId);
+      if (user) {
+        c.set("user", user);
+        return next();
+      }
+    } catch (e) {
+      console.error("Session lookup error:", e);
+    }
+  }
+
+  // 2. exe.dev proxy headers
   let exeUserId = c.req.header("x-exedev-userid");
   let email = c.req.header("x-exedev-email");
 
-  // Local dev fallback (any non-production environment)
+  // 3. Local dev fallback (any non-production environment)
   if (!exeUserId && process.env.NODE_ENV !== "production") {
     exeUserId = process.env.EXEDEV_DEV_USER ?? undefined;
     email = process.env.EXEDEV_DEV_EMAIL ?? undefined;

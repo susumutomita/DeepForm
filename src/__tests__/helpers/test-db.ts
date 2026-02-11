@@ -11,8 +11,17 @@ export const FULL_SCHEMA = `
     exe_user_id TEXT UNIQUE NOT NULL,
     email TEXT NOT NULL,
     display_name TEXT,
+    github_id INTEGER,
+    github_token TEXT,
+    avatar_url TEXT,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  );
+  CREATE TABLE IF NOT EXISTS auth_sessions (
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL REFERENCES users(id),
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    expires_at DATETIME NOT NULL
   );
   CREATE TABLE IF NOT EXISTS sessions (
     id TEXT PRIMARY KEY,

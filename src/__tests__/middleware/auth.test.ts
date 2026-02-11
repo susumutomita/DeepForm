@@ -1,3 +1,4 @@
+import crypto from "node:crypto";
 import { Hono } from "hono";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -22,6 +23,7 @@ function authHeaders(exeUserId: string = TEST_EXE_USER_ID, email: string = TEST_
 
 describe("認証ミドルウェア", () => {
   beforeEach(() => {
+    db.exec("DELETE FROM auth_sessions");
     db.exec("DELETE FROM users");
   });
 

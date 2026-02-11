@@ -5,6 +5,7 @@ import type {
   CampaignInfo, CampaignJoinResponse, CampaignAnalytics,
   CampaignAIAnalysis, CampaignExport, User,
   ExportIssuesRequest, ExportIssuesResponse,
+  GitHubRepo, CreateRepoAndExportRequest, CreateRepoAndExportResponse,
 } from './types';
 
 async function request<T>(url: string, opts?: RequestInit): Promise<T> {
@@ -226,6 +227,16 @@ export function submitAppFeedback(type: string, message: string, page?: string):
 // GitHub Issues export
 export function exportIssues(sessionId: string, data: ExportIssuesRequest): Promise<ExportIssuesResponse> {
   return post(`/api/sessions/${sessionId}/export-issues`, data);
+}
+
+// GitHub repos
+export function getGitHubRepos(): Promise<GitHubRepo[]> {
+  return request('/api/github/repos');
+}
+
+// Create repo and export
+export function createRepoAndExport(sessionId: string, body: CreateRepoAndExportRequest): Promise<CreateRepoAndExportResponse> {
+  return post(`/api/sessions/${sessionId}/create-repo-and-export`, body);
 }
 
 // Campaign Analytics

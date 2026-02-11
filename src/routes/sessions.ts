@@ -262,7 +262,9 @@ sessionRoutes.post("/sessions/:id/start", async (c) => {
 最初の質問を1つだけ聞いてください。テーマについて、まず現状の状況を理解するための質問をしてください。
 共感的で親しみやすいトーンで、日本語で話してください。200文字以内で。`;
 
-    const startMessages = [{ role: "user" as const, content: `テーマ「${session.theme}」についてインタビューを始めてください。` }];
+    const startMessages = [
+      { role: "user" as const, content: `テーマ「${session.theme}」についてインタビューを始めてください。` },
+    ];
 
     // Streaming response
     const wantsStream = c.req.header("accept")?.includes("text/event-stream");
@@ -279,7 +281,11 @@ sessionRoutes.post("/sessions/:id/start", async (c) => {
             });
             stream.on("end", () => {
               const fullText = getFullText();
-              db.prepare("INSERT INTO messages (session_id, role, content) VALUES (?, ?, ?)").run(id, "assistant", fullText);
+              db.prepare("INSERT INTO messages (session_id, role, content) VALUES (?, ?, ?)").run(
+                id,
+                "assistant",
+                fullText,
+              );
               controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: "done" })}\n\n`));
               controller.close();
             });
@@ -368,9 +374,15 @@ ${turnCount >= 5 ? "十分な情報が集まりました。最後にまとめの
             stream.on("end", () => {
               const fullText = getFullText();
               // Save to DB
-              db.prepare("INSERT INTO messages (session_id, role, content) VALUES (?, ?, ?)").run(id, "assistant", fullText);
+              db.prepare("INSERT INTO messages (session_id, role, content) VALUES (?, ?, ?)").run(
+                id,
+                "assistant",
+                fullText,
+              );
               const readyForAnalysis = fullText.includes("[READY_FOR_ANALYSIS]") || turnCount >= 8;
-              controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: "done", readyForAnalysis, turnCount })}\n\n`));
+              controller.enqueue(
+                encoder.encode(`data: ${JSON.stringify({ type: "done", readyForAnalysis, turnCount })}\n\n`),
+              );
               controller.close();
             });
             stream.on("error", (err: Error) => {

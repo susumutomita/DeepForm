@@ -4,6 +4,7 @@ export interface User {
   id: string;
   email: string;
   displayName: string | null;
+  avatarUrl?: string | null;
 }
 
 export interface Message {
@@ -292,7 +293,24 @@ export interface CampaignJoinResponse {
 export interface ExportIssuesRequest {
   repoOwner: string;
   repoName: string;
-  token: string;
+}
+
+export interface GitHubRepo {
+  full_name: string;
+  name: string;
+  owner: string;
+}
+
+export interface CreateRepoAndExportRequest {
+  name: string;
+  description?: string;
+  isPrivate?: boolean;
+}
+
+export interface CreateRepoAndExportResponse {
+  repo: { fullName: string; url: string };
+  created: ExportedIssue[];
+  errors: Array<{ feature: string; error: string }>;
 }
 
 export interface ExportedIssue {

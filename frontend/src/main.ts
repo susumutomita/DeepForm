@@ -14,7 +14,8 @@ import {
   startCampaignInterview, sendCampaignMessage, completeCampaignInterview, submitCampaignFeedback,
   handleSharedKeydown,
 } from './shared';
-import { showToast } from './ui';
+import { showToast, toggleTheme, initTheme } from './ui';
+import { openPolicy, closeModal } from './modal';
 import { t } from './i18n';
 import { renderPrivacyPolicy } from './pages/privacy';
 import { renderTerms } from './pages/terms';
@@ -93,6 +94,10 @@ w.startNewSession = async () => {
 };
 
 // Mobile menu
+w.toggleTheme = toggleTheme;
+w.openPolicy = openPolicy;
+w.closeModal = closeModal;
+
 w.toggleMobileMenu = () => {
   const nav = document.getElementById('header-nav');
   const btn = document.querySelector('.hamburger-btn');
@@ -103,6 +108,9 @@ w.toggleMobileMenu = () => {
 
 // --- Init ---
 async function init(): Promise<void> {
+  // Theme
+  initTheme();
+
   // i18n
   applyTranslations();
   document.querySelectorAll<HTMLElement>('.lang-btn').forEach(b => {

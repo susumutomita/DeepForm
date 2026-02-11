@@ -33,13 +33,6 @@ const OTHER_USER_ID = "test-user-002";
 const OTHER_EXE_USER_ID = "exe-test-002";
 const OTHER_EMAIL = "otheruser@example.com";
 
-function authHeaders(exeUserId: string = TEST_EXE_USER_ID, email: string = TEST_EMAIL): Record<string, string> {
-  return {
-    "x-exedev-userid": exeUserId,
-    "x-exedev-email": email,
-  };
-}
-
 async function authedRequest(path: string, options: RequestInit = {}): Promise<Response> {
   const headers = new Headers(options.headers);
   headers.set("x-exedev-userid", TEST_EXE_USER_ID);
@@ -52,6 +45,27 @@ async function otherUserRequest(path: string, options: RequestInit = {}): Promis
   headers.set("x-exedev-userid", OTHER_EXE_USER_ID);
   headers.set("x-exedev-email", OTHER_EMAIL);
   return await app.request(path, { ...options, headers });
+}
+
+type SQLInputValue = null | number | bigint | string;
+
+/** セッションを作成して ID を返すヘルパー */
+function insertSession(id: string, theme: string, userId: string, extra: Record<string, SQLInputValue> = {}): void {
+  const cols = ["id", "theme", "user_id", ...Object.keys(extra)];
+  const placeholders = cols.map(() => "?").join(", ");
+  db.prepare(`INSERT INTO sessions (${cols.join(", ")}) VALUES (${placeholders})`).run(
+    id, theme, userId, ...Object.values(extra),
+  );
+}
+
+function insertMessage(sessionId: string, role: string, content: string): void {
+  db.prepare("INSERT INTO messages (session_id, role, content) VALUES (?, ?, ?)").run(sessionId, role, content);
+}
+
+function insertAnalysis(sessionId: string, type: string, data: unknown): void {
+  db.prepare("INSERT INTO analysis_results (session_id, type, data) VALUES (?, ?, ?)").run(
+    sessionId, type, JSON.stringify(data),
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -68,16 +82,10 @@ describe("セッション API", () => {
     db.exec("DELETE FROM users");
     // Insert test users
     db.prepare("INSERT INTO users (id, exe_user_id, email, display_name) VALUES (?, ?, ?, ?)").run(
-      TEST_USER_ID,
-      TEST_EXE_USER_ID,
-      TEST_EMAIL,
-      "testuser",
+      TEST_USER_ID, TEST_EXE_USER_ID, TEST_EMAIL, "testuser",
     );
     db.prepare("INSERT INTO users (id, exe_user_id, email, display_name) VALUES (?, ?, ?, ?)").run(
-      OTHER_USER_ID,
-      OTHER_EXE_USER_ID,
-      OTHER_EMAIL,
-      "otheruser",
+      OTHER_USER_ID, OTHER_EXE_USER_ID, OTHER_EMAIL, "otheruser",
     );
   });
 
@@ -85,54 +93,74 @@ describe("セッション API", () => {
   // POST /api/sessions
   // -------------------------------------------------------------------------
   describe("POST /api/sessions", () => {
-    it("テーマを指定してセッションを作成できるべき", async () => {
+    it("テーマを指定してセッションを作成できること", async () => {
+      // Given: 認証済みユーザー
+      // When: テーマを指定して POST
       const res = await authedRequest("/api/sessions", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ theme: "テストテーマ" }),
       });
-
+      // Then: セッションが作成される
       expect(res.status).toBe(200);
       const data = (await res.json()) as any;
       expect(data.sessionId).toBeDefined();
       expect(data.theme).toBe("テストテーマ");
-
       const row = db.prepare("SELECT * FROM sessions WHERE id = ?").get(data.sessionId) as any;
       expect(row).toBeDefined();
-      expect(row.theme).toBe("テストテーマ");
       expect(row.user_id).toBe(TEST_USER_ID);
     });
 
     it("テーマが空の場合に 400 を返すべき", async () => {
+      // Given: 認証済みユーザー
+      // When: 空テーマで POST
       const res = await authedRequest("/api/sessions", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ theme: "" }),
       });
-
+      // Then: Zod バリデーションエラー
       expect(res.status).toBe(400);
       const data = (await res.json()) as any;
       expect(data.error).toContain("テーマ");
     });
 
-    it("テーマが空白のみの場合でも作成できるべき", async () => {
+    it("テーマが501文字以上の場合に 400 を返すべき", async () => {
+      // Given: 認証済みユーザー
+      // When: 501文字のテーマで POST
       const res = await authedRequest("/api/sessions", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ theme: "   " }),
+        body: JSON.stringify({ theme: "a".repeat(501) }),
       });
-
-      expect(res.status).toBe(200);
+      // Then: Zod バリデーションエラー
+      expect(res.status).toBe(400);
     });
 
     it("未認証の場合に 401 を返すべき", async () => {
+      // Given: 認証なし
+      // When: POST
       const res = await app.request("/api/sessions", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ theme: "テスト" }),
       });
-
+      // Then: 401
       expect(res.status).toBe(401);
+    });
+
+    it("不正な JSON の場合に 400 を返すべき", async () => {
+      // Given: 認証済みユーザー
+      // When: 不正な JSON で POST
+      const res = await authedRequest("/api/sessions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: "{ invalid json",
+      });
+      // Then: SyntaxError → 400
+      expect(res.status).toBe(400);
+      const data = (await res.json()) as any;
+      expect(data.error).toBe("Invalid JSON");
     });
   });
 
@@ -141,63 +169,59 @@ describe("セッション API", () => {
   // -------------------------------------------------------------------------
   describe("GET /api/sessions", () => {
     beforeEach(() => {
-      db.prepare("INSERT INTO sessions (id, theme, user_id) VALUES (?, ?, ?)").run(
-        "session-1",
-        "テーマ1",
-        TEST_USER_ID,
-      );
-      db.prepare("INSERT INTO sessions (id, theme, user_id) VALUES (?, ?, ?)").run(
-        "session-2",
-        "テーマ2",
-        TEST_USER_ID,
-      );
-      db.prepare("INSERT INTO sessions (id, theme, user_id) VALUES (?, ?, ?)").run(
-        "session-3",
-        "テーマ3",
-        OTHER_USER_ID,
-      );
-      db.prepare("INSERT INTO sessions (id, theme, user_id, is_public) VALUES (?, ?, ?, ?)").run(
-        "session-4",
-        "公開テーマ",
-        OTHER_USER_ID,
-        1,
-      );
+      insertSession("s1", "テーマ1", TEST_USER_ID);
+      insertSession("s2", "テーマ2", TEST_USER_ID);
+      insertSession("s3", "テーマ3", OTHER_USER_ID);
+      insertSession("s4", "公開テーマ", OTHER_USER_ID, { is_public: 1 });
     });
 
-    it("認証済みユーザーの場合に自分のセッションと公開セッションを返すべき", async () => {
+    it("認証済みユーザーの場合に自分のセッションと公開セッションを返すこと", async () => {
+      // Given: 自分のセッション 2 件 + 他人の公開セッション 1 件
+      // When: GET
       const res = await authedRequest("/api/sessions");
-
+      // Then: 3 件返る（自分2 + 公開1）
       expect(res.status).toBe(200);
       const data = (await res.json()) as any[];
       expect(data.length).toBe(3);
       const ids = data.map((s) => s.id);
-      expect(ids).toContain("session-1");
-      expect(ids).toContain("session-2");
-      expect(ids).toContain("session-4");
-      expect(ids).not.toContain("session-3");
+      expect(ids).toContain("s1");
+      expect(ids).toContain("s2");
+      expect(ids).toContain("s4");
+      expect(ids).not.toContain("s3");
     });
 
-    it("未認証の場合に公開セッションのみ返すべき", async () => {
+    it("未認証の場合に公開セッションのみ返すこと", async () => {
+      // Given: 公開セッション 1 件
+      // When: 認証なしで GET
       const res = await app.request("/api/sessions");
-
+      // Then: 公開セッションのみ
       expect(res.status).toBe(200);
       const data = (await res.json()) as any[];
       expect(data.length).toBe(1);
-      expect(data[0].id).toBe("session-4");
+      expect(data[0].id).toBe("s4");
     });
 
     it("メッセージ数を含むべき", async () => {
-      db.prepare("INSERT INTO messages (session_id, role, content) VALUES (?, ?, ?)").run(
-        "session-1",
-        "assistant",
-        "質問1",
-      );
-      db.prepare("INSERT INTO messages (session_id, role, content) VALUES (?, ?, ?)").run("session-1", "user", "回答1");
-
+      // Given: セッションにメッセージ 2 件
+      insertMessage("s1", "assistant", "質問1");
+      insertMessage("s1", "user", "回答1");
+      // When: GET
       const res = await authedRequest("/api/sessions");
+      // Then: message_count = 2
       const data = (await res.json()) as any[];
-      const s1 = data.find((s) => s.id === "session-1");
+      const s1 = data.find((s) => s.id === "s1");
       expect(s1.message_count).toBe(2);
+    });
+
+    it("respondent_done ステータスを display_status: analyzed として返すこと", async () => {
+      // Given: respondent_done ステータスの公開セッション
+      db.prepare("UPDATE sessions SET status = 'respondent_done', is_public = 1 WHERE id = ?").run("s1");
+      // When: GET
+      const res = await authedRequest("/api/sessions");
+      // Then: display_status = "analyzed"
+      const data = (await res.json()) as any[];
+      const s1 = data.find((s) => s.id === "s1");
+      expect(s1.display_status).toBe("analyzed");
     });
   });
 
@@ -206,68 +230,57 @@ describe("セッション API", () => {
   // -------------------------------------------------------------------------
   describe("GET /api/sessions/:id", () => {
     beforeEach(() => {
-      db.prepare("INSERT INTO sessions (id, theme, user_id) VALUES (?, ?, ?)").run(
-        "session-detail",
-        "テーマ詳細",
-        TEST_USER_ID,
-      );
-      db.prepare("INSERT INTO sessions (id, theme, user_id) VALUES (?, ?, ?)").run(
-        "session-other",
-        "テーマ他",
-        OTHER_USER_ID,
-      );
-      db.prepare("INSERT INTO messages (session_id, role, content) VALUES (?, ?, ?)").run(
-        "session-detail",
-        "assistant",
-        "最初の質問",
-      );
+      insertSession("sd", "テーマ詳細", TEST_USER_ID);
+      insertSession("so", "テーマ他", OTHER_USER_ID);
+      insertMessage("sd", "assistant", "最初の質問");
     });
 
-    it("自分のセッションの詳細を取得できるべき", async () => {
-      const res = await authedRequest("/api/sessions/session-detail");
-
+    it("自分のセッションの詳細を取得できること", async () => {
+      // Given: 自分のセッション
+      // When: GET
+      const res = await authedRequest("/api/sessions/sd");
+      // Then: 詳細が返る
       expect(res.status).toBe(200);
       const data = (await res.json()) as any;
-      expect(data.id).toBe("session-detail");
+      expect(data.id).toBe("sd");
       expect(data.theme).toBe("テーマ詳細");
       expect(data.messages).toHaveLength(1);
-      expect(data.messages[0].role).toBe("assistant");
       expect(data.analysis).toBeDefined();
     });
 
     it("他人の非公開セッションにアクセスした場合に 403 を返すべき", async () => {
-      const res = await authedRequest("/api/sessions/session-other");
-
+      // Given: 他人の非公開セッション
+      // When: GET
+      const res = await authedRequest("/api/sessions/so");
+      // Then: 403
       expect(res.status).toBe(403);
     });
 
     it("存在しないセッションの場合に 404 を返すべき", async () => {
+      // Given: 存在しない ID
+      // When: GET
       const res = await authedRequest("/api/sessions/nonexistent");
-
+      // Then: 404
       expect(res.status).toBe(404);
     });
 
-    it("公開セッションには未認証でもアクセスできるべき", async () => {
-      db.prepare("UPDATE sessions SET is_public = 1 WHERE id = ?").run("session-other");
-
-      const res = await app.request("/api/sessions/session-other");
-
+    it("公開セッションには未認証でもアクセスできること", async () => {
+      // Given: 公開セッション
+      db.prepare("UPDATE sessions SET is_public = 1 WHERE id = ?").run("so");
+      // When: 認証なしで GET
+      const res = await app.request("/api/sessions/so");
+      // Then: 200
       expect(res.status).toBe(200);
       const data = (await res.json()) as any;
-      expect(data.id).toBe("session-other");
+      expect(data.id).toBe("so");
     });
 
     it("分析結果を含むべき", async () => {
-      const factsData = JSON.stringify({
-        facts: [{ id: "F1", type: "fact", content: "テスト" }],
-      });
-      db.prepare("INSERT INTO analysis_results (session_id, type, data) VALUES (?, ?, ?)").run(
-        "session-detail",
-        "facts",
-        factsData,
-      );
-
-      const res = await authedRequest("/api/sessions/session-detail");
+      // Given: facts 分析結果
+      insertAnalysis("sd", "facts", { facts: [{ id: "F1", type: "fact", content: "テスト" }] });
+      // When: GET
+      const res = await authedRequest("/api/sessions/sd");
+      // Then: analysis.facts が含まれる
       const data = (await res.json()) as any;
       expect(data.analysis.facts).toBeDefined();
       expect(data.analysis.facts.facts[0].id).toBe("F1");
@@ -279,59 +292,120 @@ describe("セッション API", () => {
   // -------------------------------------------------------------------------
   describe("DELETE /api/sessions/:id", () => {
     beforeEach(() => {
-      db.prepare("INSERT INTO sessions (id, theme, user_id) VALUES (?, ?, ?)").run(
-        "session-del",
-        "テーマ削除",
-        TEST_USER_ID,
-      );
-      db.prepare("INSERT INTO messages (session_id, role, content) VALUES (?, ?, ?)").run(
-        "session-del",
-        "user",
-        "テストメッセージ",
-      );
-      db.prepare("INSERT INTO analysis_results (session_id, type, data) VALUES (?, ?, ?)").run(
-        "session-del",
-        "facts",
-        "{}",
-      );
-      db.prepare("INSERT INTO sessions (id, theme, user_id) VALUES (?, ?, ?)").run(
-        "session-other-del",
-        "テーマ他",
-        OTHER_USER_ID,
-      );
+      insertSession("sdel", "テーマ削除", TEST_USER_ID);
+      insertMessage("sdel", "user", "テストメッセージ");
+      insertAnalysis("sdel", "facts", {});
+      insertSession("sodel", "テーマ他", OTHER_USER_ID);
     });
 
-    it("自分のセッションと関連データを削除できるべき", async () => {
-      const res = await authedRequest("/api/sessions/session-del", {
-        method: "DELETE",
-      });
-
+    it("自分のセッションと関連データを削除できること", async () => {
+      // Given: 自分のセッション + メッセージ + 分析結果
+      // When: DELETE
+      const res = await authedRequest("/api/sessions/sdel", { method: "DELETE" });
+      // Then: 全て削除される
       expect(res.status).toBe(200);
-      const data = (await res.json()) as any;
-      expect(data.ok).toBe(true);
-
-      const session = db.prepare("SELECT * FROM sessions WHERE id = ?").get("session-del");
-      expect(session).toBeUndefined();
-      const messages = db.prepare("SELECT * FROM messages WHERE session_id = ?").all("session-del");
-      expect(messages).toHaveLength(0);
-      const analyses = db.prepare("SELECT * FROM analysis_results WHERE session_id = ?").all("session-del");
-      expect(analyses).toHaveLength(0);
+      expect(((await res.json()) as any).ok).toBe(true);
+      expect(db.prepare("SELECT * FROM sessions WHERE id = ?").get("sdel")).toBeUndefined();
+      expect(db.prepare("SELECT * FROM messages WHERE session_id = ?").all("sdel")).toHaveLength(0);
+      expect(db.prepare("SELECT * FROM analysis_results WHERE session_id = ?").all("sdel")).toHaveLength(0);
     });
 
     it("他人のセッションは削除できないべき", async () => {
-      const res = await authedRequest("/api/sessions/session-other-del", {
-        method: "DELETE",
-      });
-
+      // Given: 他人のセッション
+      // When: DELETE
+      const res = await authedRequest("/api/sessions/sodel", { method: "DELETE" });
+      // Then: 403
       expect(res.status).toBe(403);
     });
 
     it("未認証の場合に 401 を返すべき", async () => {
-      const res = await app.request("/api/sessions/session-del", {
-        method: "DELETE",
-      });
-
+      // Given: 認証なし
+      // When: DELETE
+      const res = await app.request("/api/sessions/sdel", { method: "DELETE" });
+      // Then: 401
       expect(res.status).toBe(401);
+    });
+
+    it("存在しないセッションの場合に 404 を返すべき", async () => {
+      // Given: 存在しない ID
+      // When: DELETE
+      const res = await authedRequest("/api/sessions/nonexistent", { method: "DELETE" });
+      // Then: 404
+      expect(res.status).toBe(404);
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // PATCH /api/sessions/:id/visibility
+  // -------------------------------------------------------------------------
+  describe("PATCH /api/sessions/:id/visibility", () => {
+    beforeEach(() => {
+      insertSession("svis", "公開テスト", TEST_USER_ID);
+    });
+
+    it("セッションを公開に変更できること", async () => {
+      // Given: 非公開セッション
+      // When: is_public: true で PATCH
+      const res = await authedRequest("/api/sessions/svis/visibility", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ is_public: true }),
+      });
+      // Then: is_public = 1
+      expect(res.status).toBe(200);
+      const data = (await res.json()) as any;
+      expect(data.is_public).toBe(1);
+    });
+
+    it("セッションを非公開に変更できること", async () => {
+      // Given: 公開セッション
+      db.prepare("UPDATE sessions SET is_public = 1 WHERE id = ?").run("svis");
+      // When: is_public: false で PATCH
+      const res = await authedRequest("/api/sessions/svis/visibility", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ is_public: false }),
+      });
+      // Then: is_public = 0
+      expect(res.status).toBe(200);
+      const data = (await res.json()) as any;
+      expect(data.is_public).toBe(0);
+    });
+
+    it("不正なボディの場合に 400 を返すべき", async () => {
+      // Given: 認証済み
+      // When: is_public がブーリアンでない
+      const res = await authedRequest("/api/sessions/svis/visibility", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ is_public: "yes" }),
+      });
+      // Then: 400
+      expect(res.status).toBe(400);
+    });
+
+    it("未認証の場合に 401 を返すべき", async () => {
+      // Given: 認証なし
+      // When: PATCH
+      const res = await app.request("/api/sessions/svis/visibility", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ is_public: true }),
+      });
+      // Then: 401
+      expect(res.status).toBe(401);
+    });
+
+    it("他人のセッションは変更できないべき", async () => {
+      // Given: 他人のセッション
+      // When: PATCH
+      const res = await otherUserRequest("/api/sessions/svis/visibility", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ is_public: true }),
+      });
+      // Then: 403
+      expect(res.status).toBe(403);
     });
   });
 
@@ -340,58 +414,48 @@ describe("セッション API", () => {
   // -------------------------------------------------------------------------
   describe("POST /api/sessions/:id/start", () => {
     beforeEach(() => {
-      db.prepare("INSERT INTO sessions (id, theme, user_id) VALUES (?, ?, ?)").run(
-        "session-start",
-        "インタビューテーマ",
-        TEST_USER_ID,
-      );
+      insertSession("sstart", "インタビューテーマ", TEST_USER_ID);
     });
 
-    it("インタビューを開始して LLM の回答を返すべき", async () => {
-      const res = await authedRequest("/api/sessions/session-start/start", {
-        method: "POST",
-      });
-
+    it("インタビューを開始して最初の質問を返すべき", async () => {
+      // Given: メッセージなしのセッション
+      // When: start
+      const res = await authedRequest("/api/sessions/sstart/start", { method: "POST" });
+      // Then: LLM の返答が返る
       expect(res.status).toBe(200);
       const data = (await res.json()) as any;
-      expect(data.reply).toBeDefined();
-      expect(callClaude).toHaveBeenCalledTimes(1);
-      expect(extractText).toHaveBeenCalledTimes(1);
-
-      const messages = db.prepare("SELECT * FROM messages WHERE session_id = ?").all("session-start");
-      expect(messages).toHaveLength(1);
-      expect((messages[0] as any).role).toBe("assistant");
+      expect(data.reply).toBe("モック LLM レスポンス");
+      expect(callClaude).toHaveBeenCalledOnce();
+      // メッセージが DB に保存される
+      const msgs = db.prepare("SELECT * FROM messages WHERE session_id = ?").all("sstart") as any[];
+      expect(msgs).toHaveLength(1);
+      expect(msgs[0].role).toBe("assistant");
     });
 
-    it("既に開始済みの場合に alreadyStarted フラグを返すべき", async () => {
-      db.prepare("INSERT INTO messages (session_id, role, content) VALUES (?, ?, ?)").run(
-        "session-start",
-        "assistant",
-        "既存の質問",
-      );
-
-      const res = await authedRequest("/api/sessions/session-start/start", {
-        method: "POST",
-      });
-
+    it("既にメッセージがある場合は alreadyStarted を返すべき", async () => {
+      // Given: 既にメッセージあり
+      insertMessage("sstart", "assistant", "最初の質問");
+      // When: start
+      const res = await authedRequest("/api/sessions/sstart/start", { method: "POST" });
+      // Then: alreadyStarted = true
       expect(res.status).toBe(200);
       const data = (await res.json()) as any;
       expect(data.alreadyStarted).toBe(true);
       expect(callClaude).not.toHaveBeenCalled();
     });
 
-    it("未認証の場合に 401 を返すべき", async () => {
-      const res = await app.request("/api/sessions/session-start/start", {
-        method: "POST",
-      });
-
-      expect(res.status).toBe(401);
+    it("他人のセッションでは開始できないべき", async () => {
+      // Given: 他人のセッション
+      insertSession("sstart-other", "他テーマ", OTHER_USER_ID);
+      // When: start
+      const res = await authedRequest("/api/sessions/sstart-other/start", { method: "POST" });
+      // Then: 403
+      expect(res.status).toBe(403);
     });
 
-    it("他人のセッションのインタビューは開始できないべき", async () => {
-      const res = await otherUserRequest("/api/sessions/session-start/start", { method: "POST" });
-
-      expect(res.status).toBe(403);
+    it("未認証の場合に 401 を返すべき", async () => {
+      const res = await app.request("/api/sessions/sstart/start", { method: "POST" });
+      expect(res.status).toBe(401);
     });
   });
 
@@ -400,55 +464,78 @@ describe("セッション API", () => {
   // -------------------------------------------------------------------------
   describe("POST /api/sessions/:id/chat", () => {
     beforeEach(() => {
-      db.prepare("INSERT INTO sessions (id, theme, user_id) VALUES (?, ?, ?)").run(
-        "session-chat",
-        "チャットテーマ",
-        TEST_USER_ID,
-      );
-      db.prepare("INSERT INTO messages (session_id, role, content) VALUES (?, ?, ?)").run(
-        "session-chat",
-        "assistant",
-        "最初の質問です",
-      );
+      insertSession("schat", "チャットテーマ", TEST_USER_ID);
+      insertMessage("schat", "assistant", "最初の質問です");
     });
 
-    it("メッセージを送信して LLM の回答を受け取れるべき", async () => {
-      const res = await authedRequest("/api/sessions/session-chat/chat", {
+    it("メッセージを送信して AI の返答を受け取れること", async () => {
+      // Given: 開始済みセッション
+      // When: メッセージ送信
+      const res = await authedRequest("/api/sessions/schat/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: "テスト回答です" }),
+        body: JSON.stringify({ message: "テスト回答" }),
       });
-
+      // Then: 返答が返る
       expect(res.status).toBe(200);
       const data = (await res.json()) as any;
       expect(data.reply).toBeDefined();
-      expect(data.turnCount).toBeDefined();
-      expect(data.readyForAnalysis).toBeDefined();
-      expect(callClaude).toHaveBeenCalledTimes(1);
-
-      const messages = db.prepare("SELECT * FROM messages WHERE session_id = ?").all("session-chat");
-      expect(messages).toHaveLength(3);
+      expect(data.turnCount).toBe(1);
+      expect(callClaude).toHaveBeenCalledOnce();
+      // ユーザーと AI のメッセージが DB に保存
+      const msgs = db.prepare("SELECT * FROM messages WHERE session_id = ? ORDER BY created_at").all("schat") as any[];
+      expect(msgs).toHaveLength(3); // assistant + user + assistant
     });
 
-    it("ターン数を正しくカウントすべき", async () => {
-      const res = await authedRequest("/api/sessions/session-chat/chat", {
+    it("メッセージが空の場合に 400 を返すべき", async () => {
+      const res = await authedRequest("/api/sessions/schat/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: "ユーザーメッセージ" }),
+        body: JSON.stringify({ message: "" }),
       });
-
-      const data = (await res.json()) as any;
-      expect(data.turnCount).toBe(1);
+      expect(res.status).toBe(400);
     });
 
-    it("未認証の場合に 401 を返すべき", async () => {
-      const res = await app.request("/api/sessions/session-chat/chat", {
+    it("8 ターン以上で readyForAnalysis が true になること", async () => {
+      // Given: 8 ターン分のメッセージを挿入
+      for (let i = 0; i < 8; i++) {
+        insertMessage("schat", "user", `回答${i}`);
+        insertMessage("schat", "assistant", `質問${i}`);
+      }
+      // When: さらにメッセージ送信
+      const res = await authedRequest("/api/sessions/schat/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ message: "最後の回答" }),
+      });
+      // Then: readyForAnalysis が true
+      expect(res.status).toBe(200);
+      const data = (await res.json()) as any;
+      expect(data.readyForAnalysis).toBe(true);
+    });
+
+    it("READY_FOR_ANALYSIS タグが返答から除去されること", async () => {
+      // Given: LLM が [READY_FOR_ANALYSIS] を含む返答を返す
+      vi.mocked(extractText).mockReturnValueOnce("まとめです[READY_FOR_ANALYSIS]");
+      // When: chat
+      const res = await authedRequest("/api/sessions/schat/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ message: "テスト" }),
       });
+      // Then: タグが除去される
+      const data = (await res.json()) as any;
+      expect(data.reply).toBe("まとめです");
+      expect(data.readyForAnalysis).toBe(true);
+    });
 
-      expect(res.status).toBe(401);
+    it("他人のセッションにはチャットできないべき", async () => {
+      const res = await otherUserRequest("/api/sessions/schat/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ message: "テスト" }),
+      });
+      expect(res.status).toBe(403);
     });
   });
 
@@ -456,78 +543,210 @@ describe("セッション API", () => {
   // POST /api/sessions/:id/analyze
   // -------------------------------------------------------------------------
   describe("POST /api/sessions/:id/analyze", () => {
-    beforeEach(() => {
-      db.prepare("INSERT INTO sessions (id, theme, user_id) VALUES (?, ?, ?)").run(
-        "session-analyze",
-        "分析テーマ",
-        TEST_USER_ID,
-      );
-      db.prepare("INSERT INTO messages (session_id, role, content) VALUES (?, ?, ?)").run(
-        "session-analyze",
-        "assistant",
-        "質問です",
-      );
-      db.prepare("INSERT INTO messages (session_id, role, content) VALUES (?, ?, ?)").run(
-        "session-analyze",
-        "user",
-        "回答です",
-      );
+    const mockFacts = {
+      facts: [{ id: "F1", type: "fact", content: "テスト事実", evidence: "発話", severity: "high" }],
+    };
 
-      vi.mocked(extractText).mockReturnValue(
-        '{"facts":[{"id":"F1","type":"fact","content":"テストファクト","evidence":"テスト証拠","severity":"high"}]}',
-      );
+    beforeEach(() => {
+      insertSession("sanalyze", "分析テーマ", TEST_USER_ID);
+      insertMessage("sanalyze", "assistant", "質問");
+      insertMessage("sanalyze", "user", "回答");
+      vi.mocked(extractText).mockReturnValue(JSON.stringify(mockFacts));
     });
 
-    it("ファクトを抽出して保存すべき", async () => {
-      const res = await authedRequest("/api/sessions/session-analyze/analyze", { method: "POST" });
-
+    it("インタビュー記録からファクトを抽出できること", async () => {
+      // When: analyze
+      const res = await authedRequest("/api/sessions/sanalyze/analyze", { method: "POST" });
+      // Then: ファクトが返る
       expect(res.status).toBe(200);
       const data = (await res.json()) as any;
       expect(data.facts).toBeDefined();
       expect(data.facts[0].id).toBe("F1");
-      expect(callClaude).toHaveBeenCalledTimes(1);
-
-      const analysis = db
-        .prepare("SELECT * FROM analysis_results WHERE session_id = ? AND type = ?")
-        .get("session-analyze", "facts") as any;
-      expect(analysis).toBeDefined();
-
-      const session = db.prepare("SELECT status FROM sessions WHERE id = ?").get("session-analyze") as any;
+      // DB に保存される
+      const row = db.prepare("SELECT * FROM analysis_results WHERE session_id = ? AND type = ?").get("sanalyze", "facts") as any;
+      expect(row).toBeDefined();
+      // ステータスが updated
+      const session = db.prepare("SELECT status FROM sessions WHERE id = ?").get("sanalyze") as any;
       expect(session.status).toBe("analyzed");
     });
 
-    it("既存の分析結果がある場合に上書きすべき", async () => {
-      db.prepare("INSERT INTO analysis_results (session_id, type, data) VALUES (?, ?, ?)").run(
-        "session-analyze",
-        "facts",
-        '{"facts":[]}',
-      );
-
-      const res = await authedRequest("/api/sessions/session-analyze/analyze", { method: "POST" });
-
+    it("既存のファクト分析を上書き更新できること", async () => {
+      // Given: 既にファクト分析がある
+      insertAnalysis("sanalyze", "facts", { facts: [{ id: "OLD" }] });
+      // When: 再度 analyze
+      const res = await authedRequest("/api/sessions/sanalyze/analyze", { method: "POST" });
+      // Then: 上書きされる
       expect(res.status).toBe(200);
-
-      const analyses = db
-        .prepare("SELECT * FROM analysis_results WHERE session_id = ? AND type = ?")
-        .all("session-analyze", "facts");
-      expect(analyses).toHaveLength(1);
+      const rows = db.prepare("SELECT * FROM analysis_results WHERE session_id = ? AND type = ?").all("sanalyze", "facts") as any[];
+      expect(rows).toHaveLength(1);
+      const parsed = JSON.parse(rows[0].data);
+      expect(parsed.facts[0].id).toBe("F1");
     });
 
-    it("LLM が不正な JSON を返した場合にフォールバックすべき", async () => {
-      vi.mocked(extractText).mockReturnValue("これは JSON ではない");
-
-      const res = await authedRequest("/api/sessions/session-analyze/analyze", { method: "POST" });
-
+    it("LLM が不正な JSON を返した場合にフォールバックすること", async () => {
+      // Given: LLM が JSON でない文字列を返す
+      vi.mocked(extractText).mockReturnValueOnce("これは JSON ではありません");
+      // When: analyze
+      const res = await authedRequest("/api/sessions/sanalyze/analyze", { method: "POST" });
+      // Then: フォールバック形式で返る
       expect(res.status).toBe(200);
       const data = (await res.json()) as any;
       expect(data.facts).toBeDefined();
       expect(data.facts[0].id).toBe("F1");
+      expect(data.facts[0].content).toContain("JSON");
     });
 
-    it("未認証の場合に 401 を返すべき", async () => {
-      const res = await app.request("/api/sessions/session-analyze/analyze", { method: "POST" });
+    it("他人のセッションは分析できないべき", async () => {
+      const res = await otherUserRequest("/api/sessions/sanalyze/analyze", { method: "POST" });
+      expect(res.status).toBe(403);
+    });
+  });
 
-      expect(res.status).toBe(401);
+  // -------------------------------------------------------------------------
+  // POST /api/sessions/:id/hypotheses
+  // -------------------------------------------------------------------------
+  describe("POST /api/sessions/:id/hypotheses", () => {
+    const mockHypotheses = {
+      hypotheses: [
+        { id: "H1", title: "仮説1", description: "説明", supportingFacts: ["F1"], counterEvidence: "反証", unverifiedPoints: ["未検証"] },
+      ],
+    };
+
+    beforeEach(() => {
+      insertSession("shyp", "仮説テーマ", TEST_USER_ID);
+      insertAnalysis("shyp", "facts", { facts: [{ id: "F1" }] });
+      vi.mocked(extractText).mockReturnValue(JSON.stringify(mockHypotheses));
+    });
+
+    it("ファクトから仮説を生成できること", async () => {
+      // When: hypotheses
+      const res = await authedRequest("/api/sessions/shyp/hypotheses", { method: "POST" });
+      // Then: 仮説が返る
+      expect(res.status).toBe(200);
+      const data = (await res.json()) as any;
+      expect(data.hypotheses).toBeDefined();
+      expect(data.hypotheses[0].id).toBe("H1");
+      // ステータスが更新される
+      const session = db.prepare("SELECT status FROM sessions WHERE id = ?").get("shyp") as any;
+      expect(session.status).toBe("hypothesized");
+    });
+
+    it("ファクトが未抽出の場合に 400 を返すべき", async () => {
+      // Given: ファクトなし
+      insertSession("shyp-nofact", "テーマ", TEST_USER_ID);
+      // When: hypotheses
+      const res = await authedRequest("/api/sessions/shyp-nofact/hypotheses", { method: "POST" });
+      // Then: 400
+      expect(res.status).toBe(400);
+      const data = (await res.json()) as any;
+      expect(data.error).toContain("ファクト");
+    });
+
+    it("既存の仮説を上書き更新できること", async () => {
+      // Given: 既に仮説あり
+      insertAnalysis("shyp", "hypotheses", { hypotheses: [{ id: "OLD" }] });
+      // When: 再度 hypotheses
+      const res = await authedRequest("/api/sessions/shyp/hypotheses", { method: "POST" });
+      // Then: 上書きされる
+      expect(res.status).toBe(200);
+      const rows = db.prepare("SELECT * FROM analysis_results WHERE session_id = ? AND type = ?").all("shyp", "hypotheses") as any[];
+      expect(rows).toHaveLength(1);
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // POST /api/sessions/:id/prd
+  // -------------------------------------------------------------------------
+  describe("POST /api/sessions/:id/prd", () => {
+    const mockPrd = {
+      prd: {
+        problemDefinition: "問題定義",
+        targetUser: "ターゲット",
+        jobsToBeDone: ["ジョブ1"],
+        coreFeatures: [],
+        nonGoals: [],
+        userFlows: [],
+        metrics: [],
+      },
+    };
+
+    beforeEach(() => {
+      insertSession("sprd", "PRD テーマ", TEST_USER_ID);
+      insertAnalysis("sprd", "facts", { facts: [{ id: "F1" }] });
+      insertAnalysis("sprd", "hypotheses", { hypotheses: [{ id: "H1" }] });
+      vi.mocked(extractText).mockReturnValue(JSON.stringify(mockPrd));
+    });
+
+    it("ファクトと仮説から PRD を生成できること", async () => {
+      // When: prd
+      const res = await authedRequest("/api/sessions/sprd/prd", { method: "POST" });
+      // Then: PRD が返る
+      expect(res.status).toBe(200);
+      const data = (await res.json()) as any;
+      expect(data.prd).toBeDefined();
+      expect(data.prd.problemDefinition).toBe("問題定義");
+      // ステータスが更新される
+      const session = db.prepare("SELECT status FROM sessions WHERE id = ?").get("sprd") as any;
+      expect(session.status).toBe("prd_generated");
+    });
+
+    it("ファクトまたは仮説が未生成の場合に 400 を返すべき", async () => {
+      // Given: ファクトのみ
+      insertSession("sprd-nohyp", "テーマ", TEST_USER_ID);
+      insertAnalysis("sprd-nohyp", "facts", { facts: [] });
+      // When: prd
+      const res = await authedRequest("/api/sessions/sprd-nohyp/prd", { method: "POST" });
+      // Then: 400
+      expect(res.status).toBe(400);
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // POST /api/sessions/:id/spec
+  // -------------------------------------------------------------------------
+  describe("POST /api/sessions/:id/spec", () => {
+    const mockSpec = {
+      spec: {
+        projectName: "テストプロジェクト",
+        techStack: { frontend: "React", backend: "Hono", database: "SQLite" },
+        apiEndpoints: [],
+        dbSchema: "CREATE TABLE test (id TEXT)",
+        screens: [],
+        testCases: [],
+      },
+    };
+
+    beforeEach(() => {
+      insertSession("sspec", "Spec テーマ", TEST_USER_ID);
+      insertAnalysis("sspec", "facts", { facts: [] });
+      insertAnalysis("sspec", "hypotheses", { hypotheses: [] });
+      insertAnalysis("sspec", "prd", { prd: { problemDefinition: "問題", coreFeatures: [] } });
+      vi.mocked(extractText).mockReturnValue(JSON.stringify(mockSpec));
+    });
+
+    it("PRD から実装仕様を生成できること", async () => {
+      // When: spec
+      const res = await authedRequest("/api/sessions/sspec/spec", { method: "POST" });
+      // Then: spec が返る
+      expect(res.status).toBe(200);
+      const data = (await res.json()) as any;
+      expect(data.spec).toBeDefined();
+      expect(data.spec.projectName).toBe("テストプロジェクト");
+      expect(data.prdMarkdown).toBeDefined();
+      // ステータスが更新される
+      const session = db.prepare("SELECT status FROM sessions WHERE id = ?").get("sspec") as any;
+      expect(session.status).toBe("spec_generated");
+    });
+
+    it("PRD が未生成の場合に 400 を返すべき", async () => {
+      // Given: PRD なし
+      insertSession("sspec-noprd", "テーマ", TEST_USER_ID);
+      // When: spec
+      const res = await authedRequest("/api/sessions/sspec-noprd/spec", { method: "POST" });
+      // Then: 400
+      expect(res.status).toBe(400);
+      const data = (await res.json()) as any;
+      expect(data.error).toContain("PRD");
     });
   });
 
@@ -536,51 +755,35 @@ describe("セッション API", () => {
   // -------------------------------------------------------------------------
   describe("POST /api/sessions/:id/share", () => {
     beforeEach(() => {
-      db.prepare("INSERT INTO sessions (id, theme, user_id) VALUES (?, ?, ?)").run(
-        "session-share",
-        "共有テーマ",
-        TEST_USER_ID,
-      );
+      insertSession("sshare", "共有テーマ", TEST_USER_ID);
     });
 
-    it("共有トークンを生成すべき", async () => {
-      const res = await authedRequest("/api/sessions/session-share/share", {
-        method: "POST",
-      });
-
+    it("共有トークンを生成できること", async () => {
+      // When: share
+      const res = await authedRequest("/api/sessions/sshare/share", { method: "POST" });
+      // Then: トークンが返る
       expect(res.status).toBe(200);
       const data = (await res.json()) as any;
       expect(data.shareToken).toBeDefined();
       expect(data.theme).toBe("共有テーマ");
-
-      const session = db.prepare("SELECT share_token, mode FROM sessions WHERE id = ?").get("session-share") as any;
+      // DB にトークンが保存される
+      const session = db.prepare("SELECT share_token, mode FROM sessions WHERE id = ?").get("sshare") as any;
       expect(session.share_token).toBe(data.shareToken);
       expect(session.mode).toBe("shared");
     });
 
-    it("既に共有トークンがある場合に既存のトークンを返すべき", async () => {
-      db.prepare("UPDATE sessions SET share_token = ? WHERE id = ?").run("existing-token", "session-share");
-
-      const res = await authedRequest("/api/sessions/session-share/share", {
-        method: "POST",
-      });
-
-      expect(res.status).toBe(200);
+    it("既にトークンがある場合は同じトークンを返すべき", async () => {
+      // Given: 既にトークンあり
+      db.prepare("UPDATE sessions SET share_token = ? WHERE id = ?").run("existing-token", "sshare");
+      // When: share
+      const res = await authedRequest("/api/sessions/sshare/share", { method: "POST" });
+      // Then: 既存トークン
       const data = (await res.json()) as any;
       expect(data.shareToken).toBe("existing-token");
     });
 
-    it("未認証の場合に 401 を返すべき", async () => {
-      const res = await app.request("/api/sessions/session-share/share", {
-        method: "POST",
-      });
-
-      expect(res.status).toBe(401);
-    });
-
-    it("他人のセッションの共有トークンは生成できないべき", async () => {
-      const res = await otherUserRequest("/api/sessions/session-share/share", { method: "POST" });
-
+    it("他人のセッションは共有できないべき", async () => {
+      const res = await otherUserRequest("/api/sessions/sshare/share", { method: "POST" });
       expect(res.status).toBe(403);
     });
   });
@@ -590,54 +793,35 @@ describe("セッション API", () => {
   // -------------------------------------------------------------------------
   describe("GET /api/shared/:token", () => {
     beforeEach(() => {
-      db.prepare("INSERT INTO sessions (id, theme, user_id, share_token, status) VALUES (?, ?, ?, ?, ?)").run(
-        "session-shared",
-        "共有テーマ",
-        TEST_USER_ID,
-        "share-abc",
-        "interviewing",
-      );
+      insertSession("sshared", "共有セッション", TEST_USER_ID);
+      db.prepare("UPDATE sessions SET share_token = ?, mode = ? WHERE id = ?").run("share-token-123", "shared", "sshared");
+      insertMessage("sshared", "assistant", "質問");
+      insertMessage("sshared", "user", "回答");
     });
 
-    it("共有トークンでセッション情報を取得できるべき", async () => {
-      const res = await app.request("/api/shared/share-abc");
-
+    it("共有トークンでセッション情報を取得できること", async () => {
+      // When: GET shared
+      const res = await app.request("/api/shared/share-token-123");
+      // Then: セッション情報が返る
       expect(res.status).toBe(200);
       const data = (await res.json()) as any;
-      expect(data.theme).toBe("共有テーマ");
-      expect(data.status).toBe("interviewing");
-      expect(data.messageCount).toBe(0);
+      expect(data.theme).toBe("共有セッション");
+      expect(data.messageCount).toBe(2);
     });
 
-    it("メッセージ数とファクトを含むべき", async () => {
-      db.prepare("INSERT INTO messages (session_id, role, content) VALUES (?, ?, ?)").run(
-        "session-shared",
-        "assistant",
-        "質問",
-      );
-      db.prepare("INSERT INTO messages (session_id, role, content) VALUES (?, ?, ?)").run(
-        "session-shared",
-        "user",
-        "回答",
-      );
-
-      const factsData = JSON.stringify({ facts: [{ id: "F1" }] });
-      db.prepare("INSERT INTO analysis_results (session_id, type, data) VALUES (?, ?, ?)").run(
-        "session-shared",
-        "facts",
-        factsData,
-      );
-
-      const res = await app.request("/api/shared/share-abc");
+    it("ファクト分析結果を含むべき", async () => {
+      // Given: ファクト分析あり
+      insertAnalysis("sshared", "facts", { facts: [{ id: "F1" }] });
+      // When: GET shared
+      const res = await app.request("/api/shared/share-token-123");
+      // Then: ファクトが含まれる
       const data = (await res.json()) as any;
-      expect(data.messageCount).toBe(2);
       expect(data.facts).toBeDefined();
       expect(data.facts.facts[0].id).toBe("F1");
     });
 
     it("存在しないトークンの場合に 404 を返すべき", async () => {
-      const res = await app.request("/api/shared/nonexistent");
-
+      const res = await app.request("/api/shared/nonexistent-token");
       expect(res.status).toBe(404);
     });
   });

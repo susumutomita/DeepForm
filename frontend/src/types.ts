@@ -265,5 +265,8 @@ export interface DeepFormWindow extends Window {
 
   // UI
   toggleMobileMenu: () => void;
+  toggleTheme: () => void;
+  openPolicy: (key: string) => void;
+  closeModal: () => void;
   activateStep: (stepName: string) => void;
 }

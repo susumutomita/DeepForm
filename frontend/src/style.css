@@ -89,6 +89,27 @@ a:hover { color: var(--primary-hover); }
 
 /* === Skip to main content (a11y) === */
 
+/* === Theme Toggle === */
+.theme-toggle-btn {
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text-dim);
+  cursor: pointer;
+  padding: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all var(--transition);
+  min-width: 36px;
+  min-height: 36px;
+}
+.theme-toggle-btn:hover {
+  color: var(--text);
+  border-color: var(--primary);
+  background: var(--primary-dim);
+}
+
 /* === Hamburger Menu (mobile) === */
 .hamburger-btn {
   display: none;
@@ -1574,6 +1595,47 @@ a:hover { color: var(--primary-hover); }
 .footer-legal { display: flex; gap: 16px; margin-top: 8px; font-size: 12px; }
 .footer-legal a { color: var(--text-dim); }
 .footer-legal a:hover { color: var(--primary); }
+
+/* === Modal === */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.5);
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+.modal-overlay.hidden { display: none; }
+.modal-content {
+  background: var(--bg-elevated);
+  border-radius: var(--radius-lg);
+  max-width: 700px;
+  width: 100%;
+  max-height: 80vh;
+  overflow-y: auto;
+  position: relative;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+}
+.modal-close {
+  position: sticky;
+  top: 0;
+  float: right;
+  background: var(--bg-elevated);
+  border: none;
+  font-size: 28px;
+  cursor: pointer;
+  color: var(--text-dim);
+  padding: 12px 16px;
+  line-height: 1;
+  z-index: 1;
+  border-radius: 0 var(--radius-lg) 0 0;
+}
+.modal-close:hover { color: var(--text); }
+@media (max-width: 768px) {
+  .modal-content { max-height: 90vh; margin: 8px; border-radius: var(--radius); }
+}
 
 /* === Dark Mode === */
 /* Manual toggle via data-theme attribute */

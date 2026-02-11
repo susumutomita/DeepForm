@@ -5,7 +5,7 @@ import { checkAuth, doLogout, isLoggedIn, redirectToLogin } from './auth';
 import { loadSessions, doToggleVisibility, doShareSession, doCreateCampaign } from './sessions';
 import {
   showHome, openSession, sendMessage, handleChatKeydown,
-  doRunAnalysis, doRunHypotheses, doRunPRD, doRunSpec,
+  doRunAnalysis, doRunHypotheses, doRunPRD, doRunSpec, doRunReadiness,
   exportSpecJSON, exportPRDMarkdown, doDeployToExeDev, activateStep,
 } from './interview';
 import {
@@ -41,6 +41,7 @@ w.runAnalysis = doRunAnalysis;
 w.runHypotheses = doRunHypotheses;
 w.runPRD = doRunPRD;
 w.runSpec = doRunSpec;
+w.runReadiness = doRunReadiness;
 w.exportSpecJSON = exportSpecJSON;
 w.exportPRDMarkdown = exportPRDMarkdown;
 w.deployToExeDev = doDeployToExeDev;

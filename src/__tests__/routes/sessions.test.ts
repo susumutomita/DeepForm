@@ -870,6 +870,119 @@ describe("セッション API", () => {
   });
 
   // -------------------------------------------------------------------------
+  // POST /api/sessions/:id/readiness
+  // -------------------------------------------------------------------------
+  describe("POST /api/sessions/:id/readiness", () => {
+    const mockReadiness = {
+      readiness: {
+        categories: [
+          {
+            id: "functionalSuitability",
+            label: "機能適合性",
+            items: [
+              {
+                id: "FS-1",
+                description: "主要ユースケースの全パスが正常に完了すること",
+                priority: "must",
+                rationale: "基本機能が動作しないとリリースできない",
+              },
+            ],
+          },
+          {
+            id: "security",
+            label: "セキュリティ",
+            items: [
+              {
+                id: "SEC-1",
+                description: "入力値はすべてサーバーサイドで検証されていること",
+                priority: "must",
+                rationale: "XSS・SQLi 対策",
+              },
+            ],
+          },
+        ],
+      },
+    };
+
+    beforeEach(() => {
+      insertSession("sready", "Readiness テーマ", TEST_USER_ID);
+      insertAnalysis("sready", "facts", { facts: [] });
+      insertAnalysis("sready", "hypotheses", { hypotheses: [] });
+      insertAnalysis("sready", "prd", { prd: { problemDefinition: "問題" } });
+      insertAnalysis("sready", "spec", { spec: { projectName: "テスト" } });
+      vi.mocked(extractText).mockReturnValue(JSON.stringify(mockReadiness));
+    });
+
+    it("spec 生成後にレディネスチェックリストを生成できること", async () => {
+      // When: readiness
+      const res = await authedRequest("/api/sessions/sready/readiness", { method: "POST" });
+      // Then: レディネスデータが返る
+      expect(res.status).toBe(200);
+      const data = (await res.json()) as any;
+      expect(data.readiness).toBeDefined();
+      expect(data.readiness.categories).toHaveLength(2);
+      expect(data.readiness.categories[0].id).toBe("functionalSuitability");
+      expect(data.readiness.categories[0].items[0].id).toBe("FS-1");
+      // DB に保存される
+      const row = db
+        .prepare("SELECT * FROM analysis_results WHERE session_id = ? AND type = ?")
+        .get("sready", "readiness") as any;
+      expect(row).toBeDefined();
+      // ステータスが更新される
+      const session = db.prepare("SELECT status FROM sessions WHERE id = ?").get("sready") as any;
+      expect(session.status).toBe("readiness_checked");
+    });
+
+    it("spec が未生成の場合に 400 を返すべき", async () => {
+      // Given: spec なし
+      insertSession("sready-nospec", "テーマ", TEST_USER_ID);
+      // When: readiness
+      const res = await authedRequest("/api/sessions/sready-nospec/readiness", { method: "POST" });
+      // Then: 400
+      expect(res.status).toBe(400);
+      const data = (await res.json()) as any;
+      expect(data.error).toContain("実装仕様");
+    });
+
+    it("GET で readiness データを取得できること", async () => {
+      // Given: readiness 分析結果がある
+      insertAnalysis("sready", "readiness", mockReadiness);
+      // When: GET session
+      const res = await authedRequest("/api/sessions/sready");
+      // Then: analysis.readiness が含まれる
+      expect(res.status).toBe(200);
+      const data = (await res.json()) as any;
+      expect(data.analysis.readiness).toBeDefined();
+      expect(data.analysis.readiness.readiness.categories).toHaveLength(2);
+    });
+
+    it("他人のセッションではレディネスチェックを実行できないべき", async () => {
+      const res = await otherUserRequest("/api/sessions/sready/readiness", { method: "POST" });
+      expect(res.status).toBe(403);
+    });
+
+    it("未認証の場合に 401 を返すべき", async () => {
+      const res = await app.request("/api/sessions/sready/readiness", { method: "POST" });
+      expect(res.status).toBe(401);
+    });
+
+    it("既存のレディネスを上書き更新できること", async () => {
+      // Given: 既にレディネスあり
+      insertAnalysis("sready", "readiness", { readiness: { categories: [{ id: "OLD" }] } });
+      // When: 再度 readiness
+      const res = await authedRequest("/api/sessions/sready/readiness", { method: "POST" });
+      // Then: 上書きされる
+      expect(res.status).toBe(200);
+      const rows = db
+        .prepare("SELECT * FROM analysis_results WHERE session_id = ? AND type = ?")
+        .all("sready", "readiness") as any[];
+      expect(rows).toHaveLength(1);
+      const parsed = JSON.parse(rows[0].data);
+      expect(parsed.readiness.categories[0].id).toBe("functionalSuitability");
+    });
+  });
+
+  // -------------------------------------------------------------------------
   // POST /api/sessions/:id/share
   // -------------------------------------------------------------------------
   describe("POST /api/sessions/:id/share", () => {

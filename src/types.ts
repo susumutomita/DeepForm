@@ -1,7 +1,14 @@
 export interface Session {
   id: string;
   theme: string;
-  status: "interviewing" | "analyzed" | "respondent_done" | "hypothesized" | "prd_generated" | "spec_generated";
+  status:
+    | "interviewing"
+    | "analyzed"
+    | "respondent_done"
+    | "hypothesized"
+    | "prd_generated"
+    | "spec_generated"
+    | "readiness_checked";
   mode: "self" | "shared" | "campaign_respondent";
   share_token: string | null;
   respondent_name: string | null;
@@ -24,7 +31,7 @@ export interface Message {
 export interface AnalysisResult {
   id: number;
   session_id: string;
-  type: "facts" | "hypotheses" | "prd" | "spec" | "campaign_analytics";
+  type: "facts" | "hypotheses" | "prd" | "spec" | "campaign_analytics" | "readiness";
   data: string;
   created_at: string;
 }

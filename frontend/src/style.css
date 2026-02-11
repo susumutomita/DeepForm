@@ -1088,6 +1088,73 @@ a:hover { color: var(--primary-hover); }
   margin-bottom: 4px;
 }
 
+/* === Readiness Checklist === */
+.readiness-category {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 20px 24px;
+  margin-bottom: 12px;
+}
+.readiness-category-label {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--primary-hover);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 12px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+.readiness-checklist {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+.readiness-item {
+  padding: 8px 0;
+  border-bottom: 1px solid var(--border-subtle);
+}
+.readiness-item:last-child {
+  border-bottom: none;
+}
+.readiness-label {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  cursor: pointer;
+  font-size: 14px;
+  line-height: 1.6;
+}
+.readiness-checkbox {
+  flex-shrink: 0;
+  width: 18px;
+  height: 18px;
+  margin-top: 3px;
+  accent-color: var(--accent-green);
+  cursor: pointer;
+}
+.readiness-text {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px;
+}
+.readiness-label:has(.readiness-checkbox:checked) .readiness-text {
+  text-decoration: line-through;
+  color: var(--text-dim);
+}
+.readiness-rationale {
+  font-size: 12px;
+  color: var(--text-dim);
+  margin-top: 4px;
+  margin-left: 28px;
+  line-height: 1.5;
+}
+
+/* Readiness status badge */
+.status-readiness_checked { background: rgba(140,148,64,0.15); color: var(--accent-green); }
+
 /* === Spec === */
 .spec-section { margin-bottom: 20px; }
 .spec-section h3 {

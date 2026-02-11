@@ -112,11 +112,33 @@ export interface Spec {
   prdMarkdown?: string;
 }
 
+export interface ReadinessItem {
+  id: string;
+  description: string;
+  priority: 'must' | 'should' | 'could';
+  rationale?: string;
+}
+
+export interface ReadinessCategory {
+  id: string;
+  label: string;
+  items: ReadinessItem[];
+}
+
+export interface ReadinessData {
+  readiness?: {
+    categories: ReadinessCategory[];
+  };
+  categories?: ReadinessCategory[];
+  error?: string;
+}
+
 export interface Analysis {
   facts?: FactsData;
   hypotheses?: HypothesesData;
   prd?: PRD;
   spec?: Spec;
+  readiness?: ReadinessData;
 }
 
 export interface Session {
@@ -148,7 +170,8 @@ export type SessionStatus =
   | 'respondent_done'
   | 'hypothesized'
   | 'prd_generated'
-  | 'spec_generated';
+  | 'spec_generated'
+  | 'readiness_checked';
 
 export interface FactsData {
   facts: Fact[];
@@ -284,8 +307,8 @@ export interface ExportIssuesResponse {
   error?: string;
 }
 
-/** All step names in the app (5 steps, no deploy). */
-export type StepName = 'interview' | 'facts' | 'hypotheses' | 'prd' | 'spec';
+/** All step names in the app (6 steps). */
+export type StepName = 'interview' | 'facts' | 'hypotheses' | 'prd' | 'spec' | 'readiness';
 
 /** Extend Window to hold globally-exposed functions. */
 export interface DeepFormWindow extends Window {
@@ -309,6 +332,7 @@ export interface DeepFormWindow extends Window {
   runHypotheses: () => Promise<void>;
   runPRD: () => Promise<void>;
   runSpec: () => Promise<void>;
+  runReadiness: () => Promise<void>;
   exportSpecJSON: () => void;
   exportPRDMarkdown: () => void;
   deployToExeDev: () => Promise<void>;

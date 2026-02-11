@@ -98,6 +98,11 @@ export function runSpec(sessionId: string): Promise<SpecData> {
   return post(`/api/sessions/${sessionId}/spec`);
 }
 
+// Spec Export
+export function getSpecExport(sessionId: string): Promise<{ theme: string; spec: unknown; prdMarkdown: string | null; exportedAt: string }> {
+  return request(`/api/sessions/${sessionId}/spec-export`);
+}
+
 // Share
 export function shareSession(sessionId: string): Promise<{ shareToken: string }> {
   return post(`/api/sessions/${sessionId}/share`);

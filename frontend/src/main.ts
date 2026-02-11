@@ -6,7 +6,7 @@ import { loadSessions, doToggleVisibility, doShareSession, doCreateCampaign } fr
 import {
   showHome, openSession, sendMessage, handleChatKeydown,
   doRunAnalysis, doRunHypotheses, doRunPRD, doRunSpec,
-  exportSpecJSON, exportPRDMarkdown, activateStep,
+  exportSpecJSON, exportPRDMarkdown, doDeployToExeDev, activateStep,
 } from './interview';
 import {
   initSharedInterview, initCampaignInterview,
@@ -40,6 +40,7 @@ w.runPRD = doRunPRD;
 w.runSpec = doRunSpec;
 w.exportSpecJSON = exportSpecJSON;
 w.exportPRDMarkdown = exportPRDMarkdown;
+w.deployToExeDev = doDeployToExeDev;
 w.activateStep = activateStep;
 w.logout = doLogout;
 w.setLang = setLang;

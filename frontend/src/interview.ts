@@ -219,6 +219,25 @@ export async function exportPRDMarkdown(): Promise<void> {
   }
 }
 
+// --- Deploy to exe.dev ---
+export async function doDeployToExeDev(): Promise<void> {
+  if (!currentSessionId) return;
+  try {
+    const data = await api.getSpecExport(currentSessionId);
+    const specJson = JSON.stringify(data.spec, null, 2);
+    await navigator.clipboard.writeText(specJson);
+    showToast('Spec をクリップボードにコピーしました。exe.dev で新しいプロジェクトを作成してください');
+
+    // Show the exe.dev link section
+    const linkContainer = document.getElementById('exedev-link-container');
+    if (linkContainer) {
+      linkContainer.classList.remove('hidden');
+    }
+  } catch (e: any) {
+    showToast(e.message, true);
+  }
+}
+
 // --- Renderers ---
 function renderFacts(facts: Fact[]): void {
   const container = document.getElementById('facts-container');

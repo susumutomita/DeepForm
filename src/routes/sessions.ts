@@ -759,6 +759,120 @@ sessionRoutes.post("/sessions/:id/spec", async (c) => {
   }
 });
 
+// 10b. POST /sessions/:id/readiness — Generate production readiness checklist (owner only)
+sessionRoutes.post("/sessions/:id/readiness", async (c) => {
+  try {
+    const result = getOwnedSession(c);
+    if (isResponse(result)) return result;
+    const session = result;
+    const id = session.id;
+
+    const specRow = db
+      .prepare("SELECT data FROM analysis_results WHERE session_id = ? AND type = ?")
+      .get(id, "spec") as unknown as { data: string } | undefined;
+    if (!specRow) return c.json({ error: "先に実装仕様の生成を実行してください" }, 400);
+
+    const spec = JSON.parse(specRow.data);
+    const prdRow = db
+      .prepare("SELECT data FROM analysis_results WHERE session_id = ? AND type = ?")
+      .get(id, "prd") as unknown as { data: string } | undefined;
+    const prd = prdRow ? JSON.parse(prdRow.data) : {};
+
+    const systemPrompt = `あなたはプロダクション品質のレビューエキスパートです。PRDと実装仕様に基づいて、ISO/IEC 25010 の8品質特性に沿った本番リリース前チェックリストを生成してください。
+
+必ず以下のJSON形式で返してください。JSON以外のテキストは含めないでください。
+
+{
+  "readiness": {
+    "categories": [
+      {
+        "id": "functionalSuitability",
+        "label": "機能適合性",
+        "items": [
+          {
+            "id": "FS-1",
+            "description": "チェック項目の説明",
+            "priority": "must",
+            "rationale": "なぜこのチェックが必要か"
+          }
+        ]
+      }
+    ]
+  }
+}
+
+ルール：
+- ISO/IEC 25010 の8品質特性すべてを網羅すること:
+  1. functionalSuitability（機能適合性）
+  2. performanceEfficiency（性能効率性）
+  3. compatibility（互換性）
+  4. usability（使用性）
+  5. reliability（信頼性）
+  6. security（セキュリティ）
+  7. maintainability（保守性）
+  8. portability（移植性）
+- 各カテゴリに2〜4個の具体的なチェック項目を生成
+- priority は "must"（必須）, "should"（推奨）, "could"（任意）のいずれか
+- PRDの非機能要件と実装仕様に基づいた具体的な項目にすること
+- 抽象的な表現は避け、テスト可能な条件を記述すること`;
+
+    const response = await callClaude(
+      [
+        {
+          role: "user",
+          content: `以下のPRDと実装仕様に基づいてプロダクションレディネスチェックリストを生成してください：\n\nPRD:\n${JSON.stringify(prd, null, 2)}\n\n実装仕様:\n${JSON.stringify(spec, null, 2)}`,
+        },
+      ],
+      systemPrompt,
+      8192,
+    );
+    const text = extractText(response);
+
+    let readiness: unknown;
+    try {
+      const jsonMatch = text.match(/\{[\s\S]*\}/);
+      readiness = JSON.parse(jsonMatch?.[0] as string);
+    } catch {
+      readiness = {
+        readiness: {
+          categories: [
+            {
+              id: "functionalSuitability",
+              label: "機能適合性",
+              items: [{ id: "FS-1", description: text, priority: "must", rationale: "" }],
+            },
+          ],
+        },
+      };
+    }
+
+    const existing = db
+      .prepare("SELECT id FROM analysis_results WHERE session_id = ? AND type = ?")
+      .get(id, "readiness") as unknown as { id: number } | undefined;
+    if (existing) {
+      db.prepare("UPDATE analysis_results SET data = ?, created_at = CURRENT_TIMESTAMP WHERE id = ?").run(
+        JSON.stringify(readiness),
+        existing.id,
+      );
+    } else {
+      db.prepare("INSERT INTO analysis_results (session_id, type, data) VALUES (?, ?, ?)").run(
+        id,
+        "readiness",
+        JSON.stringify(readiness),
+      );
+    }
+
+    db.prepare("UPDATE sessions SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?").run(
+      "readiness_checked",
+      id,
+    );
+    return c.json(readiness);
+  } catch (e) {
+    console.error("Readiness error:", e);
+    return c.json({ error: (e as Error).message }, 500);
+  }
+});
+
 // ---------------------------------------------------------------------------
 // Spec Export (for exe.dev integration)
 // ---------------------------------------------------------------------------

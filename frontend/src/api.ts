@@ -1,6 +1,6 @@
 // === DeepForm API Client ===
 import type {
-  ChatResponse, FactsData, HypothesesData, PRDData, SpecData,
+  ChatResponse, FactsData, HypothesesData, PRDData, SpecData, ReadinessData,
   Session, SessionDetail, SharedInfo, SharedStartResponse,
   CampaignInfo, CampaignJoinResponse, CampaignAnalytics,
   CampaignAIAnalysis, CampaignExport, User,
@@ -98,6 +98,10 @@ export function runPRD(sessionId: string): Promise<PRDData> {
 
 export function runSpec(sessionId: string): Promise<SpecData> {
   return post(`/api/sessions/${sessionId}/spec`);
+}
+
+export function runReadiness(sessionId: string): Promise<ReadinessData> {
+  return post(`/api/sessions/${sessionId}/readiness`);
 }
 
 // Spec Export

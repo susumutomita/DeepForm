@@ -1,7 +1,7 @@
 // === DeepForm Interview & Analysis Steps ===
 import * as api from './api';
 import { t } from './i18n';
-import type { Fact, Hypothesis, PRD, Spec, Message, StepName } from './types';
+import type { Fact, Hypothesis, PRD, Spec, ReadinessCategory, Message, StepName } from './types';
 import {
   showLoading, hideLoading, showToast, escapeHtml, factTypeLabel,
   addMessageToContainer, showTypingIndicator, removeTypingIndicator,
@@ -44,12 +44,17 @@ export async function openSession(sessionId: string, isNew = false): Promise<voi
       if (session.analysis.hypotheses) renderHypotheses(session.analysis.hypotheses.hypotheses ?? []);
       if (session.analysis.prd) renderPRD(session.analysis.prd);
       if (session.analysis.spec) renderSpec(session.analysis.spec);
+      if (session.analysis.readiness) {
+        const rd = session.analysis.readiness;
+        renderReadiness(rd.readiness?.categories ?? rd.categories ?? []);
+      }
     }
 
     updateStepNav(session.status);
     const stepMap: Record<string, StepName> = {
       'interviewing': 'interview', 'analyzed': 'facts', 'respondent_done': 'facts',
       'hypothesized': 'hypotheses', 'prd_generated': 'prd', 'spec_generated': 'spec',
+      'readiness_checked': 'readiness',
     };
     activateStep(stepMap[session.status] || 'interview');
 
@@ -186,6 +191,23 @@ export async function doRunSpec(): Promise<void> {
     updateStepNav('spec_generated');
     activateStep('spec');
     showToast(t('toast.specDone'));
+  } catch (e: any) {
+    showToast(e.message, true);
+  } finally {
+    hideLoading();
+  }
+}
+
+export async function doRunReadiness(): Promise<void> {
+  if (!currentSessionId) return;
+  showLoading(t('loading.readiness'));
+  try {
+    const data = await api.runReadiness(currentSessionId);
+    const categories = data.readiness?.categories ?? data.categories ?? [];
+    renderReadiness(categories);
+    updateStepNav('readiness_checked');
+    activateStep('readiness');
+    showToast(t('toast.readinessDone'));
   } catch (e: any) {
     showToast(e.message, true);
   } finally {
@@ -346,6 +368,67 @@ function renderSpec(spec: Spec): void {
   container.innerHTML = html;
 }
 
+function renderReadiness(categories: ReadinessCategory[]): void {
+  const container = document.getElementById('readiness-container');
+  if (!container) return;
+  while (container.firstChild) container.removeChild(container.firstChild);
+
+  for (const cat of categories) {
+    const catDiv = document.createElement('div');
+    catDiv.className = 'readiness-category';
+
+    const header = document.createElement('h3');
+    header.className = 'readiness-category-label';
+    header.textContent = cat.label;
+    catDiv.appendChild(header);
+
+    const list = document.createElement('ul');
+    list.className = 'readiness-checklist';
+
+    for (const item of cat.items) {
+      const li = document.createElement('li');
+      li.className = 'readiness-item';
+
+      const label = document.createElement('label');
+      label.className = 'readiness-label';
+
+      const checkbox = document.createElement('input');
+      checkbox.type = 'checkbox';
+      checkbox.className = 'readiness-checkbox';
+      checkbox.dataset.itemId = item.id;
+
+      const textSpan = document.createElement('span');
+      textSpan.className = 'readiness-text';
+
+      const prioritySpan = document.createElement('span');
+      prioritySpan.className = `priority-badge priority-${item.priority}`;
+      prioritySpan.textContent = item.priority;
+
+      const descSpan = document.createElement('span');
+      descSpan.textContent = ` ${item.description}`;
+
+      textSpan.appendChild(prioritySpan);
+      textSpan.appendChild(descSpan);
+
+      label.appendChild(checkbox);
+      label.appendChild(textSpan);
+      li.appendChild(label);
+
+      if (item.rationale) {
+        const rationale = document.createElement('div');
+        rationale.className = 'readiness-rationale';
+        rationale.textContent = item.rationale;
+        li.appendChild(rationale);
+      }
+
+      list.appendChild(li);
+    }
+
+    catDiv.appendChild(list);
+    container.appendChild(catDiv);
+  }
+}
+
 // --- Step Navigation ---
 export function activateStep(stepName: string): void {
   document.querySelectorAll('.step-content').forEach(el => el.classList.remove('active'));
@@ -359,8 +442,8 @@ export function activateStep(stepName: string): void {
 }
 
 function updateStepNav(status: string): void {
-  const order = ['interviewing', 'analyzed', 'hypothesized', 'prd_generated', 'spec_generated'];
-  const stepNames: StepName[] = ['interview', 'facts', 'hypotheses', 'prd', 'spec'];
+  const order = ['interviewing', 'analyzed', 'hypothesized', 'prd_generated', 'spec_generated', 'readiness_checked'];
+  const stepNames: StepName[] = ['interview', 'facts', 'hypotheses', 'prd', 'spec', 'readiness'];
   const s = status === 'respondent_done' ? 'analyzed' : status;
   const currentIndex = order.indexOf(s);
   stepNames.forEach((name, i) => {

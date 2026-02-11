@@ -1,4 +1,4 @@
-// === DeepForm Auth (Login with exe.dev) ===
+// === DeepForm Auth (GitHub OAuth) ===
 import * as api from './api';
 import type { User } from './types';
 
@@ -25,11 +25,18 @@ export function updateAuthUI(): void {
   const loginBtn = document.getElementById('login-btn');
   const userInfo = document.getElementById('user-info');
   const userName = document.getElementById('user-name');
+  const userAvatar = document.getElementById('user-avatar') as HTMLImageElement | null;
 
   if (currentUser) {
     if (loginBtn) loginBtn.style.display = 'none';
     if (userInfo) userInfo.style.display = 'flex';
     if (userName) userName.textContent = currentUser.displayName ?? currentUser.email;
+    if (userAvatar && currentUser.avatarUrl) {
+      userAvatar.src = currentUser.avatarUrl;
+      userAvatar.style.display = 'block';
+    } else if (userAvatar) {
+      userAvatar.style.display = 'none';
+    }
   } else {
     if (loginBtn) loginBtn.style.display = 'inline-flex';
     if (userInfo) userInfo.style.display = 'none';
@@ -39,9 +46,6 @@ export function updateAuthUI(): void {
 export async function doLogout(): Promise<void> {
   try {
     await api.logout();
-  } catch { /* ignore - cleanup must continue */ }
-  try {
-    await fetch('/__exe.dev/logout', { method: 'POST' });
   } catch { /* ignore */ }
   currentUser = null;
   updateAuthUI();
@@ -49,5 +53,5 @@ export async function doLogout(): Promise<void> {
 }
 
 export function redirectToLogin(): void {
-  window.location.href = '/__exe.dev/login?redirect=' + encodeURIComponent(window.location.pathname);
+  window.location.href = '/api/auth/github';
 }

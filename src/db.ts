@@ -119,4 +119,34 @@ try {
   /* index may already exist */
 }
 
+// Migration: GitHub OAuth columns
+try {
+  db.exec("ALTER TABLE users ADD COLUMN github_id INTEGER");
+} catch (e: unknown) {
+  const msg = e instanceof Error ? e.message : "";
+  if (!msg.includes("duplicate column")) throw e;
+}
+try {
+  db.exec("ALTER TABLE users ADD COLUMN github_token TEXT");
+} catch (e: unknown) {
+  const msg = e instanceof Error ? e.message : "";
+  if (!msg.includes("duplicate column")) throw e;
+}
+try {
+  db.exec("ALTER TABLE users ADD COLUMN avatar_url TEXT");
+} catch (e: unknown) {
+  const msg = e instanceof Error ? e.message : "";
+  if (!msg.includes("duplicate column")) throw e;
+}
+
+// Auth sessions table for cookie-based authentication
+db.exec(`
+  CREATE TABLE IF NOT EXISTS auth_sessions (
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL REFERENCES users(id),
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    expires_at DATETIME NOT NULL
+  );
+`);
+
 export { db };

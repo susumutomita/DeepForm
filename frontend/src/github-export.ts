@@ -1,9 +1,20 @@
-// === DeepForm GitHub Issues Export ===
+// === DeepForm GitHub Issues Export (OAuth-based) ===
 import * as api from './api';
+import { isLoggedIn } from './auth';
 import { getCurrentSessionId } from './interview';
-import { escapeHtml, showToast } from './ui';
+import { showToast } from './ui';
+import type { GitHubRepo } from './types';
 
 let modalEl: HTMLElement | null = null;
+let cachedRepos: GitHubRepo[] | null = null;
+
+function createLabel(text: string, htmlFor: string): HTMLLabelElement {
+  const label = document.createElement('label');
+  label.htmlFor = htmlFor;
+  label.textContent = text;
+  label.style.cssText = 'display:block;font-size:0.85rem;margin-bottom:4px;font-weight:500';
+  return label;
+}
 
 function createInput(type: string, id: string, placeholder: string): HTMLInputElement {
   const input = document.createElement('input');
@@ -12,14 +23,6 @@ function createInput(type: string, id: string, placeholder: string): HTMLInputEl
   input.placeholder = placeholder;
   input.style.cssText = 'width:100%;padding:8px 12px;border:1px solid var(--border);border-radius:6px;font-size:0.9rem;background:var(--bg-secondary);color:var(--text-primary)';
   return input;
-}
-
-function createLabel(text: string, htmlFor: string): HTMLLabelElement {
-  const label = document.createElement('label');
-  label.htmlFor = htmlFor;
-  label.textContent = text;
-  label.style.cssText = 'display:block;font-size:0.85rem;margin-bottom:4px;font-weight:500';
-  return label;
 }
 
 function ensureModal(): HTMLElement {
@@ -36,7 +39,7 @@ function ensureModal(): HTMLElement {
   // Close button
   const closeBtn = document.createElement('button');
   closeBtn.className = 'modal-close';
-  closeBtn.setAttribute('aria-label', '閉じる');
+  closeBtn.setAttribute('aria-label', '\u9589\u3058\u308B');
   closeBtn.textContent = '\u00d7';
   closeBtn.addEventListener('click', () => closeExportModal());
   content.appendChild(closeBtn);
@@ -49,7 +52,7 @@ function ensureModal(): HTMLElement {
 
   // Description
   const desc = document.createElement('p');
-  desc.textContent = 'PRD のコア機能を GitHub Issues として作成します。';
+  desc.textContent = 'PRD \u306e\u30b3\u30a2\u6a5f\u80fd\u3092 GitHub Issues \u3068\u3057\u3066\u4f5c\u6210\u3057\u307e\u3059\u3002';
   desc.style.cssText = 'color:var(--text-secondary);margin:0 0 20px;font-size:0.9rem';
   content.appendChild(desc);
 
@@ -57,23 +60,89 @@ function ensureModal(): HTMLElement {
   const form = document.createElement('div');
   form.id = 'github-export-form';
 
-  // Repo input
-  const repoGroup = document.createElement('div');
-  repoGroup.style.marginBottom = '12px';
-  repoGroup.appendChild(createLabel('リポジトリ (owner/repo)', 'gh-repo'));
-  repoGroup.appendChild(createInput('text', 'gh-repo', '例: myorg/myrepo'));
-  form.appendChild(repoGroup);
+  // Tab selector: existing repo vs new repo
+  const tabBar = document.createElement('div');
+  tabBar.style.cssText = 'display:flex;gap:0;margin-bottom:16px;border:1px solid var(--border);border-radius:6px;overflow:hidden';
+  const tabExisting = document.createElement('button');
+  tabExisting.id = 'tab-existing';
+  tabExisting.textContent = '\u65e2\u5b58\u30ea\u30dd\u30b8\u30c8\u30ea';
+  tabExisting.type = 'button';
+  tabExisting.style.cssText = 'flex:1;padding:8px;border:none;cursor:pointer;font-size:0.85rem;background:var(--accent);color:#fff';
+  const tabNew = document.createElement('button');
+  tabNew.id = 'tab-new';
+  tabNew.textContent = '\u65b0\u898f\u4f5c\u6210';
+  tabNew.type = 'button';
+  tabNew.style.cssText = 'flex:1;padding:8px;border:none;cursor:pointer;font-size:0.85rem;background:var(--bg-secondary);color:var(--text-secondary)';
+  tabBar.appendChild(tabExisting);
+  tabBar.appendChild(tabNew);
+  form.appendChild(tabBar);
 
-  // PAT input
-  const patGroup = document.createElement('div');
-  patGroup.style.marginBottom = '16px';
-  patGroup.appendChild(createLabel('GitHub Personal Access Token', 'gh-pat'));
-  patGroup.appendChild(createInput('password', 'gh-pat', 'ghp_xxxx...'));
-  const patHint = document.createElement('p');
-  patHint.textContent = 'PAT はサーバーに保存されません。repo スコープが必要です。';
-  patHint.style.cssText = 'color:var(--text-tertiary);font-size:0.78rem;margin:4px 0 0';
-  patGroup.appendChild(patHint);
-  form.appendChild(patGroup);
+  // --- Existing repo panel ---
+  const existingPanel = document.createElement('div');
+  existingPanel.id = 'panel-existing';
+
+  const repoGroup = document.createElement('div');
+  repoGroup.style.marginBottom = '16px';
+  repoGroup.appendChild(createLabel('\u30ea\u30dd\u30b8\u30c8\u30ea\u3092\u9078\u629e', 'gh-repo-select'));
+  const repoSelect = document.createElement('select');
+  repoSelect.id = 'gh-repo-select';
+  repoSelect.style.cssText = 'width:100%;padding:8px 12px;border:1px solid var(--border);border-radius:6px;font-size:0.9rem;background:var(--bg-secondary);color:var(--text-primary)';
+  const defaultOpt = document.createElement('option');
+  defaultOpt.value = '';
+  defaultOpt.textContent = '\u8aad\u307f\u8fbc\u307f\u4e2d...';
+  repoSelect.appendChild(defaultOpt);
+  repoGroup.appendChild(repoSelect);
+  existingPanel.appendChild(repoGroup);
+  form.appendChild(existingPanel);
+
+  // --- New repo panel ---
+  const newPanel = document.createElement('div');
+  newPanel.id = 'panel-new';
+  newPanel.style.display = 'none';
+
+  const nameGroup = document.createElement('div');
+  nameGroup.style.marginBottom = '12px';
+  nameGroup.appendChild(createLabel('\u30ea\u30dd\u30b8\u30c8\u30ea\u540d', 'gh-new-name'));
+  nameGroup.appendChild(createInput('text', 'gh-new-name', '\u4f8b: my-project'));
+  newPanel.appendChild(nameGroup);
+
+  const descGroup = document.createElement('div');
+  descGroup.style.marginBottom = '12px';
+  descGroup.appendChild(createLabel('\u8aac\u660e (\u4efb\u610f)', 'gh-new-desc'));
+  descGroup.appendChild(createInput('text', 'gh-new-desc', '\u30ea\u30dd\u30b8\u30c8\u30ea\u306e\u8aac\u660e'));
+  newPanel.appendChild(descGroup);
+
+  const privGroup = document.createElement('div');
+  privGroup.style.cssText = 'margin-bottom:16px;display:flex;align-items:center;gap:8px';
+  const privCheck = document.createElement('input');
+  privCheck.type = 'checkbox';
+  privCheck.id = 'gh-new-private';
+  const privLabel = document.createElement('label');
+  privLabel.htmlFor = 'gh-new-private';
+  privLabel.textContent = 'Private \u30ea\u30dd\u30b8\u30c8\u30ea';
+  privLabel.style.fontSize = '0.85rem';
+  privGroup.appendChild(privCheck);
+  privGroup.appendChild(privLabel);
+  newPanel.appendChild(privGroup);
+  form.appendChild(newPanel);
+
+  // Tab switching
+  tabExisting.addEventListener('click', () => {
+    existingPanel.style.display = '';
+    newPanel.style.display = 'none';
+    tabExisting.style.background = 'var(--accent)';
+    tabExisting.style.color = '#fff';
+    tabNew.style.background = 'var(--bg-secondary)';
+    tabNew.style.color = 'var(--text-secondary)';
+  });
+  tabNew.addEventListener('click', () => {
+    existingPanel.style.display = 'none';
+    newPanel.style.display = '';
+    tabNew.style.background = 'var(--accent)';
+    tabNew.style.color = '#fff';
+    tabExisting.style.background = 'var(--bg-secondary)';
+    tabExisting.style.color = 'var(--text-secondary)';
+  });
 
   // Progress
   const progress = document.createElement('div');
@@ -98,14 +167,13 @@ function ensureModal(): HTMLElement {
   submitBtn.id = 'gh-export-btn';
   submitBtn.className = 'btn btn-primary';
   submitBtn.style.width = '100%';
-  submitBtn.textContent = 'Issues を作成';
+  submitBtn.textContent = 'Issues \u3092\u4f5c\u6210';
   submitBtn.addEventListener('click', () => handleExport());
   form.appendChild(submitBtn);
 
   content.appendChild(form);
   el.appendChild(content);
 
-  // Close on overlay click
   el.addEventListener('click', (e) => {
     if (e.target === el) closeExportModal();
   });
@@ -120,49 +188,108 @@ function closeExportModal(): void {
   document.body.style.overflow = '';
 }
 
+async function loadRepos(): Promise<void> {
+  const select = document.getElementById('gh-repo-select') as HTMLSelectElement | null;
+  if (!select) return;
+
+  if (cachedRepos) {
+    populateSelect(select, cachedRepos);
+    return;
+  }
+
+  select.innerHTML = '';
+  const loading = document.createElement('option');
+  loading.value = '';
+  loading.textContent = '\u8aad\u307f\u8fbc\u307f\u4e2d...';
+  select.appendChild(loading);
+
+  try {
+    cachedRepos = await api.getGitHubRepos();
+    populateSelect(select, cachedRepos);
+  } catch (e: unknown) {
+    select.innerHTML = '';
+    const errOpt = document.createElement('option');
+    errOpt.value = '';
+    errOpt.textContent = e instanceof Error ? e.message : '\u30ea\u30dd\u30b8\u30c8\u30ea\u306e\u53d6\u5f97\u306b\u5931\u6557';
+    select.appendChild(errOpt);
+  }
+}
+
+function populateSelect(select: HTMLSelectElement, repos: GitHubRepo[]): void {
+  select.innerHTML = '';
+  const placeholder = document.createElement('option');
+  placeholder.value = '';
+  placeholder.textContent = `-- \u30ea\u30dd\u30b8\u30c8\u30ea\u3092\u9078\u629e (${repos.length}\u4ef6) --`;
+  select.appendChild(placeholder);
+  for (const repo of repos) {
+    const opt = document.createElement('option');
+    opt.value = repo.full_name;
+    opt.textContent = repo.full_name;
+    select.appendChild(opt);
+  }
+}
+
 export function openExportIssuesModal(): void {
   const sessionId = getCurrentSessionId();
   if (!sessionId) {
-    showToast('セッションが選択されていません', true);
+    showToast('\u30bb\u30c3\u30b7\u30e7\u30f3\u304c\u9078\u629e\u3055\u308c\u3066\u3044\u307e\u305b\u3093', true);
+    return;
+  }
+  if (!isLoggedIn()) {
+    showToast('GitHub Issues \u3078\u306e\u30a8\u30af\u30b9\u30dd\u30fc\u30c8\u306b\u306f\u30ed\u30b0\u30a4\u30f3\u304c\u5fc5\u8981\u3067\u3059', true);
     return;
   }
 
   const modal = ensureModal();
 
-  // Reset form state
-  const repoInput = modal.querySelector('#gh-repo') as HTMLInputElement | null;
-  const patInput = modal.querySelector('#gh-pat') as HTMLInputElement | null;
+  // Reset
   const progressEl = modal.querySelector('#github-export-progress') as HTMLElement | null;
   const resultsEl = modal.querySelector('#github-export-results') as HTMLElement | null;
   const submitBtn = modal.querySelector('#gh-export-btn') as HTMLButtonElement | null;
-
-  if (repoInput) repoInput.value = '';
-  if (patInput) patInput.value = '';
   if (progressEl) progressEl.classList.add('hidden');
-  if (resultsEl) {
-    resultsEl.classList.add('hidden');
-    while (resultsEl.firstChild) resultsEl.removeChild(resultsEl.firstChild);
-  }
+  if (resultsEl) { resultsEl.classList.add('hidden'); resultsEl.innerHTML = ''; }
   if (submitBtn) submitBtn.disabled = false;
+
+  // Reset to existing tab
+  const tabExisting = modal.querySelector('#tab-existing') as HTMLElement | null;
+  if (tabExisting) tabExisting.click();
 
   modal.classList.remove('hidden');
   document.body.style.overflow = 'hidden';
-  repoInput?.focus();
+
+  // Load repos
+  loadRepos();
 }
 
-function renderResults(resultsEl: HTMLElement, created: Array<{ number: number; title: string; url: string }>, errors: Array<{ feature: string; error: string }>): void {
-  while (resultsEl.firstChild) resultsEl.removeChild(resultsEl.firstChild);
+function renderResults(
+  resultsEl: HTMLElement,
+  created: Array<{ number: number; title: string; url: string }>,
+  errors: Array<{ feature: string; error: string }>,
+  repoUrl?: string,
+): void {
+  resultsEl.innerHTML = '';
   resultsEl.classList.remove('hidden');
+
+  if (repoUrl) {
+    const repoLink = document.createElement('p');
+    repoLink.style.cssText = 'margin:0 0 12px;font-size:0.9rem';
+    const a = document.createElement('a');
+    a.href = repoUrl;
+    a.target = '_blank';
+    a.rel = 'noopener';
+    a.style.color = 'var(--accent)';
+    a.textContent = `\u30ea\u30dd\u30b8\u30c8\u30ea: ${repoUrl.replace('https://github.com/', '')}`;
+    repoLink.appendChild(a);
+    resultsEl.appendChild(repoLink);
+  }
 
   if (created.length > 0) {
     const section = document.createElement('div');
     section.style.marginBottom = '12px';
-
     const heading = document.createElement('p');
     heading.style.cssText = 'font-size:0.85rem;color:var(--text-secondary);margin:0 0 8px';
-    heading.textContent = `作成された Issue (${created.length}件)`;
+    heading.textContent = `\u4f5c\u6210\u3055\u308c\u305f Issue (${created.length}\u4ef6)`;
     section.appendChild(heading);
-
     const list = document.createElement('ul');
     list.style.cssText = 'list-style:none;padding:0;margin:0';
     for (const issue of created) {
@@ -183,12 +310,10 @@ function renderResults(resultsEl: HTMLElement, created: Array<{ number: number; 
 
   if (errors.length > 0) {
     const section = document.createElement('div');
-
     const heading = document.createElement('p');
     heading.style.cssText = 'font-size:0.85rem;color:var(--error);margin:0 0 8px';
-    heading.textContent = `エラー (${errors.length}件)`;
+    heading.textContent = `\u30a8\u30e9\u30fc (${errors.length}\u4ef6)`;
     section.appendChild(heading);
-
     const list = document.createElement('ul');
     list.style.cssText = 'list-style:none;padding:0;margin:0';
     for (const err of errors) {
@@ -206,63 +331,55 @@ async function handleExport(): Promise<void> {
   const sessionId = getCurrentSessionId();
   if (!sessionId) return;
 
-  const repoInput = document.getElementById('gh-repo') as HTMLInputElement | null;
-  const patInput = document.getElementById('gh-pat') as HTMLInputElement | null;
-  const progressEl = document.getElementById('github-export-progress') as HTMLElement | null;
-  const progressText = document.getElementById('github-export-progress-text') as HTMLElement | null;
-  const resultsEl = document.getElementById('github-export-results') as HTMLElement | null;
+  const existingPanel = document.getElementById('panel-existing');
+  const isNewRepo = existingPanel?.style.display === 'none';
+
+  const progressEl = document.getElementById('github-export-progress');
+  const progressText = document.getElementById('github-export-progress-text');
+  const resultsEl = document.getElementById('github-export-results');
   const submitBtn = document.getElementById('gh-export-btn') as HTMLButtonElement | null;
 
-  if (!repoInput || !patInput) return;
-
-  const repoValue = repoInput.value.trim();
-  const token = patInput.value.trim();
-
-  // Validate repo format
-  const repoParts = repoValue.split('/');
-  if (repoParts.length !== 2 || !repoParts[0] || !repoParts[1]) {
-    showToast('リポジトリは owner/repo 形式で入力してください', true);
-    return;
-  }
-  if (!token) {
-    showToast('GitHub PAT を入力してください', true);
-    return;
-  }
-
-  const [repoOwner, repoName] = repoParts;
-
-  // Show progress
   if (submitBtn) submitBtn.disabled = true;
   if (progressEl) progressEl.classList.remove('hidden');
-  if (progressText) progressText.textContent = 'GitHub Issues を作成中...';
-  if (resultsEl) {
-    resultsEl.classList.add('hidden');
-    while (resultsEl.firstChild) resultsEl.removeChild(resultsEl.firstChild);
-  }
+  if (progressText) progressText.textContent = 'GitHub Issues \u3092\u4f5c\u6210\u4e2d...';
+  if (resultsEl) { resultsEl.classList.add('hidden'); resultsEl.innerHTML = ''; }
 
   try {
-    const result = await api.exportIssues(sessionId, { repoOwner, repoName, token });
+    if (isNewRepo) {
+      const nameInput = document.getElementById('gh-new-name') as HTMLInputElement | null;
+      const descInput = document.getElementById('gh-new-desc') as HTMLInputElement | null;
+      const privCheck = document.getElementById('gh-new-private') as HTMLInputElement | null;
+      const name = nameInput?.value.trim() || '';
+      if (!name) { showToast('\u30ea\u30dd\u30b8\u30c8\u30ea\u540d\u3092\u5165\u529b\u3057\u3066\u304f\u3060\u3055\u3044', true); return; }
 
-    // Clear PAT from memory
-    patInput.value = '';
+      if (progressText) progressText.textContent = '\u30ea\u30dd\u30b8\u30c8\u30ea\u3092\u4f5c\u6210\u4e2d...';
 
-    if (progressEl) progressEl.classList.add('hidden');
+      const result = await api.createRepoAndExport(sessionId, {
+        name,
+        description: descInput?.value.trim() || undefined,
+        isPrivate: privCheck?.checked,
+      });
 
-    // Show results
-    if (resultsEl) {
-      renderResults(resultsEl, result.created, result.errors);
-    }
+      if (progressEl) progressEl.classList.add('hidden');
+      if (resultsEl) renderResults(resultsEl, result.created, result.errors, result.repo.url);
+      cachedRepos = null; // invalidate cache
+      if (result.created.length > 0) showToast(`${result.created.length}\u4ef6\u306e Issue \u3092\u4f5c\u6210\u3057\u307e\u3057\u305f`);
+    } else {
+      const select = document.getElementById('gh-repo-select') as HTMLSelectElement | null;
+      const repoValue = select?.value.trim() || '';
+      if (!repoValue) { showToast('\u30ea\u30dd\u30b8\u30c8\u30ea\u3092\u9078\u629e\u3057\u3066\u304f\u3060\u3055\u3044', true); return; }
+      const [repoOwner, repoName] = repoValue.split('/');
 
-    if (result.created.length > 0) {
-      showToast(`${result.created.length}件の Issue を作成しました`);
-    }
-    if (result.errors.length > 0 && result.created.length === 0) {
-      showToast('Issue の作成に失敗しました', true);
+      const result = await api.exportIssues(sessionId, { repoOwner, repoName });
+
+      if (progressEl) progressEl.classList.add('hidden');
+      if (resultsEl) renderResults(resultsEl, result.created, result.errors);
+      if (result.created.length > 0) showToast(`${result.created.length}\u4ef6\u306e Issue \u3092\u4f5c\u6210\u3057\u307e\u3057\u305f`);
+      if (result.errors.length > 0 && result.created.length === 0) showToast('Issue \u306e\u4f5c\u6210\u306b\u5931\u6557\u3057\u307e\u3057\u305f', true);
     }
   } catch (e: unknown) {
     if (progressEl) progressEl.classList.add('hidden');
-    const message = e instanceof Error ? e.message : String(e);
-    showToast(message, true);
+    showToast(e instanceof Error ? e.message : String(e), true);
   } finally {
     if (submitBtn) submitBtn.disabled = false;
   }

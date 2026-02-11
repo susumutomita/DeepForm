@@ -29,5 +29,10 @@ export const appFeedbackSchema = z.object({
 export const exportIssuesSchema = z.object({
   repoOwner: z.string().min(1, "リポジトリオーナーを入力してください").max(100),
   repoName: z.string().min(1, "リポジトリ名を入力してください").max(100),
-  token: z.string().min(1, "GitHub PATを入力してください"),
+});
+
+export const createRepoSchema = z.object({
+  name: z.string().min(1, "リポジトリ名を入力してください").max(100),
+  description: z.string().max(500).optional(),
+  isPrivate: z.boolean().optional(),
 });

@@ -59,6 +59,9 @@ export interface User {
   exe_user_id: string;
   email: string;
   display_name: string | null;
+  github_id?: number | null;
+  github_token?: string | null;
+  avatar_url?: string | null;
   created_at: string;
   updated_at: string;
 }

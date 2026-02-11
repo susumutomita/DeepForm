@@ -193,6 +193,86 @@ export async function callClaude(messages: ClaudeMessage[], system: string, maxT
   }
 }
 
+// --- Streaming LLM Call ---
+
+export function callClaudeStream(
+  messages: ClaudeMessage[],
+  system: string,
+  maxTokens = 4096,
+): { stream: import("node:stream").Readable; getFullText: () => string } {
+  const endpoint = resolveEndpoint();
+  const body = JSON.stringify({
+    model: process.env.ANTHROPIC_MODEL ?? "claude-sonnet-4-5-20250929",
+    max_tokens: maxTokens,
+    stream: true,
+    system: buildSystemPrompt(endpoint.apiKey, system),
+    messages,
+  });
+
+  const { Readable } = require("node:stream") as typeof import("node:stream");
+  const readable = new Readable({ read() {} });
+  let fullText = "";
+
+  const { url, apiKey } = endpoint;
+  const isHttps = url.protocol === "https:";
+  const transport = isHttps ? https : http;
+
+  const options = {
+    hostname: url.hostname,
+    port: url.port || (isHttps ? 443 : 80),
+    path: url.pathname + url.search,
+    method: "POST" as const,
+    headers: buildHeaders(apiKey, Buffer.byteLength(body)),
+  };
+
+  const authMethod = apiKey ? (isOAuthToken(apiKey) ? "oauth" : "apikey") : "gateway";
+  console.info(`LLM stream request: ${url.hostname} auth=${authMethod}`);
+
+  const req = transport.request(options, (res) => {
+    let buffer = "";
+    res.on("data", (chunk: Buffer) => {
+      buffer += chunk.toString();
+      const lines = buffer.split("\n");
+      buffer = lines.pop() || "";
+      for (const line of lines) {
+        if (line.startsWith("data: ")) {
+          const data = line.slice(6).trim();
+          if (data === "[DONE]") {
+            readable.push(null);
+            return;
+          }
+          try {
+            const parsed = JSON.parse(data);
+            if (parsed.type === "content_block_delta" && parsed.delta?.text) {
+              fullText += parsed.delta.text;
+              readable.push(parsed.delta.text);
+            } else if (parsed.type === "message_stop") {
+              readable.push(null);
+            } else if (parsed.error) {
+              readable.destroy(new Error(parsed.error.message || "LLM error"));
+            }
+          } catch {
+            // skip unparseable lines
+          }
+        }
+      }
+    });
+    res.on("end", () => {
+      if (!readable.destroyed) readable.push(null);
+    });
+    res.on("error", (err) => readable.destroy(err));
+  });
+
+  req.setTimeout(180_000, () => {
+    req.destroy(new Error("LLM stream request timed out after 180s"));
+  });
+  req.on("error", (err) => readable.destroy(err));
+  req.write(body);
+  req.end();
+
+  return { stream: readable, getFullText: () => fullText };
+}
+
 export function extractText(response: ClaudeResponse): string {
   if (!response?.content) return "";
   return response.content

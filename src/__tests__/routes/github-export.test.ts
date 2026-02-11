@@ -231,6 +231,7 @@ describe("GitHub Issues エクスポート API", () => {
       // Mock fetch for GitHub API
       let fetchCallCount = 0;
       const originalFetch = globalThis.fetch;
+      // @ts-expect-error -- vitest mock lacks Bun's `preconnect` property
       globalThis.fetch = vi.fn().mockImplementation(async (url: string, opts: any) => {
         // Skip the label check/create calls
         if (typeof url === "string" && url.includes("/labels")) {
@@ -279,6 +280,7 @@ describe("GitHub Issues エクスポート API", () => {
       insertAnalysis("session-gh-error", "prd", samplePRD);
 
       const originalFetch = globalThis.fetch;
+      // @ts-expect-error -- vitest mock lacks Bun's `preconnect` property
       globalThis.fetch = vi.fn().mockImplementation(async (url: string, opts: any) => {
         if (typeof url === "string" && url.includes("/labels")) {
           return new Response(JSON.stringify({}), { status: 200, headers: { "Content-Type": "application/json" } });
@@ -317,6 +319,7 @@ describe("GitHub Issues エクスポート API", () => {
 
       let callIndex = 0;
       const originalFetch = globalThis.fetch;
+      // @ts-expect-error -- vitest mock lacks Bun's `preconnect` property
       globalThis.fetch = vi.fn().mockImplementation(async (url: string, opts: any) => {
         if (typeof url === "string" && url.includes("/labels")) {
           return new Response(JSON.stringify({}), { status: 200, headers: { "Content-Type": "application/json" } });
@@ -364,6 +367,7 @@ describe("GitHub Issues エクスポート API", () => {
 
       let capturedBody = "";
       const originalFetch = globalThis.fetch;
+      // @ts-expect-error -- vitest mock lacks Bun's `preconnect` property
       globalThis.fetch = vi.fn().mockImplementation(async (url: string, opts: any) => {
         if (typeof url === "string" && url.includes("/labels")) {
           return new Response(JSON.stringify({}), { status: 200, headers: { "Content-Type": "application/json" } });
@@ -405,6 +409,7 @@ describe("GitHub Issues エクスポート API", () => {
 
       const capturedLabels: string[][] = [];
       const originalFetch = globalThis.fetch;
+      // @ts-expect-error -- vitest mock lacks Bun's `preconnect` property
       globalThis.fetch = vi.fn().mockImplementation(async (url: string, opts: any) => {
         if (typeof url === "string" && url.includes("/labels")) {
           return new Response(JSON.stringify({}), { status: 200, headers: { "Content-Type": "application/json" } });

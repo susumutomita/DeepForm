@@ -95,4 +95,15 @@ try {
   if (!msg.includes("duplicate column")) throw e;
 }
 
+// Backfill: populate exe_user_id for pre-existing rows (uses id as fallback)
+db.prepare("UPDATE users SET exe_user_id = id WHERE exe_user_id IS NULL").run();
+db.prepare("UPDATE users SET email = 'unknown@example.com' WHERE email IS NULL").run();
+
+// Ensure unique index on exe_user_id for consistency with CREATE TABLE schema
+try {
+  db.prepare("CREATE UNIQUE INDEX IF NOT EXISTS idx_users_exe_user_id ON users(exe_user_id)").run();
+} catch {
+  /* index may already exist */
+}
+
 export { db };

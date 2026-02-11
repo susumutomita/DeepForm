@@ -4,7 +4,7 @@
 export function renderTerms(): string {
   return `
 <article class="policy-page">
-  <p class="policy-meta">最終更新日: 2025年2月</p>
+  <p class="policy-meta">最終更新日: 2026年2月</p>
 
   <h1>利用規約・免責事項</h1>
 
@@ -18,7 +18,7 @@ export function renderTerms(): string {
   <p>
     本サービスは、AI（Anthropic Claude）を活用したデプスインタビューツールです。
     ユーザーの入力をもとに、ファクト抽出・仮説生成・PRD（プロダクト要件定義書）・仕様書等の成果物を自動生成します。
-    本サービスは <a href="https://deepform.exe.xyz:8000" target="_blank" rel="noopener noreferrer">https://deepform.exe.xyz:8000</a> にてご利用いただけます。
+    本サービスは <a href="https://deepform.exe.xyz" target="_blank" rel="noopener noreferrer">https://deepform.exe.xyz</a> にてご利用いただけます。
   </p>
 
   <h2>2. 利用資格</h2>
@@ -113,7 +113,7 @@ export function renderTerms(): string {
   <h2>13. お問い合わせ</h2>
   <p>
     本規約に関するご質問は、
-    <a href="https://github.com/baku89/DeepForm/issues" target="_blank" rel="noopener noreferrer">GitHub Issues</a>
+    <a href="https://github.com/susumutomita/DeepForm/issues" target="_blank" rel="noopener noreferrer">GitHub Issues</a>
     にてお受けしております。
   </p>
 </article>

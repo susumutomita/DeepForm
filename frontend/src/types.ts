@@ -14,7 +14,7 @@ export interface Message {
 export interface Fact {
   type: 'fact' | 'pain' | 'frequency' | 'workaround';
   content: string;
-  severity: string;
+  severity: 'high' | 'medium' | 'low';
   evidence?: string;
 }
 

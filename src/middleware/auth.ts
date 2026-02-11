@@ -18,7 +18,7 @@ function upsertUser(exeUserId: string, email: string): User {
 
   if (existing) {
     db.prepare("UPDATE users SET email = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?").run(email, existing.id);
-    return { ...existing, email };
+    return db.prepare("SELECT * FROM users WHERE id = ?").get(existing.id) as unknown as User;
   }
 
   const id = crypto.randomUUID();
@@ -48,8 +48,8 @@ export const authMiddleware = createMiddleware<{
   let exeUserId = c.req.header("x-exedev-userid");
   let email = c.req.header("x-exedev-email");
 
-  // Local dev fallback
-  if (!exeUserId && process.env.NODE_ENV !== "production") {
+  // Local dev fallback (only in development mode)
+  if (!exeUserId && process.env.NODE_ENV === "development") {
     exeUserId = process.env.EXEDEV_DEV_USER ?? undefined;
     email = process.env.EXEDEV_DEV_EMAIL ?? undefined;
   }

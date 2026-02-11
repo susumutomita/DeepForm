@@ -4,7 +4,7 @@
 export function renderPrivacyPolicy(): string {
   return `
 <article class="policy-page">
-  <p class="policy-meta">最終更新日: 2025年2月</p>
+  <p class="policy-meta">最終更新日: 2026年2月</p>
 
   <h1>プライバシーポリシー</h1>
 
@@ -72,7 +72,7 @@ export function renderPrivacyPolicy(): string {
   <h2>8. お問い合わせ</h2>
   <p>
     本ポリシーに関するご質問やデータに関するお問い合わせは、
-    <a href="https://github.com/baku89/DeepForm/issues" target="_blank" rel="noopener noreferrer">GitHub Issues</a>
+    <a href="https://github.com/susumutomita/DeepForm/issues" target="_blank" rel="noopener noreferrer">GitHub Issues</a>
     にてお受けしております。
   </p>
 

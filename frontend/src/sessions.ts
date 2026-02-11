@@ -2,38 +2,104 @@
 import * as api from './api';
 import { getUser } from './auth';
 import { t } from './i18n';
-import { escapeHtml, formatDate, statusLabel, showToast } from './ui';
+import { formatDate, statusLabel, showToast } from './ui';
+import type { DeepFormWindow } from './types';
+
+const SESSION_ID_RE = /^[A-Za-z0-9_-]+$/;
+
+function safeId(id: string): string {
+  return SESSION_ID_RE.test(id) ? id : '';
+}
+
+function safeCssClass(s: string): string {
+  return s.replace(/[^a-zA-Z0-9_-]/g, '');
+}
 
 export async function loadSessions(): Promise<void> {
   const list = document.getElementById('sessions-list');
   if (!list) return;
+  const w = window as unknown as DeepFormWindow;
   try {
     const sessions = await api.getSessions();
     if (sessions.length === 0) {
-      list.innerHTML = `<p class="empty-state">${t('sessions.empty')}</p>`;
+      list.textContent = '';
+      const p = document.createElement('p');
+      p.className = 'empty-state';
+      p.textContent = t('sessions.empty');
+      list.appendChild(p);
       return;
     }
     const user = getUser();
-    list.innerHTML = sessions.map(s => `
-      <div class="session-card">
-        <div class="session-card-info" onclick="window.openSession('${s.id}')">
-          <h3>${escapeHtml(s.theme)}</h3>
-          <div class="session-card-meta">
-            <span>${s.message_count}メッセージ</span>
-            <span>${formatDate(s.created_at)}</span>
-            ${s.mode === 'shared' ? `<span class="shared-tag">${t('shared.tag')}</span>` : ''}
-            ${s.respondent_name ? `<span>${escapeHtml(s.respondent_name)}</span>` : ''}
-          </div>
-        </div>
-        <div class="session-card-actions">
-          ${user && s.user_id === user.id ? `<button class="btn-visibility btn-sm" onclick="event.stopPropagation(); window.toggleVisibility('${s.id}', ${!s.is_public})">${s.is_public ? '\uD83D\uDD13 ' + t('session.public') : '\uD83D\uDD12 ' + t('session.private')}</button>` : ''}
-          <span class="status-badge status-${s.display_status || s.status}">${statusLabel(s.display_status || s.status)}</span>
-          <button class="btn btn-sm btn-secondary" onclick="event.stopPropagation(); window.shareSession('${s.id}')" title="\u5171\u6709URL\u3092\u30b3\u30d4\u30fc">&#8599;</button>
-        </div>
-      </div>
-    `).join('');
+    // Build session cards using DOM APIs to avoid XSS via inline handlers
+    list.textContent = '';
+    for (const s of sessions) {
+      const sid = safeId(s.id);
+      if (!sid) continue;
+
+      const card = document.createElement('div');
+      card.className = 'session-card';
+
+      const info = document.createElement('div');
+      info.className = 'session-card-info';
+      info.dataset.sessionId = sid;
+      info.addEventListener('click', () => w.openSession(sid));
+
+      const h3 = document.createElement('h3');
+      h3.textContent = s.theme;
+      info.appendChild(h3);
+
+      const meta = document.createElement('div');
+      meta.className = 'session-card-meta';
+      const msgSpan = document.createElement('span');
+      msgSpan.textContent = `${s.message_count}メッセージ`;
+      meta.appendChild(msgSpan);
+      const dateSpan = document.createElement('span');
+      dateSpan.textContent = formatDate(s.created_at);
+      meta.appendChild(dateSpan);
+      if (s.mode === 'shared') {
+        const sharedSpan = document.createElement('span');
+        sharedSpan.className = 'shared-tag';
+        sharedSpan.textContent = t('shared.tag');
+        meta.appendChild(sharedSpan);
+      }
+      if (s.respondent_name) {
+        const nameSpan = document.createElement('span');
+        nameSpan.textContent = s.respondent_name;
+        meta.appendChild(nameSpan);
+      }
+      info.appendChild(meta);
+      card.appendChild(info);
+
+      const actions = document.createElement('div');
+      actions.className = 'session-card-actions';
+
+      if (user && s.user_id === user.id) {
+        const visBtn = document.createElement('button');
+        visBtn.className = 'btn-visibility btn-sm';
+        visBtn.textContent = s.is_public ? '\uD83D\uDD13 ' + t('session.public') : '\uD83D\uDD12 ' + t('session.private');
+        const newState = !s.is_public;
+        visBtn.addEventListener('click', (e) => { e.stopPropagation(); w.toggleVisibility(sid, newState); });
+        actions.appendChild(visBtn);
+      }
+
+      const badge = document.createElement('span');
+      badge.className = `status-badge status-${safeCssClass(s.display_status || s.status)}`;
+      badge.textContent = statusLabel(s.display_status || s.status);
+      actions.appendChild(badge);
+
+      const shareBtn = document.createElement('button');
+      shareBtn.className = 'btn btn-sm btn-secondary';
+      shareBtn.title = '共有URLをコピー';
+      shareBtn.textContent = '\u2197';
+      shareBtn.addEventListener('click', (e) => { e.stopPropagation(); w.shareSession(sid); });
+      actions.appendChild(shareBtn);
+
+      card.appendChild(actions);
+      list.appendChild(card);
+    }
   } catch (e) {
     console.error('Failed to load sessions:', e);
+    showToast(t('toast.notFound'), true);
   }
 }
 

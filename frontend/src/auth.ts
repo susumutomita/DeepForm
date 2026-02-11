@@ -37,8 +37,9 @@ export function updateAuthUI(): void {
 }
 
 export async function doLogout(): Promise<void> {
-  await api.logout();
-  // exe.dev logout
+  try {
+    await api.logout();
+  } catch { /* ignore - cleanup must continue */ }
   try {
     await fetch('/__exe.dev/logout', { method: 'POST' });
   } catch { /* ignore */ }

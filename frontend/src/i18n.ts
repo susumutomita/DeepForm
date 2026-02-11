@@ -443,7 +443,7 @@ export let currentLang: string =
 if (!TRANSLATIONS[currentLang]) currentLang = 'en';
 
 export function t(key: string): string {
-  return TRANSLATIONS[currentLang]?.[key] ?? TRANSLATIONS['ja']?.[key] ?? key;
+  return TRANSLATIONS[currentLang]?.[key] ?? TRANSLATIONS['en']?.[key] ?? TRANSLATIONS['ja']?.[key] ?? key;
 }
 
 export function setLang(lang: string): void {

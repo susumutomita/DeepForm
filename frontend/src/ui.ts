@@ -11,12 +11,15 @@ export function hideLoading(): void {
   document.getElementById('loading-overlay')?.classList.add('hidden');
 }
 
+let toastTimer: ReturnType<typeof setTimeout> | null = null;
+
 export function showToast(msg: string, isError = false): void {
   const toast = document.getElementById('toast');
   if (!toast) return;
+  if (toastTimer) clearTimeout(toastTimer);
   toast.textContent = msg;
   toast.className = `toast ${isError ? 'error' : ''}`;
-  setTimeout(() => { toast.className = 'toast hidden'; }, 3000);
+  toastTimer = setTimeout(() => { toast.className = 'toast hidden'; toastTimer = null; }, 3000);
 }
 
 export function escapeHtml(text: string): string {
@@ -27,7 +30,7 @@ export function escapeHtml(text: string): string {
 
 export function formatDate(d: string | null): string {
   if (!d) return '';
-  const date = new Date(d + 'Z');
+  const date = new Date(d.endsWith('Z') || /[+-]\d{2}:\d{2}$/.test(d) ? d : d + 'Z');
   return date.toLocaleDateString('ja-JP', {
     month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit',
   });

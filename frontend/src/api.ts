@@ -7,7 +7,19 @@ import type {
 
 async function request<T>(url: string, opts?: RequestInit): Promise<T> {
   const res = await fetch(url, opts);
-  const data = await res.json();
+  let data: any;
+  const contentType = res.headers.get('content-type') ?? '';
+  if (contentType.includes('application/json')) {
+    try {
+      data = await res.json();
+    } catch {
+      throw new Error(`HTTP ${res.status}: Invalid JSON response`);
+    }
+  } else {
+    const text = await res.text();
+    if (!res.ok) throw new Error(`HTTP ${res.status}: ${text.slice(0, 200)}`);
+    throw new Error(`HTTP ${res.status}: Unexpected response format`);
+  }
   if (data.error) throw new Error(data.error);
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   return data as T;

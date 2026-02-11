@@ -194,23 +194,29 @@ export async function doRunSpec(): Promise<void> {
 }
 
 // --- Export ---
-export function exportSpecJSON(): void {
+export async function exportSpecJSON(): Promise<void> {
   if (!currentSessionId) return;
-  api.getSession(currentSessionId).then(data => {
+  try {
+    const data = await api.getSession(currentSessionId);
     const spec = data.analysis?.spec || {};
-    navigator.clipboard.writeText(JSON.stringify(spec, null, 2))
-      .then(() => showToast(t('toast.copied')));
-  });
+    await navigator.clipboard.writeText(JSON.stringify(spec, null, 2));
+    showToast(t('toast.copied'));
+  } catch (e: any) {
+    showToast(e.message, true);
+  }
 }
 
-export function exportPRDMarkdown(): void {
+export async function exportPRDMarkdown(): Promise<void> {
   if (!currentSessionId) return;
-  api.getSession(currentSessionId).then(data => {
+  try {
+    const data = await api.getSession(currentSessionId);
     const spec = data.analysis?.spec;
     const md = (spec as any)?.prdMarkdown || JSON.stringify(data.analysis?.prd || {}, null, 2);
-    navigator.clipboard.writeText(md)
-      .then(() => showToast(t('toast.copied')));
-  });
+    await navigator.clipboard.writeText(md);
+    showToast(t('toast.copied'));
+  } catch (e: any) {
+    showToast(e.message, true);
+  }
 }
 
 // --- Renderers ---
@@ -221,7 +227,7 @@ function renderFacts(facts: Fact[]): void {
     <div class="fact-card">
       <div class="fact-card-header">
         <span class="fact-type type-${f.type}">${factTypeLabel(f.type)}</span>
-        <span class="severity severity-${f.severity}">${f.severity}</span>
+        <span class="severity severity-${f.severity.replace(/[^a-zA-Z0-9_-]/g, '')}">${escapeHtml(f.severity)}</span>
       </div>
       <div class="fact-content">${escapeHtml(f.content)}</div>
       ${f.evidence ? `<div class="fact-evidence">「${escapeHtml(f.evidence)}」</div>` : ''}
@@ -236,7 +242,7 @@ function renderHypotheses(hypotheses: Hypothesis[]): void {
     <div class="hypothesis-card">
       <h3><span class="badge">${h.id}</span> ${escapeHtml(h.title)}</h3>
       <p class="hypothesis-desc">${escapeHtml(h.description)}</p>
-      <div class="hypothesis-section"><strong>${t('hypo.supporting')}</strong> ${(h.supportingFacts || []).join(', ')}</div>
+      <div class="hypothesis-section"><strong>${t('hypo.supporting')}</strong> ${escapeHtml((h.supportingFacts || []).join(', '))}</div>
       <div class="hypothesis-section counter"><strong>${t('hypo.counter')}</strong> ${escapeHtml(h.counterEvidence || 'なし')}</div>
       <div class="hypothesis-section unverified"><strong>${t('hypo.unverified')}</strong>
         <ul>${(h.unverifiedPoints || []).map(p => `<li>${escapeHtml(p)}</li>`).join('')}</ul>

@@ -4,7 +4,7 @@
 export function renderSecurityPolicy(): string {
   return `
 <article class="policy-page">
-  <p class="policy-meta">最終更新日: 2025年2月</p>
+  <p class="policy-meta">最終更新日: 2026年2月</p>
 
   <h1>セキュリティポリシー</h1>
 
@@ -75,7 +75,7 @@ export function renderSecurityPolicy(): string {
     本サービスのセキュリティ上の脆弱性を発見された場合は、以下の方法でご報告ください。
   </p>
   <ul>
-    <li><strong>GitHub Issues:</strong> <a href="https://github.com/baku89/DeepForm/issues" target="_blank" rel="noopener noreferrer">https://github.com/baku89/DeepForm/issues</a> にて報告</li>
+    <li><strong>GitHub Issues:</strong> <a href="https://github.com/susumutomita/DeepForm/issues" target="_blank" rel="noopener noreferrer">https://github.com/susumutomita/DeepForm/issues</a> にて報告</li>
   </ul>
   <p>
     脆弱性の報告にあたっては、影響範囲や再現手順をできるだけ詳しくお知らせください。

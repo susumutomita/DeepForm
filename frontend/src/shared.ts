@@ -29,7 +29,7 @@ function renderSharedFacts(facts: Fact[]): void {
     <div class="fact-card">
       <div class="fact-card-header">
         <span class="fact-type type-${f.type}">${factTypeLabel(f.type)}</span>
-        <span class="severity severity-${f.severity}">${f.severity}</span>
+        <span class="severity severity-${f.severity.replace(/[^a-zA-Z0-9_-]/g, '')}">${escapeHtml(f.severity)}</span>
       </div>
       <div class="fact-content">${escapeHtml(f.content)}</div>
       ${f.evidence ? `<div class="fact-evidence">「${escapeHtml(f.evidence)}」</div>` : ''}

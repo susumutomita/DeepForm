@@ -289,6 +289,32 @@ describe("POST /api/sessions/:id/prd/apply", () => {
     expect(callClaude).toHaveBeenCalledTimes(2);
   });
 
+  it("rejects custom input when Claude returns unparseable validation response", async () => {
+    const { sessionId } = setupUserAndSession();
+
+    (callClaude as any).mockResolvedValue({
+      content: [{ type: "text", text: "I cannot validate this" }],
+    });
+    (extractText as any).mockReturnValue("I cannot validate this");
+
+    const res = await authedRequest(`/api/sessions/${sessionId}/prd/apply`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        selectedText: "10秒以内",
+        newText: "something",
+        context: "PDFレポート生成が10秒以内に完了",
+        sectionType: "qualityRequirements",
+        isCustomInput: true,
+      }),
+    });
+
+    expect(res.status).toBe(200);
+    const data = await res.json();
+    expect(data.applied).toBe(false);
+    expect(data.reason).toContain("検証に失敗");
+  });
+
   it("rejects custom input when validated as irrelevant", async () => {
     const { sessionId } = setupUserAndSession();
 

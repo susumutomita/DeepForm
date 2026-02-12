@@ -1,13 +1,16 @@
 import { Hono } from "hono";
 import { db } from "../db.ts";
+import type { User } from "../types.ts";
+
+type AppEnv = { Variables: { user: User | null } };
 
 const ADMIN_EMAILS = ["oyster880@gmail.com"];
 
-export const analyticsRoutes = new Hono();
+export const analyticsRoutes = new Hono<AppEnv>();
 
 // Admin check middleware
 analyticsRoutes.use("/*", async (c, next) => {
-  const user = c.get("user") as { email: string } | null;
+  const user = c.get("user");
   if (!user || !ADMIN_EMAILS.includes(user.email)) {
     return c.json({ error: "Forbidden" }, 403);
   }

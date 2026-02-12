@@ -1,6 +1,7 @@
 import { execFileSync } from "node:child_process";
 import http from "node:http";
 import https from "node:https";
+import { Readable } from "node:stream";
 
 const LLM_GATEWAY = "http://169.254.169.254/gateway/llm/anthropic/v1/messages";
 const ANTHROPIC_API = "https://api.anthropic.com/v1/messages";
@@ -209,8 +210,7 @@ export function callClaudeStream(
     messages,
   });
 
-  const { Readable } = require("node:stream") as typeof import("node:stream");
-  const readable = new Readable({ read() {} });
+  const readable = new Readable({ read() {}, encoding: "utf8" });
   let fullText = "";
 
   const { url, apiKey } = endpoint;

@@ -19,6 +19,7 @@ import { showToast, toggleTheme, initTheme } from './ui';
 import { openPolicy, closeModal } from './modal';
 import { openFeedbackModal, closeFeedbackModal } from './feedback';
 import { showCampaignAnalytics } from './campaign-analytics';
+import { showAnalytics } from './analytics';
 import { t } from './i18n';
 import { renderPrivacyPolicy } from './pages/privacy';
 import { renderTerms } from './pages/terms';
@@ -152,6 +153,8 @@ async function init(): Promise<void> {
     await initCampaignInterview(campaignMatch[1]);
   } else if (sessionMatch) {
     await openSession(sessionMatch[1]);
+  } else if (path === '/analytics') {
+    await showAnalytics();
   } else if (path === '/privacy' || path === '/terms' || path === '/security') {
     // Policy pages use hardcoded static HTML from compile-time constants, not user input
     const pageContent = path === '/privacy' ? renderPrivacyPolicy()

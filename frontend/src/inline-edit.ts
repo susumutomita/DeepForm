@@ -58,7 +58,7 @@ function handleSelectionChange(): void {
   }, 500);
 }
 
-function handleTextSelection(_e: MouseEvent): void {
+function handleTextSelection(): void {
   const selection = window.getSelection();
   if (!selection || selection.isCollapsed || !selection.toString().trim()) {
     return; // No text selected
@@ -111,7 +111,11 @@ function detectSectionType(el: HTMLElement, container: HTMLElement): string {
       // Check if in edge cases sub-section
       const edgeCases = current.querySelector('.edge-cases');
       if (edgeCases && edgeCases.contains(el)) return 'edgeCases';
-      return 'acceptanceCriteria';
+      // Check if el is inside a criteria list (ul after .criteria-label)
+      const closestLi = el.closest('li');
+      if (closestLi) return 'acceptanceCriteria';
+      // Feature description (p), not acceptance criteria
+      return 'other';
     }
     // Check metrics table
     if (current.tagName === 'TABLE' || current.tagName === 'TR' || current.tagName === 'TD') {
@@ -216,7 +220,7 @@ async function showSuggestionPopup(
 
     // Event handlers for suggestion clicks
     popup.querySelectorAll('.inline-edit-option').forEach(li => {
-      li.addEventListener('click', async () => {
+      li.addEventListener('click', () => {
         const newText = (li as HTMLElement).dataset.value || '';
         if (newText === selectedText) {
           closePopup();
@@ -227,7 +231,9 @@ async function showSuggestionPopup(
           (opt as HTMLElement).style.pointerEvents = 'none',
         );
         (li as HTMLElement).style.opacity = '0.6';
-        await applyEdit(sessionId, selectedText, newText, context, sectionType, false, range);
+        applyEdit(sessionId, selectedText, newText, context, sectionType, false, range).catch(() => {
+          showToast('更新に失敗しました', true);
+        });
       });
     });
 

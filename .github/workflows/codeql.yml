@@ -1,0 +1,51 @@
+name: CodeQL
+
+# Supply Chain Security:
+# - All actions pinned to full SHA for immutable references
+# - Minimal permissions following principle of least privilege
+# NOTE: This workflow uses only matrix.language which is defined
+# in this file (not from user input), so no injection risk.
+
+permissions:
+  contents: read
+  security-events: write
+  actions: read
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    - cron: "0 6 * * 1"
+  workflow_dispatch:
+
+jobs:
+  analyze:
+    name: Analyze (${{ matrix.language }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        language: [javascript-typescript, actions]
+    steps:
+      - name: Check out the code
+        # actions/checkout v4.3.1
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+
+      - name: Initialize CodeQL
+        # github/codeql-action/init v3.28.13
+        uses: github/codeql-action/init@fca7ace96b7d713c7035871441bd52efbe39c27a
+        with:
+          languages: ${{ matrix.language }}
+
+      - name: Autobuild
+        # github/codeql-action/autobuild v3.28.13
+        uses: github/codeql-action/autobuild@fca7ace96b7d713c7035871441bd52efbe39c27a
+
+      - name: Perform CodeQL Analysis
+        # github/codeql-action/analyze v3.28.13
+        uses: github/codeql-action/analyze@fca7ace96b7d713c7035871441bd52efbe39c27a
+        with:
+          category: /language:${{ matrix.language }}

@@ -133,7 +133,7 @@ sessionRoutes.post("/sessions", async (c) => {
     if (e instanceof SyntaxError) return c.json({ error: "Invalid JSON" }, 400);
     if (e instanceof ZodError) return c.json({ error: formatZodError(e) }, 400);
     console.error("Create session error:", e);
-    return c.json({ error: (e as Error).message }, 500);
+    return c.json({ error: "Internal Server Error" }, 500);
   }
 });
 
@@ -161,7 +161,7 @@ sessionRoutes.get("/sessions", (c) => {
     return c.json(sessions);
   } catch (e) {
     console.error("List sessions error:", e);
-    return c.json({ error: (e as Error).message }, 500);
+    return c.json({ error: "Internal Server Error" }, 500);
   }
 });
 
@@ -193,7 +193,7 @@ sessionRoutes.get("/sessions/:id", (c) => {
     return c.json({ ...session, messages, analysis: analysisMap });
   } catch (e) {
     console.error("Get session error:", e);
-    return c.json({ error: (e as Error).message }, 500);
+    return c.json({ error: "Internal Server Error" }, 500);
   }
 });
 
@@ -210,7 +210,7 @@ sessionRoutes.delete("/sessions/:id", (c) => {
     return c.json({ ok: true });
   } catch (e) {
     console.error("Delete session error:", e);
-    return c.json({ error: (e as Error).message }, 500);
+    return c.json({ error: "Internal Server Error" }, 500);
   }
 });
 
@@ -230,7 +230,7 @@ sessionRoutes.patch("/sessions/:id/visibility", async (c) => {
   } catch (e) {
     if (e instanceof ZodError) return c.json({ error: formatZodError(e) }, 400);
     console.error("Visibility toggle error:", e);
-    return c.json({ error: (e as Error).message }, 500);
+    return c.json({ error: "Internal Server Error" }, 500);
   }
 });
 
@@ -315,7 +315,7 @@ sessionRoutes.post("/sessions/:id/start", async (c) => {
     return c.json({ reply });
   } catch (e) {
     console.error("Start interview error:", e);
-    return c.json({ error: (e as Error).message }, 500);
+    return c.json({ error: "Internal Server Error" }, 500);
   }
 });
 
@@ -417,7 +417,7 @@ ${turnCount >= 5 ? "十分な情報が集まりました。最後にまとめの
   } catch (e) {
     if (e instanceof ZodError) return c.json({ error: formatZodError(e) }, 400);
     console.error("Chat error:", e);
-    return c.json({ error: (e as Error).message }, 500);
+    return c.json({ error: "Internal Server Error" }, 500);
   }
 });
 
@@ -493,7 +493,7 @@ severityは "high", "medium", "low" のいずれか。
     return c.json(facts);
   } catch (e) {
     console.error("Analyze error:", e);
-    return c.json({ error: (e as Error).message }, 500);
+    return c.json({ error: "Internal Server Error" }, 500);
   }
 });
 
@@ -574,7 +574,7 @@ sessionRoutes.post("/sessions/:id/hypotheses", async (c) => {
     return c.json(hypotheses);
   } catch (e) {
     console.error("Hypotheses error:", e);
-    return c.json({ error: (e as Error).message }, 500);
+    return c.json({ error: "Internal Server Error" }, 500);
   }
 });
 
@@ -732,7 +732,7 @@ sessionRoutes.post("/sessions/:id/prd", async (c) => {
     return c.json(prd);
   } catch (e) {
     console.error("PRD error:", e);
-    return c.json({ error: (e as Error).message }, 500);
+    return c.json({ error: "Internal Server Error" }, 500);
   }
 });
 
@@ -844,7 +844,7 @@ sessionRoutes.post("/sessions/:id/spec", async (c) => {
     return c.json(spec);
   } catch (e) {
     console.error("Spec error:", e);
-    return c.json({ error: (e as Error).message }, 500);
+    return c.json({ error: "Internal Server Error" }, 500);
   }
 });
 
@@ -958,7 +958,7 @@ sessionRoutes.post("/sessions/:id/readiness", async (c) => {
     return c.json(readiness);
   } catch (e) {
     console.error("Readiness error:", e);
-    return c.json({ error: (e as Error).message }, 500);
+    return c.json({ error: "Internal Server Error" }, 500);
   }
 });
 
@@ -993,283 +993,7 @@ sessionRoutes.get("/sessions/:id/spec-export", (c) => {
     });
   } catch (e) {
     console.error("Spec export error:", e);
-    return c.json({ error: (e as Error).message }, 500);
-  }
-});
-
-// ---------------------------------------------------------------------------
-// Sharing
-// ---------------------------------------------------------------------------
-
-// 11. POST /sessions/:id/share — Generate share token (owner only)
-sessionRoutes.post("/sessions/:id/share", (c) => {
-  try {
-    const result = getOwnedSession(c);
-    if (isResponse(result)) return result;
-    const session = result;
-
-    if (session.share_token) {
-      return c.json({ shareToken: session.share_token, theme: session.theme });
-    }
-
-    const token = crypto.randomUUID();
-    db.prepare("UPDATE sessions SET share_token = ?, mode = ? WHERE id = ?").run(token, "shared", session.id);
-
-    return c.json({ shareToken: token, theme: session.theme });
-  } catch (e) {
-    console.error("Share error:", e);
-    return c.json({ error: (e as Error).message }, 500);
-  }
-});
-
-// 12. GET /shared/:token — Get shared session info
-sessionRoutes.get("/shared/:token", (c) => {
-  try {
-    const token = c.req.param("token");
-    const session = db
-      .prepare("SELECT id, theme, status, share_token, respondent_name FROM sessions WHERE share_token = ?")
-      .get(token) as unknown as
-      | { id: string; theme: string; status: string; share_token: string; respondent_name: string | null }
-      | undefined;
-    if (!session) return c.json({ error: "Interview not found" }, 404);
-
-    const messageCount = (
-      db.prepare("SELECT COUNT(*) as count FROM messages WHERE session_id = ?").get(session.id) as unknown as {
-        count: number;
-      }
-    ).count;
-    const factsRow = db
-      .prepare("SELECT data FROM analysis_results WHERE session_id = ? AND type = ?")
-      .get(session.id, "facts") as unknown as { data: string } | undefined;
-
-    return c.json({
-      theme: session.theme,
-      status: session.status,
-      respondentName: session.respondent_name,
-      messageCount,
-      facts: factsRow ? JSON.parse(factsRow.data) : null,
-    });
-  } catch (e) {
-    console.error("Get shared error:", e);
-    return c.json({ error: (e as Error).message }, 500);
-  }
-});
-
-// 13. POST /shared/:token/start — Start shared interview
-sessionRoutes.post("/shared/:token/start", async (c) => {
-  try {
-    const token = c.req.param("token");
-    const body = await c.req.json();
-    const { respondentName } = respondentNameSchema.parse(body);
-    const session = db.prepare("SELECT * FROM sessions WHERE share_token = ?").get(token) as unknown as
-      | Session
-      | undefined;
-    if (!session) return c.json({ error: "Interview not found" }, 404);
-
-    // Save respondent name if provided
-    if (respondentName) {
-      db.prepare("UPDATE sessions SET respondent_name = ? WHERE id = ?").run(respondentName.trim(), session.id);
-    }
-
-    // Check if already started
-    const existing = db
-      .prepare("SELECT COUNT(*) as count FROM messages WHERE session_id = ?")
-      .get(session.id) as unknown as {
-      count: number;
-    };
-    if (existing.count > 0) {
-      const messages = db
-        .prepare("SELECT role, content FROM messages WHERE session_id = ? ORDER BY created_at")
-        .all(session.id) as unknown as { role: string; content: string }[];
-      return c.json({ reply: messages[0]?.content || "", alreadyStarted: true, messages });
-    }
-
-    const systemPrompt = `あなたは熟練のデプスインタビュアーです。これからユーザーの課題テーマについて深掘りインタビューを開始します。
-
-テーマ: 「${session.theme}」
-${respondentName ? `回答者: ${respondentName}さん` : ""}
-
-最初の質問を1つだけ聞いてください。テーマについて、まず現状の状況を理解するための質問をしてください。
-共感的で親しみやすいトーンで、日本語で話してください。200文字以内で。`;
-
-    const response = await callClaude(
-      [{ role: "user", content: `テーマ「${session.theme}」についてインタビューを始めてください。` }],
-      systemPrompt,
-      512,
-    );
-    const reply = extractText(response);
-
-    db.prepare("INSERT INTO messages (session_id, role, content) VALUES (?, ?, ?)").run(session.id, "assistant", reply);
-    db.prepare("UPDATE sessions SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?").run(
-      "interviewing",
-      session.id,
-    );
-
-    return c.json({ reply });
-  } catch (e) {
-    if (e instanceof ZodError) return c.json({ error: formatZodError(e) }, 400);
-    console.error("Start shared interview error:", e);
-    return c.json({ error: (e as Error).message }, 500);
-  }
-});
-
-// 14. POST /shared/:token/chat — Chat in shared interview
-sessionRoutes.post("/shared/:token/chat", async (c) => {
-  try {
-    const token = c.req.param("token");
-    const body = await c.req.json();
-    const { message } = chatMessageSchema.parse(body);
-    const session = db.prepare("SELECT * FROM sessions WHERE share_token = ?").get(token) as unknown as
-      | Session
-      | undefined;
-    if (!session) return c.json({ error: "Interview not found" }, 404);
-
-    // Don't allow chat after completion
-    if (session.status === "respondent_done") {
-      return c.json({ error: "このインタビューは既に完了しています" }, 400);
-    }
-
-    db.prepare("INSERT INTO messages (session_id, role, content) VALUES (?, ?, ?)").run(session.id, "user", message);
-    db.prepare("UPDATE sessions SET updated_at = CURRENT_TIMESTAMP WHERE id = ?").run(session.id);
-
-    const allMessages = db
-      .prepare("SELECT role, content FROM messages WHERE session_id = ? ORDER BY created_at")
-      .all(session.id) as unknown as { role: string; content: string }[];
-    const chatMessages = allMessages.map((m) => ({ role: m.role as "user" | "assistant", content: m.content }));
-    const turnCount = allMessages.filter((m) => m.role === "user").length;
-
-    const systemPrompt = `あなたは熟練のデプスインタビュアーです。ユーザーの課題テーマについて深掘りインタビューを行います。
-
-テーマ: 「${session.theme}」
-
-ルール：
-1. 一度に1つの質問だけ聞く
-2. 具体的なエピソードを引き出す（「最近あった具体例を教えてください」）
-3. 頻度・困り度・現在の回避策を必ず聞く
-4. 抽象的な回答には「具体的には？」で掘り下げる
-5. 共感を示しながら深掘りする
-6. 日本語で回答する
-7. 回答は簡潔に、200文字以内で
-
-${turnCount >= 5 ? "十分な情報が集まりました。最後にまとめの質問をして、回答の最後に「[INTERVIEW_COMPLETE]」タグを付けてください。ただし、ユーザーがまだ話したそうなら続けてください。" : ""}`;
-
-    const response = await callClaude(chatMessages, systemPrompt, 1024);
-    const reply = extractText(response);
-
-    db.prepare("INSERT INTO messages (session_id, role, content) VALUES (?, ?, ?)").run(session.id, "assistant", reply);
-
-    const isComplete = reply.includes("[INTERVIEW_COMPLETE]") || turnCount >= 8;
-    const cleanReply = reply.replace("[INTERVIEW_COMPLETE]", "").trim();
-
-    return c.json({ reply: cleanReply, turnCount, isComplete });
-  } catch (e) {
-    if (e instanceof ZodError) return c.json({ error: formatZodError(e) }, 400);
-    console.error("Shared chat error:", e);
-    return c.json({ error: (e as Error).message }, 500);
-  }
-});
-
-// 15. POST /shared/:token/complete — Complete shared interview + extract facts
-sessionRoutes.post("/shared/:token/complete", async (c) => {
-  try {
-    const token = c.req.param("token");
-    const session = db.prepare("SELECT * FROM sessions WHERE share_token = ?").get(token) as unknown as
-      | Session
-      | undefined;
-    if (!session) return c.json({ error: "Interview not found" }, 404);
-
-    const messages = db
-      .prepare("SELECT role, content FROM messages WHERE session_id = ? ORDER BY created_at")
-      .all(session.id) as unknown as { role: string; content: string }[];
-    const transcript = messages
-      .map((m) => `${m.role === "user" ? "回答者" : "インタビュアー"}: ${m.content}`)
-      .join("\n\n");
-
-    const systemPrompt = `あなたは定性調査の分析エキスパートです。以下のデプスインタビュー記録からファクトを抽出してください。
-
-必ず以下のJSON形式で返してください。JSON以外のテキストは含めないでください。
-
-{
-  "facts": [
-    {
-      "id": "F1",
-      "type": "fact",
-      "content": "抽出した内容",
-      "evidence": "元の発話を引用",
-      "severity": "high"
-    }
-  ]
-}
-
-typeは "fact"（事実）, "pain"（困りごと）, "frequency"（頻度）, "workaround"（回避策）のいずれか。
-severityは "high", "medium", "low" のいずれか。
-
-抽象的な表現は避け、具体的な事実のみ抽出してください。最低5つ、最大15個のファクトを抽出してください。`;
-
-    const response = await callClaude(
-      [{ role: "user", content: `以下のインタビュー記録を分析してください：\n\n${transcript}` }],
-      systemPrompt,
-      4096,
-    );
-    const text = extractText(response);
-
-    let facts: unknown;
-    try {
-      const jsonMatch = text.match(/\{[\s\S]*\}/);
-      facts = JSON.parse(jsonMatch![0]);
-    } catch {
-      facts = { facts: [{ id: "F1", type: "fact", content: text, evidence: "", severity: "medium" }] };
-    }
-
-    // Save facts
-    const existing = db
-      .prepare("SELECT id FROM analysis_results WHERE session_id = ? AND type = ?")
-      .get(session.id, "facts") as unknown as { id: number } | undefined;
-    if (existing) {
-      db.prepare("UPDATE analysis_results SET data = ?, created_at = CURRENT_TIMESTAMP WHERE id = ?").run(
-        JSON.stringify(facts),
-        existing.id,
-      );
-    } else {
-      db.prepare("INSERT INTO analysis_results (session_id, type, data) VALUES (?, ?, ?)").run(
-        session.id,
-        "facts",
-        JSON.stringify(facts),
-      );
-    }
-
-    db.prepare("UPDATE sessions SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?").run(
-      "respondent_done",
-      session.id,
-    );
-
-    return c.json(facts);
-  } catch (e) {
-    console.error("Complete shared error:", e);
-    return c.json({ error: (e as Error).message }, 500);
-  }
-});
-
-// 16. POST /shared/:token/feedback — Save respondent feedback
-sessionRoutes.post("/shared/:token/feedback", async (c) => {
-  try {
-    const token = c.req.param("token");
-    const body = await c.req.json();
-    const { feedback } = feedbackSchema.parse(body);
-    const session = db.prepare("SELECT * FROM sessions WHERE share_token = ?").get(token) as unknown as
-      | Session
-      | undefined;
-    if (!session) return c.json({ error: "Interview not found" }, 404);
-
-    db.prepare(
-      "UPDATE sessions SET respondent_feedback = ?, status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
-    ).run(feedback ?? null, "respondent_done", session.id);
-
-    return c.json({ ok: true });
-  } catch (e) {
-    if (e instanceof ZodError) return c.json({ error: formatZodError(e) }, 400);
-    console.error("Feedback error:", e);
-    return c.json({ error: (e as Error).message }, 500);
+    return c.json({ error: "Internal Server Error" }, 500);
   }
 });
 
@@ -1315,7 +1039,7 @@ sessionRoutes.post("/sessions/:id/campaign", (c) => {
     );
   } catch (e) {
     console.error("Create campaign error:", e);
-    return c.json({ error: (e as Error).message }, 500);
+    return c.json({ error: "Internal Server Error" }, 500);
   }
 });
 
@@ -1353,7 +1077,7 @@ sessionRoutes.get("/campaigns/:token", (c) => {
     });
   } catch (e) {
     console.error("Get campaign error:", e);
-    return c.json({ error: (e as Error).message }, 500);
+    return c.json({ error: "Internal Server Error" }, 500);
   }
 });
 
@@ -1397,7 +1121,7 @@ ${respondentName ? `回答者: ${respondentName}さん` : ""}
   } catch (e) {
     if (e instanceof ZodError) return c.json({ error: formatZodError(e) }, 400);
     console.error("Join campaign error:", e);
-    return c.json({ error: (e as Error).message }, 500);
+    return c.json({ error: "Internal Server Error" }, 500);
   }
 });
 
@@ -1458,7 +1182,7 @@ ${turnCount >= 5 ? "十分な情報が集まりました。最後にまとめの
   } catch (e) {
     if (e instanceof ZodError) return c.json({ error: formatZodError(e) }, 400);
     console.error("Campaign chat error:", e);
-    return c.json({ error: (e as Error).message }, 500);
+    return c.json({ error: "Internal Server Error" }, 500);
   }
 });
 
@@ -1544,7 +1268,7 @@ severityは "high", "medium", "low" のいずれか。
     return c.json(facts);
   } catch (e) {
     console.error("Campaign complete error:", e);
-    return c.json({ error: (e as Error).message }, 500);
+    return c.json({ error: "Internal Server Error" }, 500);
   }
 });
 
@@ -1574,7 +1298,7 @@ sessionRoutes.post("/campaigns/:token/sessions/:sessionId/feedback", async (c) =
   } catch (e) {
     if (e instanceof ZodError) return c.json({ error: formatZodError(e) }, 400);
     console.error("Campaign feedback error:", e);
-    return c.json({ error: (e as Error).message }, 500);
+    return c.json({ error: "Internal Server Error" }, 500);
   }
 });
 
@@ -1723,7 +1447,7 @@ sessionRoutes.get("/campaigns/:id/analytics", (c) => {
     return c.json(analytics);
   } catch (e) {
     console.error("Campaign analytics error:", e);
-    return c.json({ error: (e as Error).message }, 500);
+    return c.json({ error: "Internal Server Error" }, 500);
   }
 });
 
@@ -1818,7 +1542,7 @@ sessionRoutes.post("/campaigns/:id/analytics/generate", async (c) => {
     return c.json(analysisData);
   } catch (e) {
     console.error("Campaign analytics generate error:", e);
-    return c.json({ error: (e as Error).message }, 500);
+    return c.json({ error: "Internal Server Error" }, 500);
   }
 });
 
@@ -1885,7 +1609,7 @@ sessionRoutes.get("/campaigns/:id/export", (c) => {
     return c.json(exportData);
   } catch (e) {
     console.error("Campaign export error:", e);
-    return c.json({ error: (e as Error).message }, 500);
+    return c.json({ error: "Internal Server Error" }, 500);
   }
 });
 
@@ -1941,7 +1665,7 @@ sessionRoutes.get("/campaigns/:token/aggregate", (c) => {
     });
   } catch (e) {
     console.error("Aggregate error:", e);
-    return c.json({ error: (e as Error).message }, 500);
+    return c.json({ error: "Internal Server Error" }, 500);
   }
 });
 

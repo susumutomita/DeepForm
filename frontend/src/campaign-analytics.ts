@@ -187,7 +187,7 @@ function renderDashboard(container: HTMLElement): void {
   const dashboardHtml = `
     <div class="analytics-dashboard">
       <div class="analytics-header">
-        <h2>キャンペーン分析ダッシュボード</h2>
+        <h2>フィードバック分析ダッシュボード</h2>
         <div class="analytics-actions">
           <button class="btn btn-primary" id="btn-generate-ai">AI 横断分析を生成</button>
           <button class="btn btn-secondary" id="btn-export-json">JSON エクスポート</button>

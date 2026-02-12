@@ -151,7 +151,7 @@ export interface Session {
   created_at: string;
   is_public: boolean;
   user_id?: string;
-  mode?: 'shared' | 'normal';
+  mode?: 'normal' | 'campaign_respondent';
   respondent_name?: string;
 }
 
@@ -216,20 +216,6 @@ export interface ChatResponse {
   error?: string;
 }
 
-export interface SharedInfo {
-  theme: string;
-  status: string;
-  messageCount: number;
-  error?: string;
-}
-
-export interface SharedStartResponse {
-  reply?: string;
-  alreadyStarted?: boolean;
-  messages?: Message[];
-  error?: string;
-}
-
 export interface CampaignInfo {
   theme: string;
   campaignId?: string;
@@ -290,41 +276,6 @@ export interface CampaignJoinResponse {
   error?: string;
 }
 
-export interface ExportIssuesRequest {
-  repoOwner: string;
-  repoName: string;
-}
-
-export interface GitHubRepo {
-  full_name: string;
-  name: string;
-  owner: string;
-}
-
-export interface CreateRepoAndExportRequest {
-  name: string;
-  description?: string;
-  isPrivate?: boolean;
-}
-
-export interface CreateRepoAndExportResponse {
-  repo: { fullName: string; url: string };
-  created: ExportedIssue[];
-  errors: Array<{ feature: string; error: string }>;
-}
-
-export interface ExportedIssue {
-  number: number;
-  title: string;
-  url: string;
-}
-
-export interface ExportIssuesResponse {
-  created: ExportedIssue[];
-  errors: Array<{ feature: string; error: string }>;
-  error?: string;
-}
-
 /** All step names in the app (6 steps). */
 export type StepName = 'interview' | 'facts' | 'hypotheses' | 'prd' | 'spec' | 'readiness';
 
@@ -338,7 +289,6 @@ export interface DeepFormWindow extends Window {
   openSession: (sessionId: string, isNew?: boolean) => Promise<void>;
   loadSessions: () => Promise<void>;
   toggleVisibility: (sessionId: string, newState: boolean) => Promise<void>;
-  shareSession: (sessionId: string) => Promise<void>;
   createCampaign: (sessionId: string) => Promise<void>;
   getCurrentSessionId: () => string | null;
   startNewSession: () => Promise<void>;
@@ -355,18 +305,12 @@ export interface DeepFormWindow extends Window {
   exportSpecJSON: () => void;
   exportPRDMarkdown: () => void;
   deployToExeDev: () => Promise<void>;
-  openExportIssuesModal: () => void;
-
-  // Shared / Campaign
-  startSharedInterview: () => Promise<void>;
-  sendSharedMessage: () => Promise<void>;
-  completeSharedInterview: () => Promise<void>;
-  submitSharedFeedback: () => Promise<void>;
-  handleSharedKeydown: (event: KeyboardEvent) => void;
+  // Campaign
   startCampaignInterview: () => Promise<void>;
   sendCampaignMessage: () => Promise<void>;
   completeCampaignInterview: () => Promise<void>;
   submitCampaignFeedback: () => Promise<void>;
+  handleCampaignKeydown: (event: KeyboardEvent) => void;
 
   // Campaign Analytics
   showCampaignAnalytics: (campaignId: string) => Promise<void>;

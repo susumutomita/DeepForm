@@ -2,7 +2,7 @@
 import './style.css';
 import { applyTranslations, setLang, currentLang } from './i18n';
 import { checkAuth, doLogout, isLoggedIn, redirectToLogin } from './auth';
-import { loadSessions, doToggleVisibility, doShareSession, doCreateCampaign } from './sessions';
+import { loadSessions, doToggleVisibility, doCreateCampaign } from './sessions';
 import {
   showHome, openSession, sendMessage, handleChatKeydown,
   doRunAnalysis, doRunHypotheses, doRunPRD, doRunSpec, doRunReadiness,
@@ -11,15 +11,13 @@ import {
 } from './interview';
 import { initInlineEdit, destroyInlineEdit } from './inline-edit';
 import {
-  initSharedInterview, initCampaignInterview,
-  startSharedInterview, sendSharedMessage, completeSharedInterview, submitSharedFeedback,
+  initCampaignInterview,
   startCampaignInterview, sendCampaignMessage, completeCampaignInterview, submitCampaignFeedback,
-  handleSharedKeydown,
+  handleCampaignKeydown,
 } from './shared';
 import { showToast, toggleTheme, initTheme } from './ui';
 import { openPolicy, closeModal } from './modal';
 import { openFeedbackModal, closeFeedbackModal } from './feedback';
-import { openExportIssuesModal } from './github-export';
 import { showCampaignAnalytics } from './campaign-analytics';
 import { t } from './i18n';
 import { renderPrivacyPolicy } from './pages/privacy';
@@ -35,7 +33,6 @@ w.showHome = () => { showHome(); loadSessions(); };
 w.openSession = openSession;
 w.loadSessions = loadSessions;
 w.toggleVisibility = doToggleVisibility;
-w.shareSession = doShareSession;
 w.createCampaign = doCreateCampaign;
 w.getCurrentSessionId = getCurrentSessionId;
 w.sendMessage = sendMessage;
@@ -48,7 +45,6 @@ w.runReadiness = doRunReadiness;
 w.exportSpecJSON = exportSpecJSON;
 w.exportPRDMarkdown = exportPRDMarkdown;
 w.deployToExeDev = doDeployToExeDev;
-w.openExportIssuesModal = openExportIssuesModal;
 w.activateStep = activateStep;
 w.logout = doLogout;
 w.setLang = (lang: string) => { setLang(lang); loadSessions(); };
@@ -68,16 +64,12 @@ w.deleteSession = async (sessionId: string) => {
 // Campaign Analytics
 w.showCampaignAnalytics = showCampaignAnalytics;
 
-// Shared / Campaign
-w.startSharedInterview = startSharedInterview;
-w.sendSharedMessage = sendSharedMessage;
-w.completeSharedInterview = completeSharedInterview;
-w.submitSharedFeedback = submitSharedFeedback;
-w.handleSharedKeydown = handleSharedKeydown;
+// Campaign
 w.startCampaignInterview = startCampaignInterview;
 w.sendCampaignMessage = sendCampaignMessage;
 w.completeCampaignInterview = completeCampaignInterview;
 w.submitCampaignFeedback = submitCampaignFeedback;
+w.handleCampaignKeydown = handleCampaignKeydown;
 
 // Start new session (with auth check)
 w.startNewSession = async () => {
@@ -153,14 +145,11 @@ async function init(): Promise<void> {
 
   // Route
   const path = window.location.pathname;
-  const sharedMatch = path.match(/^\/i\/([a-z0-9]+)$/i);
-  const campaignMatch = path.match(/^\/c\/([a-z0-9]+)$/i);
+  const campaignMatch = path.match(/^\/c\/([a-z0-9-]+)$/i);
   const sessionMatch = path.match(/^\/session\/([a-z0-9-]+)$/i);
 
   if (campaignMatch) {
     await initCampaignInterview(campaignMatch[1]);
-  } else if (sharedMatch) {
-    await initSharedInterview(sharedMatch[1]);
   } else if (sessionMatch) {
     await openSession(sessionMatch[1]);
   } else if (path === '/privacy' || path === '/terms' || path === '/security') {

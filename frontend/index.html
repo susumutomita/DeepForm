@@ -251,11 +251,8 @@
 
             </div>
             <div class="session-theme" id="session-theme"></div>
-            <button class="btn btn-sm btn-secondary" style="width:100%;margin-top:12px" onclick="shareSession(getCurrentSessionId())">
-              <span data-i18n="sidebar.share">共有URLを発行</span>
-            </button>
-            <button class="btn btn-sm btn-accent" style="width:100%;margin-top:8px" onclick="createCampaign(getCurrentSessionId())">
-              <span data-i18n="sidebar.campaign">キャンペーンURLを発行</span>
+            <button class="btn btn-sm btn-accent" style="width:100%;margin-top:12px" onclick="createCampaign(getCurrentSessionId())">
+              <span data-i18n="sidebar.campaign">フィードバックURLを発行</span>
             </button>
           </div>
 
@@ -345,10 +342,6 @@
                 <button class="btn btn-deploy btn-lg" onclick="deployToExeDev()">
                   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 2L11 13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
                   <span data-i18n="spec.deploy">Deploy to exe.dev</span>
-                </button>
-                <button class="btn btn-secondary btn-lg" onclick="openExportIssuesModal()">
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 0 0-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0 0 20 4.77 5.07 5.07 0 0 0 19.91 1S18.73.65 16 2.48a13.38 13.38 0 0 0-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 0 0 5 4.77a5.44 5.44 0 0 0-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 0 0 9 18.13V22"/></svg>
-                  <span>Export to GitHub Issues</span>
                 </button>
               </div>
               <div id="exedev-link-container" class="exedev-link-container hidden">
@@ -449,7 +442,7 @@
                 <label for="shared-name" data-i18n="shared.nameLabel">お名前（任意）</label>
                 <input type="text" id="shared-name" data-i18n="shared.namePlaceholder" placeholder="例：田中太郎">
               </div>
-              <button class="btn btn-primary btn-lg" onclick="campaignToken ? startCampaignInterview() : startSharedInterview()" id="btn-shared-start">
+              <button class="btn btn-primary btn-lg" onclick="startCampaignInterview()" id="btn-shared-start">
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
                 <span data-i18n="shared.start">インタビューを始める</span>
               </button>
@@ -468,14 +461,14 @@
             <div class="chat-input-area">
               <label for="shared-chat-input" class="sr-only">回答を入力</label>
               <textarea id="shared-chat-input" data-i18n="interview.placeholder" placeholder="回答を入力…" rows="2"
-                onkeydown="handleSharedKeydown(event)"></textarea>
-              <button class="btn btn-primary" onclick="campaignToken ? sendCampaignMessage() : sendSharedMessage()" id="btn-shared-send" aria-label="送信">
+                onkeydown="handleCampaignKeydown(event)"></textarea>
+              <button class="btn btn-primary" onclick="sendCampaignMessage()" id="btn-shared-send" aria-label="送信">
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
               </button>
             </div>
             <div class="chat-hint" data-i18n="interview.hint">Shift + Enter で送信　・　Enter で改行</div>
             <div class="step-actions" id="shared-complete-actions" style="display:none">
-              <button class="btn btn-accent btn-lg" onclick="campaignToken ? completeCampaignInterview() : completeSharedInterview()">
+              <button class="btn btn-accent btn-lg" onclick="completeCampaignInterview()">
                 <span data-i18n="shared.complete">インタビューを完了する →</span>
               </button>
             </div>
@@ -491,7 +484,7 @@
                 <label for="shared-feedback" data-i18n="shared.feedbackLabel">フィードバック（任意）</label>
                 <textarea id="shared-feedback" data-i18n="shared.feedbackPlaceholder" placeholder="抽出内容への修正や追加コメントがあれば…" rows="3"></textarea>
               </div>
-              <button class="btn btn-primary btn-lg" onclick="campaignToken ? submitCampaignFeedback() : submitSharedFeedback()" style="width:100%">
+              <button class="btn btn-primary btn-lg" onclick="submitCampaignFeedback()" style="width:100%">
                 <span data-i18n="shared.submit">送信して完了</span>
               </button>
             </div>

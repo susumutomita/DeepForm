@@ -21,16 +21,12 @@ analyticsRoutes.get("/stats", (c) => {
 
   const since = `datetime('now', '-${days} days')`;
 
-  const totalViews = db
-    .prepare(
-      `SELECT COUNT(*) as count FROM page_views WHERE created_at >= ${since}`,
-    )
-    .get() as { count: number };
+  const totalViews = db.prepare(`SELECT COUNT(*) as count FROM page_views WHERE created_at >= ${since}`).get() as {
+    count: number;
+  };
 
   const uniqueVisitors = db
-    .prepare(
-      `SELECT COUNT(DISTINCT session_fingerprint) as count FROM page_views WHERE created_at >= ${since}`,
-    )
+    .prepare(`SELECT COUNT(DISTINCT session_fingerprint) as count FROM page_views WHERE created_at >= ${since}`)
     .get() as { count: number };
 
   const uniqueUsers = db
@@ -102,9 +98,7 @@ analyticsRoutes.get("/log", (c) => {
     )
     .all(limit, offset);
 
-  const total = db
-    .prepare("SELECT COUNT(*) as count FROM page_views")
-    .get() as { count: number };
+  const total = db.prepare("SELECT COUNT(*) as count FROM page_views").get() as { count: number };
 
   return c.json({ rows, total: total.count, limit, offset });
 });

@@ -13,32 +13,16 @@ export const analyticsMiddleware = createMiddleware(async (c, next) => {
   if (STATIC_EXTENSIONS.test(path)) return;
 
   try {
-    const ip =
-      c.req.header("x-forwarded-for")?.split(",")[0]?.trim() ||
-      c.req.header("x-real-ip") ||
-      "unknown";
+    const ip = c.req.header("x-forwarded-for")?.split(",")[0]?.trim() || c.req.header("x-real-ip") || "unknown";
     const ua = c.req.header("user-agent") || "";
     const referer = c.req.header("referer") || null;
     const user = c.get("user") as { id: string } | null | undefined;
-    const fingerprint = crypto
-      .createHash("sha256")
-      .update(`${ip}:${ua}`)
-      .digest("hex")
-      .substring(0, 12);
+    const fingerprint = crypto.createHash("sha256").update(`${ip}:${ua}`).digest("hex").substring(0, 12);
 
     db.prepare(
       `INSERT INTO page_views (path, method, status_code, referer, user_agent, ip_address, user_id, session_fingerprint, created_at)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))`,
-    ).run(
-      path,
-      c.req.method,
-      c.res.status,
-      referer,
-      ua,
-      ip,
-      user?.id || null,
-      fingerprint,
-    );
+    ).run(path, c.req.method, c.res.status, referer, ua, ip, user?.id || null, fingerprint);
   } catch (e) {
     console.error("Analytics error:", e);
   }

@@ -451,6 +451,17 @@ function renderReadiness(categories: ReadinessCategory[]): void {
     catDiv.appendChild(list);
     container.appendChild(catDiv);
   }
+
+  // Mark readiness sidebar step as completed when all checkboxes are checked
+  const allCheckboxes = container.querySelectorAll<HTMLInputElement>('.readiness-checkbox');
+  const updateReadinessCompletion = () => {
+    const allChecked = allCheckboxes.length > 0 && Array.from(allCheckboxes).every(cb => cb.checked);
+    const stepEl = document.querySelector('.step-nav .step[data-step="readiness"]');
+    if (stepEl) {
+      stepEl.classList.toggle('completed', allChecked);
+    }
+  };
+  allCheckboxes.forEach(cb => cb.addEventListener('change', updateReadinessCompletion));
 }
 
 // --- Step Navigation ---

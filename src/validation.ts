@@ -25,14 +25,3 @@ export const appFeedbackSchema = z.object({
   message: z.string().min(1, "メッセージを入力してください").max(5000, "メッセージは5000文字以内で入力してください"),
   page: z.string().max(200).optional(),
 });
-
-export const exportIssuesSchema = z.object({
-  repoOwner: z.string().min(1, "リポジトリオーナーを入力してください").max(100),
-  repoName: z.string().min(1, "リポジトリ名を入力してください").max(100),
-});
-
-export const createRepoSchema = z.object({
-  name: z.string().min(1, "リポジトリ名を入力してください").max(100),
-  description: z.string().max(500).optional(),
-  isPrivate: z.boolean().optional(),
-});

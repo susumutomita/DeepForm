@@ -1,11 +1,9 @@
 // === DeepForm API Client ===
 import type {
   ChatResponse, FactsData, HypothesesData, PRDData, SpecData, ReadinessData,
-  Session, SessionDetail, SharedInfo, SharedStartResponse,
+  Session, SessionDetail,
   CampaignInfo, CampaignJoinResponse, CampaignAnalytics,
   CampaignAIAnalysis, CampaignExport, User,
-  ExportIssuesRequest, ExportIssuesResponse,
-  GitHubRepo, CreateRepoAndExportRequest, CreateRepoAndExportResponse,
 } from './types';
 
 async function request<T>(url: string, opts?: RequestInit): Promise<T> {
@@ -168,34 +166,9 @@ export function getSpecExport(sessionId: string): Promise<{ theme: string; spec:
   return request(`/api/sessions/${sessionId}/spec-export`);
 }
 
-// Share
-export function shareSession(sessionId: string): Promise<{ shareToken: string }> {
-  return post(`/api/sessions/${sessionId}/share`);
-}
-
+// Campaign
 export function createCampaign(sessionId: string): Promise<{ shareToken: string }> {
   return post(`/api/sessions/${sessionId}/campaign`);
-}
-
-// Shared interview
-export function getShared(token: string): Promise<SharedInfo> {
-  return request(`/api/shared/${token}`);
-}
-
-export function startShared(token: string, respondentName?: string): Promise<SharedStartResponse> {
-  return post(`/api/shared/${token}/start`, { respondentName });
-}
-
-export function chatShared(token: string, message: string): Promise<ChatResponse> {
-  return post(`/api/shared/${token}/chat`, { message });
-}
-
-export function completeShared(token: string): Promise<FactsData> {
-  return post(`/api/shared/${token}/complete`);
-}
-
-export function feedbackShared(token: string, feedback: string | null): Promise<void> {
-  return post(`/api/shared/${token}/feedback`, { feedback });
 }
 
 // Campaign
@@ -222,21 +195,6 @@ export function feedbackCampaign(token: string, sessionId: string, feedback: str
 // App feedback
 export function submitAppFeedback(type: string, message: string, page?: string): Promise<{ ok: boolean }> {
   return post('/api/feedback', { type, message, page });
-}
-
-// GitHub Issues export
-export function exportIssues(sessionId: string, data: ExportIssuesRequest): Promise<ExportIssuesResponse> {
-  return post(`/api/sessions/${sessionId}/export-issues`, data);
-}
-
-// GitHub repos
-export function getGitHubRepos(): Promise<GitHubRepo[]> {
-  return request('/api/github/repos');
-}
-
-// Create repo and export
-export function createRepoAndExport(sessionId: string, body: CreateRepoAndExportRequest): Promise<CreateRepoAndExportResponse> {
-  return post(`/api/sessions/${sessionId}/create-repo-and-export`, body);
 }
 
 // Campaign Analytics

@@ -56,12 +56,6 @@ export async function loadSessions(): Promise<void> {
       const dateSpan = document.createElement('span');
       dateSpan.textContent = formatDate(s.created_at);
       meta.appendChild(dateSpan);
-      if (s.mode === 'shared') {
-        const sharedSpan = document.createElement('span');
-        sharedSpan.className = 'shared-tag';
-        sharedSpan.textContent = t('shared.tag');
-        meta.appendChild(sharedSpan);
-      }
       if (s.respondent_name) {
         const nameSpan = document.createElement('span');
         nameSpan.textContent = s.respondent_name;
@@ -87,13 +81,6 @@ export async function loadSessions(): Promise<void> {
       badge.textContent = statusLabel(s.display_status || s.status);
       actions.appendChild(badge);
 
-      const shareBtn = document.createElement('button');
-      shareBtn.className = 'btn btn-sm btn-secondary';
-      shareBtn.title = '共有URLをコピー';
-      shareBtn.textContent = '\u2197';
-      shareBtn.addEventListener('click', (e) => { e.stopPropagation(); w.shareSession(sid); });
-      actions.appendChild(shareBtn);
-
       card.appendChild(actions);
       list.appendChild(card);
     }
@@ -107,17 +94,6 @@ export async function doToggleVisibility(sessionId: string, newState: boolean): 
   try {
     await api.toggleVisibility(sessionId, newState);
     await loadSessions();
-  } catch (e: any) {
-    showToast(e.message, true);
-  }
-}
-
-export async function doShareSession(sessionId: string): Promise<void> {
-  try {
-    const data = await api.shareSession(sessionId);
-    const url = `${window.location.origin}/i/${data.shareToken}`;
-    await navigator.clipboard.writeText(url);
-    showToast(`${t('toast.shareUrl')}: ${url}`);
   } catch (e: any) {
     showToast(e.message, true);
   }

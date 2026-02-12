@@ -4,14 +4,17 @@ import { serveStatic } from "@hono/node-server/serve-static";
 import { Hono } from "hono";
 import { bodyLimit } from "hono/body-limit";
 import { HTTPException } from "hono/http-exception";
+import { secureHeaders } from "hono/secure-headers";
 import { authMiddleware } from "./middleware/auth.ts";
 import { authRoutes } from "./routes/auth.ts";
 import { feedbackRoutes } from "./routes/feedback.ts";
-import { githubExportRoutes } from "./routes/github-export.ts";
 import { prdEditRoutes } from "./routes/prd-edit.ts";
 import { sessionRoutes } from "./routes/sessions.ts";
 
 const app = new Hono();
+
+// Security headers
+app.use("*", secureHeaders());
 
 // Determine static file root: prefer Vite build output, fall back to legacy public/
 const distDir = path.resolve("public_dist");
@@ -41,9 +44,6 @@ app.route("/api", sessionRoutes);
 
 // Feedback routes
 app.route("/api/feedback", feedbackRoutes);
-
-// GitHub export routes
-app.route("/api", githubExportRoutes);
 
 // PRD inline edit routes
 app.route("", prdEditRoutes);

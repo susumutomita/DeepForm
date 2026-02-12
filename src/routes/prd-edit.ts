@@ -102,7 +102,7 @@ prdEditRoutes.post("/api/sessions/:id/prd/suggest", async (c) => {
     const text = extractText(response);
 
     // Parse the JSON array from Claude's response
-    const jsonMatch = text.match(/\[[\s\S]*?\]/);
+    const jsonMatch = text.match(/\[[\s\S]*\]/);
     if (!jsonMatch) {
       return c.json({ error: "AIからの応答を解析できませんでした" }, 500);
     }
@@ -180,16 +180,22 @@ prdEditRoutes.post("/api/sessions/:id/prd/apply", async (c) => {
         512,
       );
       const validationText = extractText(validationResponse);
-      const validationMatch = validationText.match(/\{[\s\S]*?\}/);
+      const validationMatch = validationText.match(/\{[\s\S]*\}/);
 
-      if (validationMatch) {
-        const validation = JSON.parse(validationMatch[0]);
-        if (!validation.relevant) {
-          return c.json({
-            applied: false,
-            reason: validation.reason ?? "入力された内容は要件の文脈と関連性がありません。",
-          });
-        }
+      if (!validationMatch) {
+        // Claude の応答を解析できない場合は安全側に倒して却下
+        return c.json({
+          applied: false,
+          reason: "入力内容の検証に失敗しました。もう一度お試しください。",
+        });
+      }
+
+      const validation = JSON.parse(validationMatch[0]);
+      if (!validation.relevant) {
+        return c.json({
+          applied: false,
+          reason: validation.reason ?? "入力された内容は要件の文脈と関連性がありません。",
+        });
       }
 
       // Relevant custom input: use Claude to rewrite naturally
@@ -210,7 +216,7 @@ prdEditRoutes.post("/api/sessions/:id/prd/apply", async (c) => {
         `置き換え対象: 「${selectedText}」`,
         `新しい内容: 「${newText}」`,
         "",
-        "上記の元の文で「${selectedText}」を「${newText}」の意味を反映させて自然に書き換えた文を出力してください。",
+        `上記の元の文で「${selectedText}」を「${newText}」の意味を反映させて自然に書き換えた文を出力してください。`,
       ].join("\n");
 
       const rewriteResponse = await callClaude([{ role: "user", content: rewriteMessage }], rewriteSystemPrompt, 1024);
@@ -243,7 +249,7 @@ prdEditRoutes.post("/api/sessions/:id/prd/apply", async (c) => {
 // DB helper: update PRD content in analysis_results
 // ---------------------------------------------------------------------------
 
-function updatePrdInDb(sessionId: string, sectionType: string, oldContext: string, newContext: string): void {
+function updatePrdInDb(sessionId: string, _sectionType: string, oldContext: string, newContext: string): void {
   // Try to find existing PRD data
   const prdRow = db
     .prepare("SELECT id, data FROM analysis_results WHERE session_id = ? AND type = ?")
@@ -260,20 +266,14 @@ function updatePrdInDb(sessionId: string, sectionType: string, oldContext: strin
     // Walk through the PRD data and replace the old context with the new one
     const updated = replaceInObject(prdData, oldContext, newContext);
 
-    db.prepare("UPDATE analysis_results SET data = ?, created_at = CURRENT_TIMESTAMP WHERE id = ?").run(
-      JSON.stringify(updated),
-      prdRow.id,
-    );
+    db.prepare("UPDATE analysis_results SET data = ? WHERE id = ?").run(JSON.stringify(updated), prdRow.id);
   } catch {
     // If parsing fails, try a raw string replacement
     const updatedData = prdRow.data.replace(
       JSON.stringify(oldContext).slice(1, -1),
       JSON.stringify(newContext).slice(1, -1),
     );
-    db.prepare("UPDATE analysis_results SET data = ?, created_at = CURRENT_TIMESTAMP WHERE id = ?").run(
-      updatedData,
-      prdRow.id,
-    );
+    db.prepare("UPDATE analysis_results SET data = ? WHERE id = ?").run(updatedData, prdRow.id);
   }
 }
 

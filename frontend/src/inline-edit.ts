@@ -14,18 +14,25 @@ interface ApplyResponse {
 }
 
 let activePopup: HTMLElement | null = null;
+let selectionChangeTimer: ReturnType<typeof setTimeout> | null = null;
 
-// Initialize: attach mouseup listener to PRD container
+// Initialize: attach listeners for both mouse and touch
 export function initInlineEdit(): void {
-  // Listen for text selection on the PRD container
+  // Mouse (desktop)
   document.addEventListener('mouseup', handleTextSelection);
-  // Close popup on click outside
   document.addEventListener('mousedown', handleClickOutside);
+  // Touch (mobile) — selectionchange fires after long-press selection
+  document.addEventListener('selectionchange', handleSelectionChange);
+  // Close popup on touch outside
+  document.addEventListener('touchstart', handleTouchOutside);
 }
 
 export function destroyInlineEdit(): void {
   document.removeEventListener('mouseup', handleTextSelection);
   document.removeEventListener('mousedown', handleClickOutside);
+  document.removeEventListener('selectionchange', handleSelectionChange);
+  document.removeEventListener('touchstart', handleTouchOutside);
+  if (selectionChangeTimer) clearTimeout(selectionChangeTimer);
   closePopup();
 }
 
@@ -35,7 +42,23 @@ function handleClickOutside(e: MouseEvent): void {
   }
 }
 
-function handleTextSelection(_e: MouseEvent): void {
+function handleTouchOutside(e: TouchEvent): void {
+  if (activePopup && !activePopup.contains(e.target as Node)) {
+    closePopup();
+  }
+}
+
+// Debounced selectionchange handler for mobile touch selection
+function handleSelectionChange(): void {
+  if (selectionChangeTimer) clearTimeout(selectionChangeTimer);
+  selectionChangeTimer = setTimeout(() => {
+    // Only trigger on touch devices (avoid double-firing on desktop)
+    if (!('ontouchstart' in window)) return;
+    handleTextSelection();
+  }, 500);
+}
+
+function handleTextSelection(): void {
   const selection = window.getSelection();
   if (!selection || selection.isCollapsed || !selection.toString().trim()) {
     return; // No text selected
@@ -88,7 +111,11 @@ function detectSectionType(el: HTMLElement, container: HTMLElement): string {
       // Check if in edge cases sub-section
       const edgeCases = current.querySelector('.edge-cases');
       if (edgeCases && edgeCases.contains(el)) return 'edgeCases';
-      return 'acceptanceCriteria';
+      // Check if el is inside a criteria list (ul after .criteria-label)
+      const closestLi = el.closest('li');
+      if (closestLi) return 'acceptanceCriteria';
+      // Feature description (p), not acceptance criteria
+      return 'other';
     }
     // Check metrics table
     if (current.tagName === 'TABLE' || current.tagName === 'TR' || current.tagName === 'TD') {
@@ -121,13 +148,37 @@ async function showSuggestionPopup(
     </div>
   `;
 
-  // Position popup below the selection
+  // Position popup
   const scrollTop = window.scrollY || document.documentElement.scrollTop;
   const scrollLeft = window.scrollX || document.documentElement.scrollLeft;
+  const isMobile = 'ontouchstart' in window || window.innerWidth < 768;
   popup.style.position = 'absolute';
-  popup.style.top = `${rect.bottom + scrollTop + 4}px`;
-  popup.style.left = `${rect.left + scrollLeft}px`;
   popup.style.zIndex = '9999';
+
+  if (isMobile) {
+    // Mobile: place opposite to OS context menu
+    // OS menu appears toward screen center, so we go toward the edge
+    const selectionCenterY = rect.top + rect.height / 2;
+    const isUpperHalf = selectionCenterY < window.innerHeight / 2;
+
+    if (isUpperHalf) {
+      // Selection in upper half → OS menu below → DeepForm above
+      popup.classList.add('inline-edit-popup--mobile-above');
+      popup.style.top = `${rect.top + scrollTop - 8}px`; // temp, adjusted after render
+    } else {
+      // Selection in lower half → OS menu above → DeepForm below
+      popup.classList.add('inline-edit-popup--mobile-below');
+      popup.style.top = `${rect.bottom + scrollTop + 40}px`; // below OS menu area
+    }
+    // Horizontally center on screen for mobile
+    popup.style.left = `${scrollLeft + 16}px`;
+    popup.style.right = '16px';
+    popup.style.maxWidth = `${window.innerWidth - 32}px`;
+  } else {
+    // Desktop: show below the selection
+    popup.style.top = `${rect.bottom + scrollTop + 4}px`;
+    popup.style.left = `${rect.left + scrollLeft}px`;
+  }
 
   document.body.appendChild(popup);
   activePopup = popup;
@@ -169,7 +220,7 @@ async function showSuggestionPopup(
 
     // Event handlers for suggestion clicks
     popup.querySelectorAll('.inline-edit-option').forEach(li => {
-      li.addEventListener('click', async () => {
+      li.addEventListener('click', () => {
         const newText = (li as HTMLElement).dataset.value || '';
         if (newText === selectedText) {
           closePopup();
@@ -180,7 +231,9 @@ async function showSuggestionPopup(
           (opt as HTMLElement).style.pointerEvents = 'none',
         );
         (li as HTMLElement).style.opacity = '0.6';
-        await applyEdit(sessionId, selectedText, newText, context, sectionType, false, range);
+        applyEdit(sessionId, selectedText, newText, context, sectionType, false, range).catch(() => {
+          showToast('更新に失敗しました', true);
+        });
       });
     });
 
@@ -279,23 +332,38 @@ function repositionPopup(popup: HTMLElement, triggerRect: DOMRect): void {
   const popupRect = popup.getBoundingClientRect();
   const viewportWidth = window.innerWidth;
   const viewportHeight = window.innerHeight;
+  const scrollTop = window.scrollY || document.documentElement.scrollTop;
+  const scrollLeft = window.scrollX || document.documentElement.scrollLeft;
+  const isMobileAbove = popup.classList.contains('inline-edit-popup--mobile-above');
+  const isMobileBelow = popup.classList.contains('inline-edit-popup--mobile-below');
 
-  // Adjust horizontal position if going off-screen to the right
-  if (popupRect.right > viewportWidth - 16) {
-    const scrollLeft = window.scrollX || document.documentElement.scrollLeft;
-    popup.style.left = `${viewportWidth - popupRect.width - 16 + scrollLeft}px`;
-  }
+  if (isMobileAbove) {
+    // Place popup so its bottom is just above the selection
+    popup.style.top = `${triggerRect.top + scrollTop - popupRect.height - 12}px`;
 
-  // Adjust horizontal position if going off-screen to the left
-  if (popupRect.left < 16) {
-    const scrollLeft = window.scrollX || document.documentElement.scrollLeft;
-    popup.style.left = `${16 + scrollLeft}px`;
-  }
-
-  // If popup would go below viewport, show above the selection instead
-  if (popupRect.bottom > viewportHeight - 16) {
-    const scrollTop = window.scrollY || document.documentElement.scrollTop;
-    popup.style.top = `${triggerRect.top + scrollTop - popupRect.height - 4}px`;
+    // If that goes above viewport, flip to below
+    const newTop = triggerRect.top - popupRect.height - 12;
+    if (newTop < 0) {
+      popup.classList.remove('inline-edit-popup--mobile-above');
+      popup.classList.add('inline-edit-popup--mobile-below');
+      popup.style.top = `${triggerRect.bottom + scrollTop + 40}px`;
+    }
+  } else if (isMobileBelow) {
+    // If popup goes below viewport, shift up
+    if (popupRect.bottom > viewportHeight - 12) {
+      popup.style.top = `${viewportHeight - popupRect.height - 12 + scrollTop}px`;
+    }
+  } else {
+    // Desktop: adjust if off-screen
+    if (popupRect.right > viewportWidth - 16) {
+      popup.style.left = `${viewportWidth - popupRect.width - 16 + scrollLeft}px`;
+    }
+    if (popupRect.left < 16) {
+      popup.style.left = `${16 + scrollLeft}px`;
+    }
+    if (popupRect.bottom > viewportHeight - 16) {
+      popup.style.top = `${triggerRect.top + scrollTop - popupRect.height - 4}px`;
+    }
   }
 }
 

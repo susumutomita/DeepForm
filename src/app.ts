@@ -5,7 +5,9 @@ import { Hono } from "hono";
 import { bodyLimit } from "hono/body-limit";
 import { HTTPException } from "hono/http-exception";
 import { secureHeaders } from "hono/secure-headers";
+import { analyticsMiddleware } from "./middleware/analytics.ts";
 import { authMiddleware } from "./middleware/auth.ts";
+import { analyticsRoutes } from "./routes/analytics.ts";
 import { authRoutes } from "./routes/auth.ts";
 import { feedbackRoutes } from "./routes/feedback.ts";
 import { prdEditRoutes } from "./routes/prd-edit.ts";
@@ -36,6 +38,9 @@ app.use("/api/*", bodyLimit({ maxSize: 10 * 1024 * 1024 }));
 // Auth middleware (global) — exe.dev headers からユーザーを解決
 app.use("*", authMiddleware);
 
+// Analytics middleware — records page views after auth resolves user
+app.use("*", analyticsMiddleware);
+
 // Auth routes
 app.route("/api/auth", authRoutes);
 
@@ -44,6 +49,9 @@ app.route("/api", sessionRoutes);
 
 // Feedback routes
 app.route("/api/feedback", feedbackRoutes);
+
+// Admin analytics routes
+app.route("/api/admin/analytics", analyticsRoutes);
 
 // PRD inline edit routes
 app.route("", prdEditRoutes);

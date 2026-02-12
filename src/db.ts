@@ -149,4 +149,23 @@ db.exec(`
   );
 `);
 
+// Analytics: page_views table
+db.exec(`
+  CREATE TABLE IF NOT EXISTS page_views (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    path TEXT NOT NULL,
+    method TEXT NOT NULL DEFAULT 'GET',
+    status_code INTEGER,
+    referer TEXT,
+    user_agent TEXT,
+    ip_address TEXT,
+    country TEXT,
+    user_id TEXT,
+    session_fingerprint TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  );
+  CREATE INDEX IF NOT EXISTS idx_page_views_created_at ON page_views(created_at);
+  CREATE INDEX IF NOT EXISTS idx_page_views_path ON page_views(path);
+`);
+
 export { db };

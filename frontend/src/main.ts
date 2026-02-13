@@ -1,7 +1,7 @@
 // === DeepForm Frontend Entry Point ===
 import './style.css';
 import { applyTranslations, setLang, currentLang } from './i18n';
-import { checkAuth, doLogout, isLoggedIn, redirectToLogin } from './auth';
+import { checkAuth, doLogout } from './auth';
 import { loadSessions, doToggleVisibility, doCreateCampaign } from './sessions';
 import {
   showHome, openSession, sendMessage, handleChatKeydown,
@@ -74,11 +74,6 @@ w.handleCampaignKeydown = handleCampaignKeydown;
 
 // Start new session (with auth check)
 w.startNewSession = async () => {
-  if (!isLoggedIn()) {
-    showToast(t('auth.loginRequired'), true);
-    setTimeout(() => redirectToLogin(), 1500);
-    return;
-  }
   const input = document.getElementById('theme-input') as HTMLTextAreaElement | null;
   if (!input) return;
   const theme = input.value.trim();
@@ -89,12 +84,7 @@ w.startNewSession = async () => {
     input.value = '';
     await openSession(data.sessionId, true);
   } catch (e: any) {
-    if (e.message.includes('ログイン')) {
-      showToast(t('auth.loginRequired'), true);
-      setTimeout(() => redirectToLogin(), 1500);
-    } else {
-      showToast(e.message, true);
-    }
+    showToast(e.message, true);
   }
 };
 

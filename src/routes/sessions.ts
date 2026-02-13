@@ -30,12 +30,14 @@ function formatZodError(error: ZodError): string {
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function getOwnedSession(c: Context<AppEnv, any>): Session | Response {
   const user = c.get("user");
-  if (!user) return c.json({ error: "ログインが必要です" }, 401);
   const session = db.prepare("SELECT * FROM sessions WHERE id = ?").get(c.req.param("id")) as unknown as
     | Session
     | undefined;
   if (!session) return c.json({ error: "Session not found" }, 404);
-  if (session.user_id !== user.id) return c.json({ error: "アクセス権限がありません" }, 403);
+  // Allow access: owner of session, or anonymous public session
+  const isOwner = user && session.user_id === user.id;
+  const isAnonymousPublic = !session.user_id && session.is_public === 1;
+  if (!isOwner && !isAnonymousPublic) return c.json({ error: "アクセス権限がありません" }, 403);
   return session;
 }
 
@@ -110,24 +112,33 @@ const MAX_SESSIONS_PER_USER = Number(process.env.MAX_SESSIONS_PER_USER) || 50;
 sessionRoutes.post("/sessions", async (c) => {
   try {
     const user = c.get("user");
-    if (!user) return c.json({ error: "ログインが必要です" }, 401);
 
     const body = await c.req.json();
     const { theme } = createSessionSchema.parse(body);
 
-    // Enforce session limit per user
-    const { count } = db.prepare("SELECT COUNT(*) as count FROM sessions WHERE user_id = ?").get(user.id) as {
-      count: number;
-    };
-    if (count >= MAX_SESSIONS_PER_USER) {
-      return c.json(
-        { error: `セッション数の上限（${MAX_SESSIONS_PER_USER}件）に達しました。不要なセッションを削除してください。` },
-        429,
-      );
+    // Enforce session limit per user (logged-in users only)
+    if (user) {
+      const { count } = db.prepare("SELECT COUNT(*) as count FROM sessions WHERE user_id = ?").get(user.id) as {
+        count: number;
+      };
+      if (count >= MAX_SESSIONS_PER_USER) {
+        return c.json(
+          {
+            error: `セッション数の上限（${MAX_SESSIONS_PER_USER}件）に達しました。不要なセッションを削除してください。`,
+          },
+          429,
+        );
+      }
     }
 
     const id = crypto.randomUUID();
-    db.prepare("INSERT INTO sessions (id, theme, user_id) VALUES (?, ?, ?)").run(id, theme.trim(), user.id);
+    const isPublic = user ? 0 : 1;
+    db.prepare("INSERT INTO sessions (id, theme, user_id, is_public) VALUES (?, ?, ?, ?)").run(
+      id,
+      theme.trim(),
+      user?.id ?? null,
+      isPublic,
+    );
     return c.json({ sessionId: id, theme: theme.trim() });
   } catch (e) {
     if (e instanceof SyntaxError) return c.json({ error: "Invalid JSON" }, 400);

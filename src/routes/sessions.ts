@@ -1008,6 +1008,68 @@ sessionRoutes.get("/sessions/:id/spec-export", (c) => {
   }
 });
 
+// GET /sessions/:id/deploy-bundle — Public endpoint for Shelley to fetch spec + PRD
+// Generates a one-time deploy token on first call, then serves via token
+sessionRoutes.get("/sessions/:id/deploy-bundle", (c) => {
+  try {
+    const id = c.req.param("id");
+    const session = db.prepare("SELECT * FROM sessions WHERE id = ?").get(id) as unknown as Session | undefined;
+    if (!session) return c.json({ error: "Session not found" }, 404);
+
+    // Allow access: owner, public sessions, or via deploy token
+    const user = c.get("user");
+    const isOwner = user && session.user_id === user.id;
+    const isPublic = session.is_public === 1;
+    const tokenParam = c.req.query("token");
+    const isValidToken = tokenParam && session.share_token === tokenParam;
+    if (!isOwner && !isPublic && !isValidToken) {
+      return c.json({ error: "アクセス権限がありません" }, 403);
+    }
+
+    // Ensure share_token exists for deploy URL
+    let shareToken = session.share_token;
+    if (!shareToken) {
+      shareToken = crypto.randomUUID();
+      db.prepare("UPDATE sessions SET share_token = ? WHERE id = ?").run(shareToken, id);
+    }
+
+    // Gather spec
+    const specRow = db
+      .prepare("SELECT data FROM analysis_results WHERE session_id = ? AND type = ?")
+      .get(id, "spec") as unknown as { data: string } | undefined;
+    if (!specRow) return c.json({ error: "Spec not generated yet" }, 400);
+
+    // Gather PRD
+    const prdRow = db
+      .prepare("SELECT data FROM analysis_results WHERE session_id = ? AND type = ?")
+      .get(id, "prd") as unknown as { data: string } | undefined;
+
+    const specData = JSON.parse(specRow.data);
+    const prdData = prdRow ? JSON.parse(prdRow.data) : null;
+
+    // Return as plain text optimized for Shelley consumption
+    const format = c.req.query("format");
+    if (format === "text") {
+      let text = `# DeepForm Deploy Bundle\n# Theme: ${session.theme}\n\n`;
+      text += `## spec.json\n\n${JSON.stringify(specData.spec || specData, null, 2)}\n\n`;
+      if (prdData) {
+        text += `## PRD\n\n${JSON.stringify(prdData.prd || prdData, null, 2)}\n`;
+      }
+      return c.text(text);
+    }
+
+    return c.json({
+      theme: session.theme,
+      spec: specData.spec || specData,
+      prd: prdData?.prd || prdData || null,
+      deployUrl: `https://deepform.exe.xyz:8000/api/sessions/${id}/deploy-bundle?token=${shareToken}&format=text`,
+    });
+  } catch (e) {
+    console.error("Deploy bundle error:", e);
+    return c.json({ error: "Internal Server Error" }, 500);
+  }
+});
+
 // ---------------------------------------------------------------------------
 // Campaigns
 // ---------------------------------------------------------------------------

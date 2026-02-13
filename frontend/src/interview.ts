@@ -232,11 +232,77 @@ export async function doRunReadiness(): Promise<void> {
     updateStepNav('readiness_checked');
     activateStep('readiness');
     showToast(t('toast.readinessDone'));
+    // Show completion feedback prompt after a short delay
+    setTimeout(() => showCompletionFeedback(), 1500);
   } catch (e: any) {
     showToast(e.message, true);
   } finally {
     hideLoading();
   }
+}
+
+function showCompletionFeedback(): void {
+  // Don't show if already shown for this session
+  const storageKey = `deepform_feedback_${currentSessionId}`;
+  if (localStorage.getItem(storageKey)) return;
+
+  const overlay = document.createElement('div');
+  overlay.className = 'completion-feedback-overlay';
+  overlay.addEventListener('click', (e) => {
+    if (e.target === overlay) { overlay.remove(); localStorage.setItem(storageKey, '1'); }
+  });
+
+  const card = document.createElement('div');
+  card.className = 'completion-feedback-card';
+  card.innerHTML = `
+    <h3>🎉 完走しました！</h3>
+    <p>インタビューから spec まで体験いかがでしたか？</p>
+    <div class="completion-feedback-reactions">
+      <button class="reaction-btn" data-rating="great">😍<span>すごくいい</span></button>
+      <button class="reaction-btn" data-rating="good">🙂<span>まあまあ</span></button>
+      <button class="reaction-btn" data-rating="bad">😕<span>微妙</span></button>
+    </div>
+    <textarea class="completion-feedback-text" placeholder="一言あれば（任意）" rows="2" maxlength="500"></textarea>
+    <div class="completion-feedback-actions">
+      <button class="btn btn-primary completion-feedback-submit" disabled>送信</button>
+      <button class="btn btn-secondary completion-feedback-skip">スキップ</button>
+    </div>
+  `;
+
+  overlay.appendChild(card);
+  document.body.appendChild(overlay);
+
+  let selectedRating = '';
+  const submitBtn = card.querySelector('.completion-feedback-submit') as HTMLButtonElement;
+  const skipBtn = card.querySelector('.completion-feedback-skip') as HTMLButtonElement;
+  const textArea = card.querySelector('.completion-feedback-text') as HTMLTextAreaElement;
+
+  // Reaction buttons
+  card.querySelectorAll('.reaction-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      card.querySelectorAll('.reaction-btn').forEach(b => b.classList.remove('selected'));
+      btn.classList.add('selected');
+      selectedRating = (btn as HTMLElement).dataset.rating || '';
+      submitBtn.disabled = false;
+    });
+  });
+
+  // Submit
+  submitBtn.addEventListener('click', async () => {
+    const message = `[completion:${selectedRating}] ${textArea.value.trim()}`;
+    try {
+      await api.submitAppFeedback('completion', message, `/session/${currentSessionId}`);
+      showToast('フィードバックありがとうございます！');
+    } catch { /* ignore */ }
+    localStorage.setItem(storageKey, '1');
+    overlay.remove();
+  });
+
+  // Skip
+  skipBtn.addEventListener('click', () => {
+    localStorage.setItem(storageKey, '1');
+    overlay.remove();
+  });
 }
 
 // --- Export ---

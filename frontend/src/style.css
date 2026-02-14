@@ -2588,3 +2588,101 @@ a:hover { color: var(--primary-hover); }
 .analytics-error p {
   margin-bottom: 0.5rem;
 }
+
+/* === Completion Feedback === */
+.completion-feedback-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+.completion-feedback-card {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 2rem;
+  max-width: 400px;
+  width: 90%;
+  text-align: center;
+}
+.completion-feedback-card h3 { margin: 0 0 0.5rem; }
+.completion-feedback-card p { margin: 0 0 1rem; color: var(--text-muted); }
+.feedback-emoji-row { display: flex; gap: 1rem; justify-content: center; margin-bottom: 1rem; }
+.feedback-emoji-btn {
+  font-size: 2rem;
+  background: none;
+  border: 2px solid transparent;
+  border-radius: 12px;
+  padding: 0.5rem;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.feedback-emoji-btn:hover { border-color: var(--border); transform: scale(1.1); }
+.feedback-emoji-btn.selected { border-color: var(--primary); background: var(--bg-card); transform: scale(1.15); }
+.feedback-text {
+  width: 100%;
+  padding: 0.5rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-card);
+  color: var(--text);
+  resize: none;
+  margin-bottom: 1rem;
+  font-family: inherit;
+}
+.feedback-actions { display: flex; gap: 0.5rem; justify-content: center; }
+.btn-ghost { background: none; border: none; color: var(--text-muted); }
+.btn-ghost:hover { color: var(--text); }
+
+/* === Chat Choice Buttons === */
+.chat-choices {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  padding: 0.75rem 0;
+  animation: fadeIn 0.3s ease;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.chat-choice-btn {
+  background: var(--bg-card);
+  border: 1px solid var(--primary);
+  color: var(--primary);
+  padding: 0.5rem 1rem;
+  border-radius: 20px;
+  cursor: pointer;
+  font-size: 0.9rem;
+  transition: all 0.2s;
+  text-align: left;
+  line-height: 1.4;
+}
+
+.chat-choice-btn:hover {
+  background: var(--primary);
+  color: white;
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+}
+
+.chat-choice-btn:active {
+  transform: translateY(0);
+}
+
+.chat-choice-other {
+  border-style: dashed;
+  color: var(--text-muted);
+  border-color: var(--border);
+}
+
+.chat-choice-other:hover {
+  background: var(--bg-card);
+  color: var(--text);
+  border-color: var(--text);
+}

@@ -68,8 +68,8 @@ describe("Hono アプリケーション", () => {
       // When: セッション作成 API を叩く
       const res = await app.request("/api/sessions", options);
 
-      // Then: 401 が返る
-      expect(res.status).toBe(401);
+      // Then: ゲストアクセスでセッション作成可能 (200)
+      expect(res.status).toBe(200);
     });
 
     it("GET /api/sessions が公開セッション一覧を返すべき", async () => {

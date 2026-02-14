@@ -72,13 +72,8 @@ w.completeCampaignInterview = completeCampaignInterview;
 w.submitCampaignFeedback = submitCampaignFeedback;
 w.handleCampaignKeydown = handleCampaignKeydown;
 
-// Start new session (with auth check)
+// Start new session (guest access allowed)
 w.startNewSession = async () => {
-  if (!isLoggedIn()) {
-    showToast(t('auth.loginRequired'), true);
-    setTimeout(() => redirectToLogin(), 1500);
-    return;
-  }
   const input = document.getElementById('theme-input') as HTMLTextAreaElement | null;
   if (!input) return;
   const theme = input.value.trim();
@@ -89,12 +84,7 @@ w.startNewSession = async () => {
     input.value = '';
     await openSession(data.sessionId, true);
   } catch (e: any) {
-    if (e.message.includes('ログイン')) {
-      showToast(t('auth.loginRequired'), true);
-      setTimeout(() => redirectToLogin(), 1500);
-    } else {
-      showToast(e.message, true);
-    }
+    showToast(e.message, true);
   }
 };
 

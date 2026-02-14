@@ -86,7 +86,7 @@ export function sendChat(sessionId: string, message: string): Promise<ChatRespon
 export interface StreamCallbacks {
   onDelta: (text: string) => void;
   onMeta?: (data: { turnCount: number }) => void;
-  onDone: (data: { readyForAnalysis?: boolean; turnCount?: number }) => void;
+  onDone: (data: { readyForAnalysis?: boolean; turnCount?: number; choices?: string[] }) => void;
   onError: (error: string) => void;
 }
 

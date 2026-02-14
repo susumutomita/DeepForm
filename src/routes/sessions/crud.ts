@@ -17,24 +17,30 @@ const MAX_SESSIONS_PER_USER = Number(process.env.MAX_SESSIONS_PER_USER) || 50;
 crudRoutes.post("/sessions", async (c) => {
   try {
     const user = c.get("user");
-    if (!user) return c.json({ error: "ログインが必要です" }, 401);
-
     const body = await c.req.json();
     const { theme } = createSessionSchema.parse(body);
 
-    // Enforce session limit per user
-    const { count } = db.prepare("SELECT COUNT(*) as count FROM sessions WHERE user_id = ?").get(user.id) as {
-      count: number;
-    };
-    if (count >= MAX_SESSIONS_PER_USER) {
-      return c.json(
-        { error: `セッション数の上限（${MAX_SESSIONS_PER_USER}件）に達しました。不要なセッションを削除してください。` },
-        429,
-      );
+    if (user) {
+      // Enforce session limit per user
+      const { count } = db.prepare("SELECT COUNT(*) as count FROM sessions WHERE user_id = ?").get(user.id) as {
+        count: number;
+      };
+      if (count >= MAX_SESSIONS_PER_USER) {
+        return c.json(
+          {
+            error: `セッション数の上限（${MAX_SESSIONS_PER_USER}件）に達しました。不要なセッションを削除してください。`,
+          },
+          429,
+        );
+      }
     }
 
     const id = crypto.randomUUID();
-    db.prepare("INSERT INTO sessions (id, theme, user_id) VALUES (?, ?, ?)").run(id, theme.trim(), user.id);
+    if (user) {
+      db.prepare("INSERT INTO sessions (id, theme, user_id) VALUES (?, ?, ?)").run(id, theme.trim(), user.id);
+    } else {
+      db.prepare("INSERT INTO sessions (id, theme, user_id, is_public) VALUES (?, ?, NULL, 1)").run(id, theme.trim());
+    }
     return c.json({ sessionId: id, theme: theme.trim() });
   } catch (e) {
     if (e instanceof SyntaxError) return c.json({ error: "Invalid JSON" }, 400);

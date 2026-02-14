@@ -143,7 +143,7 @@ describe("POST /api/sessions/:id/prd/suggest", () => {
       }),
     });
 
-    expect(res.status).toBe(401);
+    expect(res.status).toBe(403);
   });
 
   it("returns 403 for non-owner", async () => {
@@ -360,7 +360,7 @@ describe("POST /api/sessions/:id/prd/apply", () => {
       }),
     });
 
-    expect(res.status).toBe(401);
+    expect(res.status).toBe(403);
   });
 
   it("returns 400 for invalid sectionType", async () => {

@@ -62,6 +62,15 @@ analyticsRoutes.get("/stats", (c) => {
     )
     .all();
 
+  // UTM sources
+  const utmSources = db
+    .prepare(
+      `SELECT utm_source, utm_medium, utm_campaign, COUNT(*) as views, COUNT(DISTINCT session_fingerprint) as visitors
+     FROM page_views WHERE utm_source IS NOT NULL AND created_at >= ${since}
+     GROUP BY utm_source, utm_medium, utm_campaign ORDER BY visitors DESC LIMIT 20`,
+    )
+    .all();
+
   // Recent visitors (unique fingerprints)
   const recentVisitors = db
     .prepare(
@@ -79,6 +88,7 @@ analyticsRoutes.get("/stats", (c) => {
     viewsByDay,
     topPages,
     topReferers,
+    utmSources,
     recentVisitors,
   });
 });

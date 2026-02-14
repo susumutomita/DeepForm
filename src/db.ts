@@ -176,4 +176,15 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_page_views_path ON page_views(path);
 `);
 
+// Migration: add UTM columns to page_views
+try {
+  db.exec(`
+    ALTER TABLE page_views ADD COLUMN utm_source TEXT;
+    ALTER TABLE page_views ADD COLUMN utm_medium TEXT;
+    ALTER TABLE page_views ADD COLUMN utm_campaign TEXT;
+  `);
+} catch {
+  // Columns already exist
+}
+
 export { db };

@@ -27,9 +27,10 @@ export const pipelineRoutes = new Hono<AppEnv>();
 // Prompts
 // ---------------------------------------------------------------------------
 
-const FACTS_SYSTEM = `あなたは定性調査の分析エキスパートです。以下のデプスインタビュー記録からファクトを抽出してください。
+// Facts + Hypotheses in a single LLM call (saves one round-trip + token re-send)
+const ANALYSIS_SYSTEM = `あなたは定性調査の分析エキスパートです。デプスインタビュー記録から「ファクト抽出」と「仮説生成」を同時に行ってください。
 
-必ずJSON形式で返してください。JSON以外のテキストは含めないでください。
+必ず以下のJSON形式で返してください。JSON以外のテキストは含めないでください。
 
 {
   "facts": [
@@ -40,19 +41,7 @@ const FACTS_SYSTEM = `あなたは定性調査の分析エキスパートです�
       "evidence": "元の発話を引用",
       "severity": "high"
     }
-  ]
-}
-
-typeは "fact"（事実）, "pain"（困りごと）, "frequency"（頻度）, "workaround"（回避策）のいずれか。
-severityは "high", "medium", "low" のいずれか。
-
-抽象的な表現は避け、具体的な事実のみ抽出してください。最低5つ、最大4個のファクトを抽出してください。`;
-
-const HYPOTHESES_SYSTEM = `あなたはプロダクト仮説生成のエキスパートです。抽出されたファクトから仮説を生成してください。
-
-必ずJSON形式で返してください。JSON以外のテキストは含めないでください。
-
-{
+  ],
   "hypotheses": [
     {
       "id": "H1",
@@ -65,7 +54,14 @@ const HYPOTHESES_SYSTEM = `あなたはプロダクト仮説生成のエキス�
   ]
 }
 
-3つの仮説を生成してください。各仮説に根拠となるファクトID、反証パターン、未検証ポイントを必ず含めてください。`;
+ファクトのルール:
+- type: "fact"(事実), "pain"(困りごと), "frequency"(頻度), "workaround"(回避策)
+- severity: "high", "medium", "low"
+- 抽象的な表現は避け、具体的な事実のみ抽出。最低5つ、最大15個
+
+仮説のルール:
+- 3つの仮説を生成
+- 各仮説に根拠となるファクトID、反証パターン、未検証ポイントを必ず含める`;
 
 const DESIGN_SYSTEM = `あなたはシニアプロダクトマネージャー兼テックリードです。
 ファクトと仮説から、「要件定義（PRD）」と「実装仕様（spec）」を統合した設計書を生成してください。
@@ -199,18 +195,34 @@ pipelineRoutes.post("/sessions/:id/pipeline", async (c) => {
       }
 
       try {
-        // --- Stage 1: Facts ---
+        // --- Stage 1: Analysis (facts + hypotheses in one call) ---
         send("stage", { stage: "facts", status: "running" });
         const transcript = buildTranscript(id);
-        const factsResp = await callClaude(
+        const analysisResp = await callClaude(
           [{ role: "user", content: `以下のインタビュー記録を分析してください：\n\n${transcript}` }],
-          FACTS_SYSTEM,
+          ANALYSIS_SYSTEM,
           4096,
         );
-        const factsText = extractText(factsResp);
-        const facts = parseJSON(factsText, {
-          facts: [{ id: "F1", type: "fact", content: factsText, evidence: "", severity: "medium" }],
-        });
+        const analysisText = extractText(analysisResp);
+        // biome-ignore lint/suspicious/noExplicitAny: dynamic LLM JSON output
+        const analysis = parseJSON(analysisText, {
+          facts: [{ id: "F1", type: "fact", content: analysisText, evidence: "", severity: "medium" }],
+          hypotheses: [
+            {
+              id: "H1",
+              title: "parse error",
+              description: analysisText,
+              supportingFacts: [],
+              counterEvidence: "",
+              unverifiedPoints: [],
+            },
+          ],
+        }) as any;
+
+        const facts = { facts: analysis.facts || [] };
+        const hypotheses = { hypotheses: analysis.hypotheses || [] };
+
+        // Save facts
         saveAnalysisResult(id, ANALYSIS_TYPE.FACTS, facts);
         db.prepare("UPDATE sessions SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?").run(
           SESSION_STATUS.ANALYZED,
@@ -218,31 +230,7 @@ pipelineRoutes.post("/sessions/:id/pipeline", async (c) => {
         );
         send("stage", { stage: "facts", status: "done", data: facts });
 
-        // --- Stage 2: Hypotheses ---
-        send("stage", { stage: "hypotheses", status: "running" });
-        const hypoResp = await callClaude(
-          [
-            {
-              role: "user",
-              content: `以下のファクトから仮説を生成してください：\n\n${JSON.stringify(facts, null, 2)}`,
-            },
-          ],
-          HYPOTHESES_SYSTEM,
-          4096,
-        );
-        const hypoText = extractText(hypoResp);
-        const hypotheses = parseJSON(hypoText, {
-          hypotheses: [
-            {
-              id: "H1",
-              title: hypoText,
-              description: "",
-              supportingFacts: [],
-              counterEvidence: "",
-              unverifiedPoints: [],
-            },
-          ],
-        });
+        // Save hypotheses
         saveAnalysisResult(id, ANALYSIS_TYPE.HYPOTHESES, hypotheses);
         db.prepare("UPDATE sessions SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?").run(
           SESSION_STATUS.HYPOTHESIZED,
@@ -250,7 +238,7 @@ pipelineRoutes.post("/sessions/:id/pipeline", async (c) => {
         );
         send("stage", { stage: "hypotheses", status: "done", data: hypotheses });
 
-        // --- Stage 3: Design (PRD + Spec merged) ---
+        // --- Stage 2: Design (PRD + Spec merged) ---
         send("stage", { stage: "design", status: "running" });
         const designResp = await callClaude(
           [

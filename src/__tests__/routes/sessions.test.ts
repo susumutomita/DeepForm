@@ -963,9 +963,9 @@ describe("セッション API", () => {
       expect(res.status).toBe(403);
     });
 
-    it("未認証でもセッションオーナー以外は 403 を返すべき", async () => {
+    it("未認証の場合に 401 を返すべき（Pro 必須）", async () => {
       const res = await app.request("/api/sessions/sready/readiness", { method: "POST" });
-      expect(res.status).toBe(403);
+      expect(res.status).toBe(401);
     });
 
     it("既存のレディネスを上書き更新できること", async () => {

@@ -562,7 +562,27 @@ analysisRoutes.post("/sessions/:id/deploy-token", (c) => {
 
     const baseUrl = process.env.BASE_URL || "https://deepform.exe.xyz:8000";
     const deployUrl = `${baseUrl}/api/sessions/${id}/deploy-bundle?token=${token}&format=text`;
-    return c.json({ deployUrl, theme: session.theme });
+
+    // Extract projectName from spec if available
+    let projectName = "";
+    const specResult = db
+      .prepare(
+        "SELECT data FROM analysis_results WHERE session_id = ? AND type = 'spec' ORDER BY created_at DESC LIMIT 1",
+      )
+      .get(id) as { data: string } | undefined;
+    if (specResult) {
+      try {
+        const parsed = JSON.parse(specResult.data);
+        // Try direct access first, then parse from raw markdown code block
+        projectName = parsed?.spec?.projectName || parsed?.projectName || "";
+        if (!projectName && parsed?.spec?.raw) {
+          const rawMatch = parsed.spec.raw.match(/"projectName"\s*:\s*"([^"]+)"/);
+          if (rawMatch) projectName = rawMatch[1];
+        }
+      } catch {}
+    }
+
+    return c.json({ deployUrl, theme: session.theme, projectName });
   } catch (e) {
     console.error("Deploy token error:", e);
     return c.json({ error: "Internal Server Error" }, 500);

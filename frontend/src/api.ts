@@ -21,8 +21,13 @@ async function request<T>(url: string, opts?: RequestInit): Promise<T> {
     if (!res.ok) throw new Error(`HTTP ${res.status}: ${text.slice(0, 200)}`);
     throw new Error(`HTTP ${res.status}: Unexpected response format`);
   }
-  if (data.error) throw new Error(data.error);
-  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  if (!res.ok || data.error) {
+    const err = new Error(data.error || `HTTP ${res.status}`);
+    (err as any).status = res.status;
+    (err as any).upgradeUrl = data.upgradeUrl;
+    (err as any).upgrade = data.upgrade;
+    throw err;
+  }
   return data as T;
 }
 
@@ -40,6 +45,11 @@ function patch<T>(url: string, body: unknown): Promise<T> {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
   });
+}
+
+// Billing
+export async function getPlan(): Promise<{ plan: string; loggedIn: boolean }> {
+  return request('/api/billing/plan');
 }
 
 // Auth

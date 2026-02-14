@@ -1,4 +1,5 @@
 import crypto from "node:crypto";
+import type { Context } from "hono";
 import { Hono } from "hono";
 import { ANALYSIS_TYPE, SESSION_STATUS } from "../../constants.ts";
 import { db } from "../../db.ts";
@@ -7,6 +8,29 @@ import { generatePRDMarkdown } from "../../helpers/format.ts";
 import { getOwnedSession, isResponse } from "../../helpers/session-ownership.ts";
 import { callClaude, extractText } from "../../llm.ts";
 import type { AppEnv, Session } from "../../types.ts";
+
+const PAYMENT_LINK = "https://buy.stripe.com/test_dRmcMXbrh3Q8ggx8DA48000";
+
+// biome-ignore lint/suspicious/noExplicitAny: Hono の Context 型パラメータ制約
+function requirePro(c: Context<AppEnv, any>): Response | null {
+  const user = c.get("user");
+  if (!user) {
+    return c.json({ error: "Login required for this feature", upgrade: true }, 401);
+  }
+
+  const row = db.prepare("SELECT plan FROM users WHERE id = ?").get(user.id) as { plan: string } | undefined;
+  if (row?.plan !== "pro") {
+    return c.json(
+      {
+        error: "Pro plan required",
+        upgrade: true,
+        upgradeUrl: `${PAYMENT_LINK}?client_reference_id=${user.id}`,
+      },
+      402,
+    );
+  }
+  return null;
+}
 
 export const analysisRoutes = new Hono<AppEnv>();
 
@@ -145,9 +169,11 @@ analysisRoutes.post("/sessions/:id/hypotheses", async (c) => {
   }
 });
 
-// 9. POST /sessions/:id/prd — Generate PRD from facts & hypotheses (owner only)
+// 9. POST /sessions/:id/prd — Generate PRD from facts & hypotheses (owner only, pro)
 analysisRoutes.post("/sessions/:id/prd", async (c) => {
   try {
+    const blocked = requirePro(c);
+    if (blocked) return blocked;
     const result = getOwnedSession(c);
     if (isResponse(result)) return result;
     const session = result;
@@ -299,9 +325,11 @@ analysisRoutes.post("/sessions/:id/prd", async (c) => {
   }
 });
 
-// 10. POST /sessions/:id/spec — Generate spec from PRD (owner only)
+// 10. POST /sessions/:id/spec — Generate spec from PRD (owner only, pro)
 analysisRoutes.post("/sessions/:id/spec", async (c) => {
   try {
+    const blocked = requirePro(c);
+    if (blocked) return blocked;
     const result = getOwnedSession(c);
     if (isResponse(result)) return result;
     const session = result;
@@ -407,9 +435,11 @@ analysisRoutes.post("/sessions/:id/spec", async (c) => {
   }
 });
 
-// 10b. POST /sessions/:id/readiness — Generate production readiness checklist (owner only)
+// 10b. POST /sessions/:id/readiness — Generate production readiness checklist (owner only, pro)
 analysisRoutes.post("/sessions/:id/readiness", async (c) => {
   try {
+    const blocked = requirePro(c);
+    if (blocked) return blocked;
     const result = getOwnedSession(c);
     if (isResponse(result)) return result;
     const session = result;

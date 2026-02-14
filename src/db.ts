@@ -187,4 +187,24 @@ try {
   // Columns already exist
 }
 
+// Migration: Stripe billing columns on users
+try {
+  db.exec("ALTER TABLE users ADD COLUMN plan TEXT DEFAULT 'free'");
+} catch (e: unknown) {
+  const msg = e instanceof Error ? e.message : "";
+  if (!msg.includes("duplicate column")) throw e;
+}
+try {
+  db.exec("ALTER TABLE users ADD COLUMN stripe_customer_id TEXT");
+} catch (e: unknown) {
+  const msg = e instanceof Error ? e.message : "";
+  if (!msg.includes("duplicate column")) throw e;
+}
+try {
+  db.exec("ALTER TABLE users ADD COLUMN plan_updated_at DATETIME");
+} catch (e: unknown) {
+  const msg = e instanceof Error ? e.message : "";
+  if (!msg.includes("duplicate column")) throw e;
+}
+
 export { db };

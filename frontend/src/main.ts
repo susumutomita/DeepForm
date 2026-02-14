@@ -118,6 +118,28 @@ async function init(): Promise<void> {
   // Auth
   await checkAuth();
 
+  // Plan badge in header
+  try {
+    const planData = await api.getPlan();
+    const userInfo = document.getElementById('user-info');
+    if (userInfo && planData.loggedIn) {
+      const existing = userInfo.querySelector('.plan-badge');
+      if (existing) existing.remove();
+      const badge = document.createElement('span');
+      badge.className = 'plan-badge';
+      if (planData.plan === 'pro') {
+        badge.textContent = 'PRO';
+        badge.style.cssText = 'background: var(--primary); color: white; font-size: 0.7rem; padding: 2px 6px; border-radius: 4px; font-weight: 700; margin-left: 6px;';
+      } else {
+        badge.textContent = 'Free';
+        badge.style.cssText = 'background: var(--bg-input); color: var(--text-dim); font-size: 0.7rem; padding: 2px 6px; border-radius: 4px; font-weight: 600; margin-left: 6px;';
+      }
+      userInfo.appendChild(badge);
+    }
+  } catch {
+    // Plan check is non-critical
+  }
+
   // Step nav clicks
   document.querySelectorAll('.step-nav .step').forEach(el => {
     el.addEventListener('click', () => {

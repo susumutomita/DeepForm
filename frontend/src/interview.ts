@@ -9,7 +9,48 @@ import {
 } from './ui';
 import { initInlineEdit, destroyInlineEdit } from './inline-edit';
 
+const PAYMENT_LINK = 'https://buy.stripe.com/test_dRmcMXbrh3Q8ggx8DA48000';
+
 let currentSessionId: string | null = null;
+
+function showUpgradeModal(upgradeUrl: string): void {
+  const overlay = document.createElement('div');
+  overlay.className = 'completion-feedback-overlay';
+  overlay.onclick = () => overlay.remove();
+
+  const card = document.createElement('div');
+  card.className = 'completion-feedback-card';
+  card.onclick = (e) => e.stopPropagation();
+  card.innerHTML = `
+    <h3>🚀 Upgrade to Pro</h3>
+    <p style="margin: 1rem 0; color: var(--text-dim);">
+      PRD generation, spec export, and readiness checks are available on the Pro plan.
+    </p>
+    <div style="background: var(--bg-input); border-radius: 8px; padding: 1rem; margin: 1rem 0;">
+      <div style="font-size: 2rem; font-weight: 700;">$29<span style="font-size: 1rem; font-weight: 400; color: var(--text-dim);">/month</span></div>
+      <ul style="text-align: left; margin: 0.5rem 0; padding-left: 1.2rem; color: var(--text-dim); font-size: 0.9rem;">
+        <li>Unlimited sessions</li>
+        <li>PRD &amp; Spec generation</li>
+        <li>Deploy to exe.dev</li>
+        <li>Private sessions</li>
+        <li>Export (spec.json, PRD.md)</li>
+      </ul>
+    </div>
+    <a href="${upgradeUrl}" target="_blank" style="
+      display: block; background: var(--primary); color: white; text-decoration: none;
+      padding: 12px 24px; border-radius: 8px; font-weight: 600; text-align: center;
+      margin-bottom: 0.5rem;
+    ">Subscribe — $29/month</a>
+    <button class="upgrade-dismiss-btn" style="
+      background: none; border: none; color: var(--text-muted); cursor: pointer;
+      font-size: 0.9rem; padding: 8px;
+    ">Maybe later</button>
+  `;
+  overlay.appendChild(card);
+  document.body.appendChild(overlay);
+
+  card.querySelector('.upgrade-dismiss-btn')?.addEventListener('click', () => overlay.remove());
+}
 
 export function getCurrentSessionId(): string | null { return currentSessionId; }
 
@@ -258,6 +299,11 @@ export async function doRunPRD(): Promise<void> {
     initInlineEdit();
     showToast(t('toast.prdDone'));
   } catch (e: any) {
+    hideLoading();
+    if (e.status === 402 || e.upgrade) {
+      showUpgradeModal(e.upgradeUrl || PAYMENT_LINK);
+      return;
+    }
     showToast(e.message, true);
   } finally {
     hideLoading();
@@ -274,6 +320,11 @@ export async function doRunSpec(): Promise<void> {
     activateStep('spec');
     showToast(t('toast.specDone'));
   } catch (e: any) {
+    hideLoading();
+    if (e.status === 402 || e.upgrade) {
+      showUpgradeModal(e.upgradeUrl || PAYMENT_LINK);
+      return;
+    }
     showToast(e.message, true);
   } finally {
     hideLoading();
@@ -292,6 +343,11 @@ export async function doRunReadiness(): Promise<void> {
     showToast(t('toast.readinessDone'));
     showCompletionFeedback(currentSessionId);
   } catch (e: any) {
+    hideLoading();
+    if (e.status === 402 || e.upgrade) {
+      showUpgradeModal(e.upgradeUrl || PAYMENT_LINK);
+      return;
+    }
     showToast(e.message, true);
   } finally {
     hideLoading();

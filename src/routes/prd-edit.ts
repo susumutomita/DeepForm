@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import { z } from "zod";
-import { db } from "../db.ts";
+import { db } from "../db/index.ts";
 import { getOwnedSession, isResponse } from "../helpers/session-ownership.ts";
 import { callClaude, extractText } from "../llm.ts";
 import type { AppEnv } from "../types.ts";
@@ -44,7 +44,7 @@ const SECTION_LABELS: Record<string, string> = {
 // ---------------------------------------------------------------------------
 
 prdEditRoutes.post("/api/sessions/:id/prd/suggest", async (c) => {
-  const result = getOwnedSession(c);
+  const result = await getOwnedSession(c);
   if (isResponse(result)) return result;
 
   let body: z.infer<typeof suggestSchema>;
@@ -114,7 +114,7 @@ prdEditRoutes.post("/api/sessions/:id/prd/suggest", async (c) => {
 // ---------------------------------------------------------------------------
 
 prdEditRoutes.post("/api/sessions/:id/prd/apply", async (c) => {
-  const sessionResult = getOwnedSession(c);
+  const sessionResult = await getOwnedSession(c);
   if (isResponse(sessionResult)) return sessionResult;
   const session = sessionResult;
 
@@ -209,7 +209,7 @@ prdEditRoutes.post("/api/sessions/:id/prd/apply", async (c) => {
         .replace(/^[「『]|[」』]$/g, "");
 
       // Persist the change
-      updatePrdInDb(session.id, sectionType, context, updatedText);
+      await updatePrdInDb(session.id, sectionType, context, updatedText);
 
       return c.json({ updatedText, applied: true });
     }
@@ -220,7 +220,7 @@ prdEditRoutes.post("/api/sessions/:id/prd/apply", async (c) => {
     const updatedText = context.replace(selectedText, newText);
 
     // Persist the change
-    updatePrdInDb(session.id, sectionType, context, updatedText);
+    await updatePrdInDb(session.id, sectionType, context, updatedText);
 
     return c.json({ updatedText, applied: true });
   } catch (err) {
@@ -233,11 +233,19 @@ prdEditRoutes.post("/api/sessions/:id/prd/apply", async (c) => {
 // DB helper: update PRD content in analysis_results
 // ---------------------------------------------------------------------------
 
-function updatePrdInDb(sessionId: string, _sectionType: string, oldContext: string, newContext: string): void {
+async function updatePrdInDb(
+  sessionId: string,
+  _sectionType: string,
+  oldContext: string,
+  newContext: string,
+): Promise<void> {
   // Try to find existing PRD data
-  const prdRow = db
-    .prepare("SELECT id, data FROM analysis_results WHERE session_id = ? AND type = ?")
-    .get(sessionId, "prd") as unknown as { id: number; data: string } | undefined;
+  const prdRow = await db
+    .selectFrom("analysis_results")
+    .select(["id", "data"])
+    .where("session_id", "=", sessionId)
+    .where("type", "=", "prd")
+    .executeTakeFirst();
 
   if (!prdRow) {
     // No PRD record exists; nothing to update
@@ -250,14 +258,18 @@ function updatePrdInDb(sessionId: string, _sectionType: string, oldContext: stri
     // Walk through the PRD data and replace the old context with the new one
     const updated = replaceInObject(prdData, oldContext, newContext);
 
-    db.prepare("UPDATE analysis_results SET data = ? WHERE id = ?").run(JSON.stringify(updated), prdRow.id);
+    await db
+      .updateTable("analysis_results")
+      .set({ data: JSON.stringify(updated) })
+      .where("id", "=", prdRow.id)
+      .execute();
   } catch {
     // If parsing fails, try a raw string replacement
     const updatedData = prdRow.data.replace(
       JSON.stringify(oldContext).slice(1, -1),
       JSON.stringify(newContext).slice(1, -1),
     );
-    db.prepare("UPDATE analysis_results SET data = ? WHERE id = ?").run(updatedData, prdRow.id);
+    await db.updateTable("analysis_results").set({ data: updatedData }).where("id", "=", prdRow.id).execute();
   }
 }
 

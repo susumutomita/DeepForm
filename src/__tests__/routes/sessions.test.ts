@@ -6,7 +6,7 @@ vi.mock("@hono/node-server/serve-static", () => ({
 }));
 
 // node:sqlite でテスト用 DB を作成（ネイティブバイナリ不要）
-vi.mock("../../db.ts", async () => {
+vi.mock("../../db/index.ts", async () => {
   const { createTestDb } = await import("../helpers/test-db.ts");
   return { db: createTestDb() };
 });
@@ -20,8 +20,10 @@ vi.mock("../../llm.ts", () => ({
 }));
 
 import { app } from "../../app.ts";
-import { db } from "../../db.ts";
 import { callClaude, extractText } from "../../llm.ts";
+import { getRawDb } from "../helpers/test-db.ts";
+
+const rawDb = getRawDb();
 
 // ---------------------------------------------------------------------------
 // Auth helpers — exe.dev proxy header authentication
@@ -53,24 +55,19 @@ type SQLInputValue = null | number | bigint | string;
 function insertSession(id: string, theme: string, userId: string, extra: Record<string, SQLInputValue> = {}): void {
   const cols = ["id", "theme", "user_id", ...Object.keys(extra)];
   const placeholders = cols.map(() => "?").join(", ");
-  db.prepare(`INSERT INTO sessions (${cols.join(", ")}) VALUES (${placeholders})`).run(
-    id,
-    theme,
-    userId,
-    ...Object.values(extra),
-  );
+  rawDb
+    .prepare(`INSERT INTO sessions (${cols.join(", ")}) VALUES (${placeholders})`)
+    .run(id, theme, userId, ...Object.values(extra));
 }
 
 function insertMessage(sessionId: string, role: string, content: string): void {
-  db.prepare("INSERT INTO messages (session_id, role, content) VALUES (?, ?, ?)").run(sessionId, role, content);
+  rawDb.prepare("INSERT INTO messages (session_id, role, content) VALUES (?, ?, ?)").run(sessionId, role, content);
 }
 
 function insertAnalysis(sessionId: string, type: string, data: unknown): void {
-  db.prepare("INSERT INTO analysis_results (session_id, type, data) VALUES (?, ?, ?)").run(
-    sessionId,
-    type,
-    JSON.stringify(data),
-  );
+  rawDb
+    .prepare("INSERT INTO analysis_results (session_id, type, data) VALUES (?, ?, ?)")
+    .run(sessionId, type, JSON.stringify(data));
 }
 
 // ---------------------------------------------------------------------------
@@ -80,26 +77,18 @@ describe("セッション API", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     // Clean all tables (order matters for foreign keys)
-    db.exec("DELETE FROM analysis_results");
-    db.exec("DELETE FROM messages");
-    db.exec("DELETE FROM campaigns");
-    db.exec("DELETE FROM sessions");
-    db.exec("DELETE FROM users");
+    rawDb.exec("DELETE FROM analysis_results");
+    rawDb.exec("DELETE FROM messages");
+    rawDb.exec("DELETE FROM campaigns");
+    rawDb.exec("DELETE FROM sessions");
+    rawDb.exec("DELETE FROM users");
     // Insert test users
-    db.prepare("INSERT INTO users (id, exe_user_id, email, display_name, plan) VALUES (?, ?, ?, ?, ?)").run(
-      TEST_USER_ID,
-      TEST_EXE_USER_ID,
-      TEST_EMAIL,
-      "testuser",
-      "pro",
-    );
-    db.prepare("INSERT INTO users (id, exe_user_id, email, display_name, plan) VALUES (?, ?, ?, ?, ?)").run(
-      OTHER_USER_ID,
-      OTHER_EXE_USER_ID,
-      OTHER_EMAIL,
-      "otheruser",
-      "pro",
-    );
+    rawDb
+      .prepare("INSERT INTO users (id, exe_user_id, email, display_name, plan) VALUES (?, ?, ?, ?, ?)")
+      .run(TEST_USER_ID, TEST_EXE_USER_ID, TEST_EMAIL, "testuser", "pro");
+    rawDb
+      .prepare("INSERT INTO users (id, exe_user_id, email, display_name, plan) VALUES (?, ?, ?, ?, ?)")
+      .run(OTHER_USER_ID, OTHER_EXE_USER_ID, OTHER_EMAIL, "otheruser", "pro");
   });
 
   // -------------------------------------------------------------------------
@@ -119,7 +108,7 @@ describe("セッション API", () => {
       const data = (await res.json()) as any;
       expect(data.sessionId).toBeDefined();
       expect(data.theme).toBe("テストテーマ");
-      const row = db.prepare("SELECT * FROM sessions WHERE id = ?").get(data.sessionId) as any;
+      const row = rawDb.prepare("SELECT * FROM sessions WHERE id = ?").get(data.sessionId) as any;
       expect(row).toBeDefined();
       expect(row.user_id).toBe(TEST_USER_ID);
     });
@@ -245,7 +234,7 @@ describe("セッション API", () => {
 
     it("respondent_done ステータスを display_status: analyzed として返すこと", async () => {
       // Given: respondent_done ステータスの公開セッション
-      db.prepare("UPDATE sessions SET status = 'respondent_done', is_public = 1 WHERE id = ?").run("s1");
+      rawDb.prepare("UPDATE sessions SET status = 'respondent_done', is_public = 1 WHERE id = ?").run("s1");
       // When: GET
       const res = await authedRequest("/api/sessions");
       // Then: display_status = "analyzed"
@@ -296,7 +285,7 @@ describe("セッション API", () => {
 
     it("公開セッションには未認証でもアクセスできること", async () => {
       // Given: 公開セッション
-      db.prepare("UPDATE sessions SET is_public = 1 WHERE id = ?").run("so");
+      rawDb.prepare("UPDATE sessions SET is_public = 1 WHERE id = ?").run("so");
       // When: 認証なしで GET
       const res = await app.request("/api/sessions/so");
       // Then: 200
@@ -335,9 +324,9 @@ describe("セッション API", () => {
       // Then: 全て削除される
       expect(res.status).toBe(200);
       expect(((await res.json()) as any).ok).toBe(true);
-      expect(db.prepare("SELECT * FROM sessions WHERE id = ?").get("sdel")).toBeUndefined();
-      expect(db.prepare("SELECT * FROM messages WHERE session_id = ?").all("sdel")).toHaveLength(0);
-      expect(db.prepare("SELECT * FROM analysis_results WHERE session_id = ?").all("sdel")).toHaveLength(0);
+      expect(rawDb.prepare("SELECT * FROM sessions WHERE id = ?").get("sdel")).toBeUndefined();
+      expect(rawDb.prepare("SELECT * FROM messages WHERE session_id = ?").all("sdel")).toHaveLength(0);
+      expect(rawDb.prepare("SELECT * FROM analysis_results WHERE session_id = ?").all("sdel")).toHaveLength(0);
     });
 
     it("他人のセッションは削除できないべき", async () => {
@@ -389,7 +378,7 @@ describe("セッション API", () => {
 
     it("セッションを非公開に変更できること", async () => {
       // Given: 公開セッション
-      db.prepare("UPDATE sessions SET is_public = 1 WHERE id = ?").run("svis");
+      rawDb.prepare("UPDATE sessions SET is_public = 1 WHERE id = ?").run("svis");
       // When: is_public: false で PATCH
       const res = await authedRequest("/api/sessions/svis/visibility", {
         method: "PATCH",
@@ -457,7 +446,7 @@ describe("セッション API", () => {
       expect(data.reply).toBe("モック LLM レスポンス");
       expect(callClaude).toHaveBeenCalledOnce();
       // メッセージが DB に保存される
-      const msgs = db.prepare("SELECT * FROM messages WHERE session_id = ?").all("sstart") as any[];
+      const msgs = rawDb.prepare("SELECT * FROM messages WHERE session_id = ?").all("sstart") as any[];
       expect(msgs).toHaveLength(1);
       expect(msgs[0].role).toBe("assistant");
     });
@@ -513,7 +502,9 @@ describe("セッション API", () => {
       expect(data.turnCount).toBe(1);
       expect(callClaude).toHaveBeenCalledOnce();
       // ユーザーと AI のメッセージが DB に保存
-      const msgs = db.prepare("SELECT * FROM messages WHERE session_id = ? ORDER BY created_at").all("schat") as any[];
+      const msgs = rawDb
+        .prepare("SELECT * FROM messages WHERE session_id = ? ORDER BY created_at")
+        .all("schat") as any[];
       expect(msgs).toHaveLength(3); // assistant + user + assistant
     });
 
@@ -593,12 +584,12 @@ describe("セッション API", () => {
       expect(data.facts).toBeDefined();
       expect(data.facts[0].id).toBe("F1");
       // DB に保存される
-      const row = db
+      const row = rawDb
         .prepare("SELECT * FROM analysis_results WHERE session_id = ? AND type = ?")
         .get("sanalyze", "facts") as any;
       expect(row).toBeDefined();
       // ステータスが updated
-      const session = db.prepare("SELECT status FROM sessions WHERE id = ?").get("sanalyze") as any;
+      const session = rawDb.prepare("SELECT status FROM sessions WHERE id = ?").get("sanalyze") as any;
       expect(session.status).toBe("analyzed");
     });
 
@@ -609,7 +600,7 @@ describe("セッション API", () => {
       const res = await authedRequest("/api/sessions/sanalyze/analyze", { method: "POST" });
       // Then: 上書きされる
       expect(res.status).toBe(200);
-      const rows = db
+      const rows = rawDb
         .prepare("SELECT * FROM analysis_results WHERE session_id = ? AND type = ?")
         .all("sanalyze", "facts") as any[];
       expect(rows).toHaveLength(1);
@@ -668,7 +659,7 @@ describe("セッション API", () => {
       expect(data.hypotheses).toBeDefined();
       expect(data.hypotheses[0].id).toBe("H1");
       // ステータスが更新される
-      const session = db.prepare("SELECT status FROM sessions WHERE id = ?").get("shyp") as any;
+      const session = rawDb.prepare("SELECT status FROM sessions WHERE id = ?").get("shyp") as any;
       expect(session.status).toBe("hypothesized");
     });
 
@@ -690,7 +681,7 @@ describe("セッション API", () => {
       const res = await authedRequest("/api/sessions/shyp/hypotheses", { method: "POST" });
       // Then: 上書きされる
       expect(res.status).toBe(200);
-      const rows = db
+      const rows = rawDb
         .prepare("SELECT * FROM analysis_results WHERE session_id = ? AND type = ?")
         .all("shyp", "hypotheses") as any[];
       expect(rows).toHaveLength(1);
@@ -729,7 +720,7 @@ describe("セッション API", () => {
       expect(data.prd).toBeDefined();
       expect(data.prd.problemDefinition).toBe("問題定義");
       // ステータスが更新される
-      const session = db.prepare("SELECT status FROM sessions WHERE id = ?").get("sprd") as any;
+      const session = rawDb.prepare("SELECT status FROM sessions WHERE id = ?").get("sprd") as any;
       expect(session.status).toBe("prd_generated");
     });
 
@@ -777,7 +768,7 @@ describe("セッション API", () => {
       expect(data.spec.projectName).toBe("テストプロジェクト");
       expect(data.prdMarkdown).toBeDefined();
       // ステータスが更新される
-      const session = db.prepare("SELECT status FROM sessions WHERE id = ?").get("sspec") as any;
+      const session = rawDb.prepare("SELECT status FROM sessions WHERE id = ?").get("sspec") as any;
       expect(session.status).toBe("spec_generated");
     });
 
@@ -826,7 +817,7 @@ describe("セッション API", () => {
 
     it("公開セッションの spec を未認証でエクスポートできること", async () => {
       // Given: 公開セッション
-      db.prepare("UPDATE sessions SET is_public = 1 WHERE id = ?").run("sexport");
+      rawDb.prepare("UPDATE sessions SET is_public = 1 WHERE id = ?").run("sexport");
       // When: 認証なしで GET
       const res = await app.request("/api/sessions/sexport/spec-export");
       // Then: 200
@@ -926,12 +917,12 @@ describe("セッション API", () => {
       expect(data.readiness.categories[0].id).toBe("functionalSuitability");
       expect(data.readiness.categories[0].items[0].id).toBe("FS-1");
       // DB に保存される
-      const row = db
+      const row = rawDb
         .prepare("SELECT * FROM analysis_results WHERE session_id = ? AND type = ?")
         .get("sready", "readiness") as any;
       expect(row).toBeDefined();
       // ステータスが更新される
-      const session = db.prepare("SELECT status FROM sessions WHERE id = ?").get("sready") as any;
+      const session = rawDb.prepare("SELECT status FROM sessions WHERE id = ?").get("sready") as any;
       expect(session.status).toBe("readiness_checked");
     });
 
@@ -975,7 +966,7 @@ describe("セッション API", () => {
       const res = await authedRequest("/api/sessions/sready/readiness", { method: "POST" });
       // Then: 上書きされる
       expect(res.status).toBe(200);
-      const rows = db
+      const rows = rawDb
         .prepare("SELECT * FROM analysis_results WHERE session_id = ? AND type = ?")
         .all("sready", "readiness") as any[];
       expect(rows).toHaveLength(1);

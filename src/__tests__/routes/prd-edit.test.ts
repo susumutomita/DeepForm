@@ -6,7 +6,7 @@ vi.mock("@hono/node-server/serve-static", () => ({
 }));
 
 // node:sqlite でテスト用 DB を作成
-vi.mock("../../db.ts", async () => {
+vi.mock("../../db/index.ts", async () => {
   const { createTestDb } = await import("../helpers/test-db.ts");
   return { db: createTestDb() };
 });
@@ -18,13 +18,15 @@ vi.mock("../../llm.ts", () => ({
 }));
 
 import { app } from "../../app.ts";
-import { db } from "../../db.ts";
 import { callClaude, extractText } from "../../llm.ts";
+import { getRawDb } from "../helpers/test-db.ts";
+
+const rawDb = getRawDb();
 
 // ---------------------------------------------------------------------------
 // Auth helpers
 // ---------------------------------------------------------------------------
-const TEST_USER_ID = "test-user-001";
+const _TEST_USER_ID = "test-user-001";
 const TEST_EXE_USER_ID = "exe-test-001";
 const TEST_EMAIL = "testuser@example.com";
 const OTHER_EXE_USER_ID = "exe-test-002";
@@ -50,11 +52,11 @@ function setupUserAndSession(): { userId: string; sessionId: string } {
   const userId = `usr-${Date.now()}`;
   const sessionId = `sess-${Date.now()}`;
 
-  (db.prepare("INSERT INTO users (id, exe_user_id, email, plan) VALUES (?, ?, ?, ?)") as any).run(
+  (rawDb.prepare("INSERT INTO users (id, exe_user_id, email, plan) VALUES (?, ?, ?, ?)") as any).run(
     ...([userId, TEST_EXE_USER_ID, TEST_EMAIL, "pro"] as SQLInputValue[]),
   );
 
-  (db.prepare("INSERT INTO sessions (id, theme, status, mode, user_id) VALUES (?, ?, ?, ?, ?)") as any).run(
+  (rawDb.prepare("INSERT INTO sessions (id, theme, status, mode, user_id) VALUES (?, ?, ?, ?, ?)") as any).run(
     ...([sessionId, "テスト課題", "prd_generated", "self", userId] as SQLInputValue[]),
   );
 
@@ -85,7 +87,7 @@ function setupUserAndSession(): { userId: string; sessionId: string } {
     },
   });
 
-  (db.prepare("INSERT INTO analysis_results (session_id, type, data) VALUES (?, ?, ?)") as any).run(
+  (rawDb.prepare("INSERT INTO analysis_results (session_id, type, data) VALUES (?, ?, ?)") as any).run(
     ...([sessionId, "prd", prdData] as SQLInputValue[]),
   );
 
@@ -98,10 +100,10 @@ function setupUserAndSession(): { userId: string; sessionId: string } {
 
 beforeEach(() => {
   // Clear all tables
-  (db.prepare("DELETE FROM analysis_results") as any).run();
-  (db.prepare("DELETE FROM messages") as any).run();
-  (db.prepare("DELETE FROM sessions") as any).run();
-  (db.prepare("DELETE FROM users") as any).run();
+  (rawDb.prepare("DELETE FROM analysis_results") as any).run();
+  (rawDb.prepare("DELETE FROM messages") as any).run();
+  (rawDb.prepare("DELETE FROM sessions") as any).run();
+  (rawDb.prepare("DELETE FROM users") as any).run();
   vi.clearAllMocks();
 });
 
@@ -150,7 +152,7 @@ describe("POST /api/sessions/:id/prd/suggest", () => {
     const { sessionId } = setupUserAndSession();
 
     // Create other user
-    (db.prepare("INSERT INTO users (id, exe_user_id, email, plan) VALUES (?, ?, ?, ?)") as any).run(
+    (rawDb.prepare("INSERT INTO users (id, exe_user_id, email, plan) VALUES (?, ?, ?, ?)") as any).run(
       ...(["other-user", OTHER_EXE_USER_ID, OTHER_EMAIL, "pro"] as SQLInputValue[]),
     );
 
@@ -245,7 +247,7 @@ describe("POST /api/sessions/:id/prd/apply", () => {
     expect(data.updatedText).toBe("PDFレポート生成が5秒以内に完了");
 
     // Verify DB was updated
-    const prdRow = (db.prepare("SELECT data FROM analysis_results WHERE session_id = ? AND type = ?") as any).get(
+    const prdRow = (rawDb.prepare("SELECT data FROM analysis_results WHERE session_id = ? AND type = ?") as any).get(
       sessionId,
       "prd",
     ) as { data: string };
@@ -396,7 +398,7 @@ describe("POST /api/sessions/:id/prd/apply", () => {
       }),
     });
 
-    const prdRow = (db.prepare("SELECT data FROM analysis_results WHERE session_id = ? AND type = ?") as any).get(
+    const prdRow = (rawDb.prepare("SELECT data FROM analysis_results WHERE session_id = ? AND type = ?") as any).get(
       sessionId,
       "prd",
     ) as { data: string };
@@ -440,7 +442,7 @@ describe("POST /api/sessions/:id/prd/apply", () => {
     expect(data2.updatedText).toBe("PDFレポート生成が3秒以内に完了");
 
     // Verify DB reflects latest edit
-    const prdRow = (db.prepare("SELECT data FROM analysis_results WHERE session_id = ? AND type = ?") as any).get(
+    const prdRow = (rawDb.prepare("SELECT data FROM analysis_results WHERE session_id = ? AND type = ?") as any).get(
       sessionId,
       "prd",
     ) as { data: string };

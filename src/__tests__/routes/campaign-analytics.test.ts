@@ -6,7 +6,7 @@ vi.mock("@hono/node-server/serve-static", () => ({
 }));
 
 // node:sqlite でテスト用 DB を作成（ネイティブバイナリ不要）
-vi.mock("../../db.ts", async () => {
+vi.mock("../../db/index.ts", async () => {
   const { createTestDb } = await import("../helpers/test-db.ts");
   return { db: createTestDb() };
 });
@@ -20,8 +20,10 @@ vi.mock("../../llm.ts", () => ({
 }));
 
 import { app } from "../../app.ts";
-import { db } from "../../db.ts";
 import { callClaude, extractText } from "../../llm.ts";
+import { getRawDb } from "../helpers/test-db.ts";
+
+const rawDb = getRawDb();
 
 // ---------------------------------------------------------------------------
 // Auth helpers
@@ -52,38 +54,30 @@ type SQLInputValue = null | number | bigint | string;
 function insertSession(id: string, theme: string, userId: string, extra: Record<string, SQLInputValue> = {}): void {
   const cols = ["id", "theme", "user_id", ...Object.keys(extra)];
   const placeholders = cols.map(() => "?").join(", ");
-  db.prepare(`INSERT INTO sessions (${cols.join(", ")}) VALUES (${placeholders})`).run(
-    id,
-    theme,
-    userId,
-    ...Object.values(extra),
-  );
+  rawDb
+    .prepare(`INSERT INTO sessions (${cols.join(", ")}) VALUES (${placeholders})`)
+    .run(id, theme, userId, ...Object.values(extra));
 }
 
 function insertCampaign(id: string, theme: string, ownerSessionId: string, shareToken: string): void {
-  db.prepare("INSERT INTO campaigns (id, theme, owner_session_id, share_token) VALUES (?, ?, ?, ?)").run(
-    id,
-    theme,
-    ownerSessionId,
-    shareToken,
-  );
+  rawDb
+    .prepare("INSERT INTO campaigns (id, theme, owner_session_id, share_token) VALUES (?, ?, ?, ?)")
+    .run(id, theme, ownerSessionId, shareToken);
 }
 
 function insertAnalysis(sessionId: string, type: string, data: unknown): void {
-  db.prepare("INSERT INTO analysis_results (session_id, type, data) VALUES (?, ?, ?)").run(
-    sessionId,
-    type,
-    JSON.stringify(data),
-  );
+  rawDb
+    .prepare("INSERT INTO analysis_results (session_id, type, data) VALUES (?, ?, ?)")
+    .run(sessionId, type, JSON.stringify(data));
 }
 
 /** Helper: clean all tables (SQLite DatabaseSync.exec — not child_process) */
 function cleanTables(): void {
-  db.prepare("DELETE FROM analysis_results").run();
-  db.prepare("DELETE FROM messages").run();
-  db.prepare("DELETE FROM campaigns").run();
-  db.prepare("DELETE FROM sessions").run();
-  db.prepare("DELETE FROM users").run();
+  rawDb.prepare("DELETE FROM analysis_results").run();
+  rawDb.prepare("DELETE FROM messages").run();
+  rawDb.prepare("DELETE FROM campaigns").run();
+  rawDb.prepare("DELETE FROM sessions").run();
+  rawDb.prepare("DELETE FROM users").run();
 }
 
 // ---------------------------------------------------------------------------
@@ -93,18 +87,12 @@ describe("キャンペーン分析 API", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     cleanTables();
-    db.prepare("INSERT INTO users (id, exe_user_id, email, display_name) VALUES (?, ?, ?, ?)").run(
-      TEST_USER_ID,
-      TEST_EXE_USER_ID,
-      TEST_EMAIL,
-      "testuser",
-    );
-    db.prepare("INSERT INTO users (id, exe_user_id, email, display_name) VALUES (?, ?, ?, ?)").run(
-      OTHER_USER_ID,
-      OTHER_EXE_USER_ID,
-      OTHER_EMAIL,
-      "otheruser",
-    );
+    rawDb
+      .prepare("INSERT INTO users (id, exe_user_id, email, display_name) VALUES (?, ?, ?, ?)")
+      .run(TEST_USER_ID, TEST_EXE_USER_ID, TEST_EMAIL, "testuser");
+    rawDb
+      .prepare("INSERT INTO users (id, exe_user_id, email, display_name) VALUES (?, ?, ?, ?)")
+      .run(OTHER_USER_ID, OTHER_EXE_USER_ID, OTHER_EMAIL, "otheruser");
   });
 
   // -------------------------------------------------------------------------
@@ -242,7 +230,7 @@ describe("キャンペーン分析 API", () => {
       expect(data.summary).toBe("テスト分析");
       expect(callClaude).toHaveBeenCalledOnce();
       // analysis_results に保存される
-      const row = db
+      const row = rawDb
         .prepare("SELECT * FROM analysis_results WHERE session_id = ? AND type = ?")
         .get("owner-session", "campaign_analytics") as any;
       expect(row).toBeDefined();
@@ -278,7 +266,7 @@ describe("キャンペーン分析 API", () => {
       });
       // Then: 上書きされる
       expect(res.status).toBe(200);
-      const rows = db
+      const rows = rawDb
         .prepare("SELECT * FROM analysis_results WHERE session_id = ? AND type = ?")
         .all("owner-session", "campaign_analytics") as any[];
       expect(rows).toHaveLength(1);

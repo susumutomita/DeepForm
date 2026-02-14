@@ -1,6 +1,7 @@
 import crypto from "node:crypto";
 import { createMiddleware } from "hono/factory";
-import { db } from "../db.ts";
+import { now } from "../db/helpers.ts";
+import { db } from "../db/index.ts";
 
 const STATIC_EXTENSIONS = /\.(js|css|png|jpg|jpeg|gif|svg|ico|woff|woff2|ttf|eot|map)$/;
 const API_PREFIX = /^\/api\//;
@@ -11,9 +12,9 @@ const DEDUP_WINDOW_MS = 5 * 60 * 1000; // 5 minutes
 
 // Cleanup old entries periodically
 setInterval(() => {
-  const now = Date.now();
-  for (const [key, ts] of recentHits) {
-    if (now - ts > DEDUP_WINDOW_MS) recentHits.delete(key);
+  const ts = Date.now();
+  for (const [key, hitTs] of recentHits) {
+    if (ts - hitTs > DEDUP_WINDOW_MS) recentHits.delete(key);
   }
 }, 60_000);
 
@@ -36,32 +37,33 @@ export const analyticsMiddleware = createMiddleware(async (c, next) => {
 
     // Dedup: skip if same fingerprint+path within 5 minutes
     const dedupKey = `${fingerprint}:${path}`;
-    const now = Date.now();
+    const ts = Date.now();
     const lastHit = recentHits.get(dedupKey);
-    if (lastHit && now - lastHit < DEDUP_WINDOW_MS) return;
-    recentHits.set(dedupKey, now);
+    if (lastHit && ts - lastHit < DEDUP_WINDOW_MS) return;
+    recentHits.set(dedupKey, ts);
 
     // Extract UTM parameters
     const utmSource = url.searchParams.get("utm_source") || null;
     const utmMedium = url.searchParams.get("utm_medium") || null;
     const utmCampaign = url.searchParams.get("utm_campaign") || null;
 
-    db.prepare(
-      `INSERT INTO page_views (path, method, status_code, referer, user_agent, ip_address, user_id, session_fingerprint, utm_source, utm_medium, utm_campaign, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))`,
-    ).run(
-      path,
-      c.req.method,
-      c.res.status,
-      referer,
-      ua,
-      ip,
-      user?.id || null,
-      fingerprint,
-      utmSource,
-      utmMedium,
-      utmCampaign,
-    );
+    await db
+      .insertInto("page_views")
+      .values({
+        path,
+        method: c.req.method,
+        status_code: c.res.status,
+        referer,
+        user_agent: ua,
+        ip_address: ip,
+        user_id: user?.id || null,
+        session_fingerprint: fingerprint,
+        utm_source: utmSource,
+        utm_medium: utmMedium,
+        utm_campaign: utmCampaign,
+        created_at: now(),
+      })
+      .execute();
   } catch (e) {
     console.error("Analytics error:", e);
   }

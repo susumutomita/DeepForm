@@ -2,7 +2,8 @@ import crypto from "node:crypto";
 import { Hono } from "hono";
 import { ZodError } from "zod";
 import { ANALYSIS_TYPE, SESSION_STATUS } from "../../constants.ts";
-import { db } from "../../db.ts";
+import { now } from "../../db/helpers.ts";
+import { db } from "../../db/index.ts";
 import { saveAnalysisResult } from "../../helpers/analysis-store.ts";
 import { formatZodError } from "../../helpers/format.ts";
 import { getOwnedCampaignById, getOwnedSession, isResponse } from "../../helpers/session-ownership.ts";
@@ -13,16 +14,18 @@ import { chatMessageSchema, feedbackSchema, respondentNameSchema } from "../../v
 export const campaignRoutes = new Hono<AppEnv>();
 
 // 17. POST /sessions/:id/campaign — Create campaign from session (owner only)
-campaignRoutes.post("/sessions/:id/campaign", (c) => {
+campaignRoutes.post("/sessions/:id/campaign", async (c) => {
   try {
-    const result = getOwnedSession(c);
+    const result = await getOwnedSession(c);
     if (isResponse(result)) return result;
     const session = result;
 
     // Check if campaign already exists for this session
-    const existing = db.prepare("SELECT * FROM campaigns WHERE owner_session_id = ?").get(session.id) as unknown as
-      | Campaign
-      | undefined;
+    const existing = (await db
+      .selectFrom("campaigns")
+      .selectAll()
+      .where("owner_session_id", "=", session.id)
+      .executeTakeFirst()) as unknown as Campaign | undefined;
     if (existing) {
       return c.json({
         campaignId: existing.id,
@@ -33,12 +36,15 @@ campaignRoutes.post("/sessions/:id/campaign", (c) => {
 
     const campaignId = crypto.randomUUID();
     const token = crypto.randomUUID();
-    db.prepare("INSERT INTO campaigns (id, theme, owner_session_id, share_token) VALUES (?, ?, ?, ?)").run(
-      campaignId,
-      session.theme,
-      session.id,
-      token,
-    );
+    await db
+      .insertInto("campaigns")
+      .values({
+        id: campaignId,
+        theme: session.theme,
+        owner_session_id: session.id,
+        share_token: token,
+      })
+      .execute();
 
     return c.json(
       {
@@ -55,21 +61,30 @@ campaignRoutes.post("/sessions/:id/campaign", (c) => {
 });
 
 // 18. GET /campaigns/:token — Get campaign info
-campaignRoutes.get("/campaigns/:token", (c) => {
+campaignRoutes.get("/campaigns/:token", async (c) => {
   try {
     const token = c.req.param("token");
-    const campaign = db.prepare("SELECT * FROM campaigns WHERE share_token = ?").get(token) as unknown as
-      | Campaign
-      | undefined;
+    const campaign = (await db
+      .selectFrom("campaigns")
+      .selectAll()
+      .where("share_token", "=", token)
+      .executeTakeFirst()) as unknown as Campaign | undefined;
     if (!campaign) return c.json({ error: "Campaign not found" }, 404);
 
-    const respondents = db
-      .prepare(`
-      SELECT s.id, s.respondent_name, s.status, s.created_at,
-        (SELECT COUNT(*) FROM messages WHERE session_id = s.id AND role = 'user') as message_count
-      FROM sessions s WHERE s.campaign_id = ? ORDER BY s.created_at DESC
-    `)
-      .all(campaign.id) as unknown as {
+    const respondents = (await db
+      .selectFrom("sessions as s")
+      .select(["s.id", "s.respondent_name", "s.status", "s.created_at"])
+      .select((eb) =>
+        eb
+          .selectFrom("messages")
+          .select((eb2) => eb2.fn.countAll().as("count"))
+          .whereRef("messages.session_id", "=", "s.id")
+          .where("messages.role", "=", "user")
+          .as("message_count"),
+      )
+      .where("s.campaign_id", "=", campaign.id)
+      .orderBy("s.created_at", "desc")
+      .execute()) as unknown as {
       id: string;
       respondent_name: string | null;
       status: string;
@@ -98,17 +113,26 @@ campaignRoutes.post("/campaigns/:token/join", async (c) => {
     const token = c.req.param("token");
     const body = await c.req.json();
     const { respondentName } = respondentNameSchema.parse(body);
-    const campaign = db.prepare("SELECT * FROM campaigns WHERE share_token = ?").get(token) as unknown as
-      | Campaign
-      | undefined;
+    const campaign = (await db
+      .selectFrom("campaigns")
+      .selectAll()
+      .where("share_token", "=", token)
+      .executeTakeFirst()) as unknown as Campaign | undefined;
     if (!campaign) return c.json({ error: "Campaign not found" }, 404);
 
     // Create a new session for this respondent
     const sessionId = crypto.randomUUID();
-    db.prepare(`
-      INSERT INTO sessions (id, theme, status, mode, respondent_name, campaign_id)
-      VALUES (?, ?, 'interviewing', 'campaign_respondent', ?, ?)
-    `).run(sessionId, campaign.theme, respondentName || null, campaign.id);
+    await db
+      .insertInto("sessions")
+      .values({
+        id: sessionId,
+        theme: campaign.theme,
+        status: "interviewing",
+        mode: "campaign_respondent",
+        respondent_name: respondentName || null,
+        campaign_id: campaign.id,
+      })
+      .execute();
 
     // Generate first interview question
     const systemPrompt = `あなたは熟練のデプスインタビュアーです。これからユーザーの課題テーマについて深掘りインタビューを開始します。
@@ -126,7 +150,7 @@ ${respondentName ? `回答者: ${respondentName}さん` : ""}
     );
     const reply = extractText(response);
 
-    db.prepare("INSERT INTO messages (session_id, role, content) VALUES (?, ?, ?)").run(sessionId, "assistant", reply);
+    await db.insertInto("messages").values({ session_id: sessionId, role: "assistant", content: reply }).execute();
 
     return c.json({ sessionId, reply, theme: campaign.theme }, 201);
   } catch (e) {
@@ -143,26 +167,34 @@ campaignRoutes.post("/campaigns/:token/sessions/:sessionId/chat", async (c) => {
     const sessionId = c.req.param("sessionId");
     const body = await c.req.json();
     const { message } = chatMessageSchema.parse(body);
-    const campaign = db.prepare("SELECT * FROM campaigns WHERE share_token = ?").get(token) as unknown as
-      | Campaign
-      | undefined;
+    const campaign = (await db
+      .selectFrom("campaigns")
+      .selectAll()
+      .where("share_token", "=", token)
+      .executeTakeFirst()) as unknown as Campaign | undefined;
     if (!campaign) return c.json({ error: "Campaign not found" }, 404);
 
-    const session = db
-      .prepare("SELECT * FROM sessions WHERE id = ? AND campaign_id = ?")
-      .get(sessionId, campaign.id) as unknown as Session | undefined;
+    const session = (await db
+      .selectFrom("sessions")
+      .selectAll()
+      .where("id", "=", sessionId)
+      .where("campaign_id", "=", campaign.id)
+      .executeTakeFirst()) as unknown as Session | undefined;
     if (!session) return c.json({ error: "Session not found" }, 404);
 
     if (session.status === SESSION_STATUS.RESPONDENT_DONE) {
       return c.json({ error: "このインタビューは既に完了しています" }, 400);
     }
 
-    db.prepare("INSERT INTO messages (session_id, role, content) VALUES (?, ?, ?)").run(session.id, "user", message);
-    db.prepare("UPDATE sessions SET updated_at = CURRENT_TIMESTAMP WHERE id = ?").run(session.id);
+    await db.insertInto("messages").values({ session_id: session.id, role: "user", content: message }).execute();
+    await db.updateTable("sessions").set({ updated_at: now() }).where("id", "=", session.id).execute();
 
-    const allMessages = db
-      .prepare("SELECT role, content FROM messages WHERE session_id = ? ORDER BY created_at")
-      .all(session.id) as unknown as { role: string; content: string }[];
+    const allMessages = (await db
+      .selectFrom("messages")
+      .select(["role", "content"])
+      .where("session_id", "=", session.id)
+      .orderBy("created_at")
+      .execute()) as unknown as { role: string; content: string }[];
     const chatMessages = allMessages.map((m) => ({ role: m.role as "user" | "assistant", content: m.content }));
     const turnCount = allMessages.filter((m) => m.role === "user").length;
 
@@ -184,7 +216,7 @@ ${turnCount >= 5 ? "十分な情報が集まりました。最後にまとめの
     const response = await callClaude(chatMessages, systemPrompt, 1024);
     const reply = extractText(response);
 
-    db.prepare("INSERT INTO messages (session_id, role, content) VALUES (?, ?, ?)").run(session.id, "assistant", reply);
+    await db.insertInto("messages").values({ session_id: session.id, role: "assistant", content: reply }).execute();
 
     const isComplete = reply.includes("[INTERVIEW_COMPLETE]") || turnCount >= 8;
     const cleanReply = reply.replace("[INTERVIEW_COMPLETE]", "").trim();
@@ -202,19 +234,27 @@ campaignRoutes.post("/campaigns/:token/sessions/:sessionId/complete", async (c) 
   try {
     const token = c.req.param("token");
     const sessionId = c.req.param("sessionId");
-    const campaign = db.prepare("SELECT * FROM campaigns WHERE share_token = ?").get(token) as unknown as
-      | Campaign
-      | undefined;
+    const campaign = (await db
+      .selectFrom("campaigns")
+      .selectAll()
+      .where("share_token", "=", token)
+      .executeTakeFirst()) as unknown as Campaign | undefined;
     if (!campaign) return c.json({ error: "Campaign not found" }, 404);
 
-    const session = db
-      .prepare("SELECT * FROM sessions WHERE id = ? AND campaign_id = ?")
-      .get(sessionId, campaign.id) as unknown as Session | undefined;
+    const session = (await db
+      .selectFrom("sessions")
+      .selectAll()
+      .where("id", "=", sessionId)
+      .where("campaign_id", "=", campaign.id)
+      .executeTakeFirst()) as unknown as Session | undefined;
     if (!session) return c.json({ error: "Session not found" }, 404);
 
-    const messages = db
-      .prepare("SELECT role, content FROM messages WHERE session_id = ? ORDER BY created_at")
-      .all(session.id) as unknown as { role: string; content: string }[];
+    const messages = (await db
+      .selectFrom("messages")
+      .select(["role", "content"])
+      .where("session_id", "=", session.id)
+      .orderBy("created_at")
+      .execute()) as unknown as { role: string; content: string }[];
     const transcript = messages
       .map((m) => `${m.role === "user" ? "回答者" : "インタビュアー"}: ${m.content}`)
       .join("\n\n");
@@ -254,13 +294,14 @@ severityは "high", "medium", "low" のいずれか。
       facts = { facts: [{ id: "F1", type: "fact", content: text, evidence: "", severity: "medium" }] };
     }
 
-    saveAnalysisResult(session.id, ANALYSIS_TYPE.FACTS, facts);
+    await saveAnalysisResult(session.id, ANALYSIS_TYPE.FACTS, facts);
 
-    db.prepare("UPDATE sessions SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?").run(
-      SESSION_STATUS.RESPONDENT_DONE,
-      session.id,
-    );
-    db.prepare("UPDATE campaigns SET updated_at = CURRENT_TIMESTAMP WHERE id = ?").run(campaign.id);
+    await db
+      .updateTable("sessions")
+      .set({ status: SESSION_STATUS.RESPONDENT_DONE, updated_at: now() })
+      .where("id", "=", session.id)
+      .execute();
+    await db.updateTable("campaigns").set({ updated_at: now() }).where("id", "=", campaign.id).execute();
 
     return c.json(facts);
   } catch (e) {
@@ -276,20 +317,26 @@ campaignRoutes.post("/campaigns/:token/sessions/:sessionId/feedback", async (c) 
     const sessionId = c.req.param("sessionId");
     const body = await c.req.json();
     const { feedback } = feedbackSchema.parse(body);
-    const campaign = db.prepare("SELECT * FROM campaigns WHERE share_token = ?").get(token) as unknown as
-      | Campaign
-      | undefined;
+    const campaign = (await db
+      .selectFrom("campaigns")
+      .selectAll()
+      .where("share_token", "=", token)
+      .executeTakeFirst()) as unknown as Campaign | undefined;
     if (!campaign) return c.json({ error: "Campaign not found" }, 404);
 
-    const session = db
-      .prepare("SELECT * FROM sessions WHERE id = ? AND campaign_id = ?")
-      .get(sessionId, campaign.id) as unknown as Session | undefined;
+    const session = (await db
+      .selectFrom("sessions")
+      .selectAll()
+      .where("id", "=", sessionId)
+      .where("campaign_id", "=", campaign.id)
+      .executeTakeFirst()) as unknown as Session | undefined;
     if (!session) return c.json({ error: "Session not found" }, 404);
 
-    db.prepare("UPDATE sessions SET respondent_feedback = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?").run(
-      feedback ?? null,
-      session.id,
-    );
+    await db
+      .updateTable("sessions")
+      .set({ respondent_feedback: feedback ?? null, updated_at: now() })
+      .where("id", "=", session.id)
+      .execute();
 
     return c.json({ ok: true });
   } catch (e) {
@@ -303,18 +350,23 @@ campaignRoutes.post("/campaigns/:token/sessions/:sessionId/feedback", async (c) 
 // Helper: build campaign analytics from facts
 // ---------------------------------------------------------------------------
 
-function buildCampaignAnalytics(campaignId: string): CampaignAnalytics {
-  const allSessions = db
-    .prepare("SELECT id, status FROM sessions WHERE campaign_id = ?")
-    .all(campaignId) as unknown as { id: string; status: string }[];
+async function buildCampaignAnalytics(campaignId: string): Promise<CampaignAnalytics> {
+  const allSessions = (await db
+    .selectFrom("sessions")
+    .select(["id", "status"])
+    .where("campaign_id", "=", campaignId)
+    .execute()) as unknown as { id: string; status: string }[];
 
   const completedSessions = allSessions.filter((s) => s.status === SESSION_STATUS.RESPONDENT_DONE);
 
   const allFacts: Array<{ type: string; content: string; severity: string }> = [];
   for (const s of completedSessions) {
-    const factsRow = db
-      .prepare("SELECT data FROM analysis_results WHERE session_id = ? AND type = ?")
-      .get(s.id, ANALYSIS_TYPE.FACTS) as unknown as { data: string } | undefined;
+    const factsRow = (await db
+      .selectFrom("analysis_results")
+      .select("data")
+      .where("session_id", "=", s.id)
+      .where("type", "=", ANALYSIS_TYPE.FACTS)
+      .executeTakeFirst()) as unknown as { data: string } | undefined;
     if (factsRow) {
       const parsed = JSON.parse(factsRow.data);
       const factList = (parsed.facts || parsed) as Array<Record<string, unknown>>;
@@ -407,13 +459,13 @@ function buildCampaignAnalytics(campaignId: string): CampaignAnalytics {
 // ---------------------------------------------------------------------------
 
 // 24. GET /campaigns/:id/analytics — Aggregate analytics (owner only)
-campaignRoutes.get("/campaigns/:id/analytics", (c) => {
+campaignRoutes.get("/campaigns/:id/analytics", async (c) => {
   try {
-    const result = getOwnedCampaignById(c);
+    const result = await getOwnedCampaignById(c);
     if (result instanceof Response) return result;
     const campaign = result;
 
-    const analytics = buildCampaignAnalytics(campaign.id);
+    const analytics = await buildCampaignAnalytics(campaign.id);
     return c.json(analytics);
   } catch (e) {
     console.error("Campaign analytics error:", e);
@@ -424,11 +476,11 @@ campaignRoutes.get("/campaigns/:id/analytics", (c) => {
 // 25. POST /campaigns/:id/analytics/generate — AI cross-analysis (owner only)
 campaignRoutes.post("/campaigns/:id/analytics/generate", async (c) => {
   try {
-    const result = getOwnedCampaignById(c);
+    const result = await getOwnedCampaignById(c);
     if (result instanceof Response) return result;
     const campaign = result;
 
-    const analytics = buildCampaignAnalytics(campaign.id);
+    const analytics = await buildCampaignAnalytics(campaign.id);
 
     if (analytics.completedSessions === 0) {
       return c.json({ error: "完了済みセッションがありません" }, 400);
@@ -493,7 +545,7 @@ campaignRoutes.post("/campaigns/:id/analytics/generate", async (c) => {
     // Save to analysis_results using campaign's owner_session_id
     // owner_session_id is guaranteed non-null here because getOwnedCampaignById checks it
     const sessionId = campaign.owner_session_id as string;
-    saveAnalysisResult(sessionId, ANALYSIS_TYPE.CAMPAIGN_ANALYTICS, analysisData);
+    await saveAnalysisResult(sessionId, ANALYSIS_TYPE.CAMPAIGN_ANALYTICS, analysisData);
 
     return c.json(analysisData);
   } catch (e) {
@@ -503,36 +555,45 @@ campaignRoutes.post("/campaigns/:id/analytics/generate", async (c) => {
 });
 
 // 26. GET /campaigns/:id/export — Export analytics as JSON (owner only)
-campaignRoutes.get("/campaigns/:id/export", (c) => {
+campaignRoutes.get("/campaigns/:id/export", async (c) => {
   try {
-    const result = getOwnedCampaignById(c);
+    const result = await getOwnedCampaignById(c);
     if (result instanceof Response) return result;
     const campaign = result;
 
-    const analytics = buildCampaignAnalytics(campaign.id);
+    const analytics = await buildCampaignAnalytics(campaign.id);
 
     // Include AI-generated analysis if available
     let aiAnalysis: unknown = null;
     if (campaign.owner_session_id) {
-      const aiRow = db
-        .prepare("SELECT data FROM analysis_results WHERE session_id = ? AND type = ?")
-        .get(campaign.owner_session_id, ANALYSIS_TYPE.CAMPAIGN_ANALYTICS) as unknown as { data: string } | undefined;
+      const aiRow = (await db
+        .selectFrom("analysis_results")
+        .select("data")
+        .where("session_id", "=", campaign.owner_session_id)
+        .where("type", "=", ANALYSIS_TYPE.CAMPAIGN_ANALYTICS)
+        .executeTakeFirst()) as unknown as { data: string } | undefined;
       if (aiRow) {
         aiAnalysis = JSON.parse(aiRow.data);
       }
     }
 
     // Collect respondent details
-    const respondents = db
-      .prepare(`
-      SELECT s.id, s.respondent_name, s.status, s.respondent_feedback, s.created_at,
-        ar.data as facts_data
-      FROM sessions s
-      LEFT JOIN analysis_results ar ON ar.session_id = s.id AND ar.type = 'facts'
-      WHERE s.campaign_id = ?
-      ORDER BY s.created_at
-    `)
-      .all(campaign.id) as unknown as {
+    const respondents = (await db
+      .selectFrom("sessions as s")
+      .leftJoin("analysis_results as ar", (join) =>
+        join.onRef("ar.session_id", "=", "s.id").on("ar.type", "=", "facts"),
+      )
+      .select([
+        "s.id",
+        "s.respondent_name",
+        "s.status",
+        "s.respondent_feedback",
+        "s.created_at",
+        "ar.data as facts_data",
+      ])
+      .where("s.campaign_id", "=", campaign.id)
+      .orderBy("s.created_at")
+      .execute()) as unknown as {
       id: string;
       respondent_name: string | null;
       status: string;
@@ -570,24 +631,26 @@ campaignRoutes.get("/campaigns/:id/export", (c) => {
 });
 
 // 23. GET /campaigns/:token/aggregate — Aggregate all respondent facts
-campaignRoutes.get("/campaigns/:token/aggregate", (c) => {
+campaignRoutes.get("/campaigns/:token/aggregate", async (c) => {
   try {
     const token = c.req.param("token");
-    const campaign = db.prepare("SELECT * FROM campaigns WHERE share_token = ?").get(token) as unknown as
-      | Campaign
-      | undefined;
+    const campaign = (await db
+      .selectFrom("campaigns")
+      .selectAll()
+      .where("share_token", "=", token)
+      .executeTakeFirst()) as unknown as Campaign | undefined;
     if (!campaign) return c.json({ error: "Campaign not found" }, 404);
 
-    const sessions = db
-      .prepare(`
-      SELECT s.id, s.respondent_name, s.status, s.respondent_feedback,
-        ar.data as facts_data
-      FROM sessions s
-      LEFT JOIN analysis_results ar ON ar.session_id = s.id AND ar.type = 'facts'
-      WHERE s.campaign_id = ? AND s.status = 'respondent_done'
-      ORDER BY s.created_at
-    `)
-      .all(campaign.id) as unknown as {
+    const sessions = (await db
+      .selectFrom("sessions as s")
+      .leftJoin("analysis_results as ar", (join) =>
+        join.onRef("ar.session_id", "=", "s.id").on("ar.type", "=", "facts"),
+      )
+      .select(["s.id", "s.respondent_name", "s.status", "s.respondent_feedback", "ar.data as facts_data"])
+      .where("s.campaign_id", "=", campaign.id)
+      .where("s.status", "=", "respondent_done")
+      .orderBy("s.created_at")
+      .execute()) as unknown as {
       id: string;
       respondent_name: string | null;
       status: string;

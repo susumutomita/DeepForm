@@ -13,7 +13,8 @@
 
 import { Hono } from "hono";
 import { ANALYSIS_TYPE, requiresProForStep, SESSION_STATUS } from "../../constants.ts";
-import { db } from "../../db.ts";
+import { now } from "../../db/helpers.ts";
+import { db } from "../../db/index.ts";
 import { saveAnalysisResult } from "../../helpers/analysis-store.ts";
 import { generatePRDMarkdown } from "../../helpers/format.ts";
 import { getOwnedSession, isResponse } from "../../helpers/session-ownership.ts";
@@ -56,7 +57,7 @@ const ANALYSIS_SYSTEM = `あなたは定性調査の分析エキスパートで�
 }
 
 ファクトのルール:
-- type: "fact"(事実), "pain"(困りごと), "frequency"(頻度), "workaround"(回避策)
+- type: "fact"（事実), "pain"（困りごと), "frequency"（頻度), "workaround"（回避策)
 - severity: "high", "medium", "low"
 - 抽象的な表現は避け、具体的な事実のみ抽出。最低5つ、最大15個
 
@@ -222,10 +223,13 @@ const SPEC_SYSTEM = `あなたはテックリードです。PRDからコーデ�
 // Helpers
 // ---------------------------------------------------------------------------
 
-function buildTranscript(sessionId: string): string {
-  const messages = db
-    .prepare("SELECT role, content FROM messages WHERE session_id = ? ORDER BY created_at")
-    .all(sessionId) as unknown as { role: string; content: string }[];
+async function buildTranscript(sessionId: string): Promise<string> {
+  const messages = await db
+    .selectFrom("messages")
+    .select(["role", "content"])
+    .where("session_id", "=", sessionId)
+    .orderBy("created_at")
+    .execute();
   return messages.map((m) => `${m.role === "user" ? "回答者" : "インタビュアー"}: ${m.content}`).join("\n\n");
 }
 
@@ -247,7 +251,7 @@ function parseJSON(text: string, fallback: unknown): unknown {
 
 pipelineRoutes.post("/sessions/:id/pipeline", async (c) => {
   // Ownership check
-  const result = getOwnedSession(c);
+  const result = await getOwnedSession(c);
   if (isResponse(result)) return result;
   const session = result as Session;
   const id = session.id;
@@ -260,7 +264,7 @@ pipelineRoutes.post("/sessions/:id/pipeline", async (c) => {
       if (!user) {
         return c.json({ error: "Login required for this feature", upgrade: true }, 401);
       }
-      const row = db.prepare("SELECT plan FROM users WHERE id = ?").get(user.id) as { plan: string } | undefined;
+      const row = await db.selectFrom("users").select("plan").where("id", "=", user.id).executeTakeFirst();
       if (row?.plan !== "pro") {
         return c.json(
           { error: "Pro plan required", upgrade: true, upgradeUrl: `${PAYMENT_LINK}?client_reference_id=${user.id}` },
@@ -282,14 +286,13 @@ pipelineRoutes.post("/sessions/:id/pipeline", async (c) => {
       try {
         // --- Stage 1: Analysis (facts + hypotheses in one call) ---
         send("stage", { stage: "facts", status: "running" });
-        const transcript = buildTranscript(id);
+        const transcript = await buildTranscript(id);
         const analysisResp = await callClaude(
           [{ role: "user", content: `以下のインタビュー記録を分析してください：\n\n${transcript}` }],
           ANALYSIS_SYSTEM,
           4096,
         );
         const analysisText = extractText(analysisResp);
-        // biome-ignore lint/suspicious/noExplicitAny: dynamic LLM JSON output
         const analysis = parseJSON(analysisText, {
           facts: [{ id: "F1", type: "fact", content: analysisText, evidence: "", severity: "medium" }],
           hypotheses: [
@@ -302,25 +305,28 @@ pipelineRoutes.post("/sessions/:id/pipeline", async (c) => {
               unverifiedPoints: [],
             },
           ],
+          // biome-ignore lint/suspicious/noExplicitAny: dynamic LLM JSON output
         }) as any;
 
         const facts = { facts: analysis.facts || [] };
         const hypotheses = { hypotheses: analysis.hypotheses || [] };
 
         // Save facts
-        saveAnalysisResult(id, ANALYSIS_TYPE.FACTS, facts);
-        db.prepare("UPDATE sessions SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?").run(
-          SESSION_STATUS.ANALYZED,
-          id,
-        );
+        await saveAnalysisResult(id, ANALYSIS_TYPE.FACTS, facts);
+        await db
+          .updateTable("sessions")
+          .set({ status: SESSION_STATUS.ANALYZED, updated_at: now() })
+          .where("id", "=", id)
+          .execute();
         send("stage", { stage: "facts", status: "done", data: facts });
 
         // Save hypotheses
-        saveAnalysisResult(id, ANALYSIS_TYPE.HYPOTHESES, hypotheses);
-        db.prepare("UPDATE sessions SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?").run(
-          SESSION_STATUS.HYPOTHESIZED,
-          id,
-        );
+        await saveAnalysisResult(id, ANALYSIS_TYPE.HYPOTHESES, hypotheses);
+        await db
+          .updateTable("sessions")
+          .set({ status: SESSION_STATUS.HYPOTHESIZED, updated_at: now() })
+          .where("id", "=", id)
+          .execute();
         send("stage", { stage: "hypotheses", status: "done", data: hypotheses });
 
         // --- Stage 2: PRD ---
@@ -349,11 +355,12 @@ pipelineRoutes.post("/sessions/:id/pipeline", async (c) => {
           },
         }) as any;
 
-        saveAnalysisResult(id, ANALYSIS_TYPE.PRD, prd);
-        db.prepare("UPDATE sessions SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?").run(
-          SESSION_STATUS.PRD_GENERATED,
-          id,
-        );
+        await saveAnalysisResult(id, ANALYSIS_TYPE.PRD, prd);
+        await db
+          .updateTable("sessions")
+          .set({ status: SESSION_STATUS.PRD_GENERATED, updated_at: now() })
+          .where("id", "=", id)
+          .execute();
         send("stage", { stage: "prd", status: "done", data: prd });
 
         // --- Stage 3: Spec ---
@@ -381,11 +388,12 @@ pipelineRoutes.post("/sessions/:id/pipeline", async (c) => {
           spec = { spec: { ...spec, prdMarkdown } };
         }
 
-        saveAnalysisResult(id, ANALYSIS_TYPE.SPEC, spec);
-        db.prepare("UPDATE sessions SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?").run(
-          SESSION_STATUS.SPEC_GENERATED,
-          id,
-        );
+        await saveAnalysisResult(id, ANALYSIS_TYPE.SPEC, spec);
+        await db
+          .updateTable("sessions")
+          .set({ status: SESSION_STATUS.SPEC_GENERATED, updated_at: now() })
+          .where("id", "=", id)
+          .execute();
         send("stage", { stage: "spec", status: "done", data: spec });
 
         send("done", {});

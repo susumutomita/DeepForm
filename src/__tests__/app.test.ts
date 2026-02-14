@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
 // node:sqlite でテスト用 DB を作成（ネイティブバイナリ不要）
-vi.mock("../db.ts", async () => {
+vi.mock("../db/index.ts", async () => {
   const { createTestDb } = await import("./helpers/test-db.ts");
   return { db: createTestDb() };
 });

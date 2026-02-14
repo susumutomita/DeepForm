@@ -1,6 +1,8 @@
 import { Hono } from "hono";
+import { sql } from "kysely";
 import { ADMIN_EMAILS } from "../constants.ts";
-import { db } from "../db.ts";
+import { daysAgo } from "../db/helpers.ts";
+import { db } from "../db/index.ts";
 import type { AppEnv } from "../types.ts";
 
 export const analyticsRoutes = new Hono<AppEnv>();
@@ -15,70 +17,96 @@ analyticsRoutes.use("/*", async (c, next) => {
 });
 
 // Overview stats
-analyticsRoutes.get("/stats", (c) => {
+analyticsRoutes.get("/stats", async (c) => {
   const period = c.req.query("period") || "7d";
   const days = period === "24h" ? 1 : period === "30d" ? 30 : 7;
 
-  const since = `datetime('now', '-${days} days')`;
+  const since = daysAgo(days);
 
-  const totalViews = db.prepare(`SELECT COUNT(*) as count FROM page_views WHERE created_at >= ${since}`).get() as {
-    count: number;
-  };
+  const totalViews = await db
+    .selectFrom("page_views")
+    .select((eb) => eb.fn.countAll().as("count"))
+    .where("created_at", ">=", since)
+    .executeTakeFirstOrThrow();
 
-  const uniqueVisitors = db
-    .prepare(`SELECT COUNT(DISTINCT session_fingerprint) as count FROM page_views WHERE created_at >= ${since}`)
-    .get() as { count: number };
+  const uniqueVisitors = await db
+    .selectFrom("page_views")
+    .select((eb) => eb.fn.count(eb.ref("session_fingerprint")).distinct().as("count"))
+    .where("created_at", ">=", since)
+    .executeTakeFirstOrThrow();
 
-  const uniqueUsers = db
-    .prepare(
-      `SELECT COUNT(DISTINCT user_id) as count FROM page_views WHERE user_id IS NOT NULL AND created_at >= ${since}`,
-    )
-    .get() as { count: number };
+  const uniqueUsers = await db
+    .selectFrom("page_views")
+    .select((eb) => eb.fn.count(eb.ref("user_id")).distinct().as("count"))
+    .where("user_id", "is not", null)
+    .where("created_at", ">=", since)
+    .executeTakeFirstOrThrow();
 
   // Views by day
-  const viewsByDay = db
-    .prepare(
-      `SELECT date(created_at) as day, COUNT(*) as views, COUNT(DISTINCT session_fingerprint) as visitors
-     FROM page_views WHERE created_at >= ${since}
-     GROUP BY day ORDER BY day`,
-    )
-    .all();
+  const viewsByDay = await db
+    .selectFrom("page_views")
+    .select([sql<string>`date(created_at)`.as("day")])
+    .select((eb) => [
+      eb.fn.countAll().as("views"),
+      eb.fn.count(eb.ref("session_fingerprint")).distinct().as("visitors"),
+    ])
+    .where("created_at", ">=", since)
+    .groupBy(sql`date(created_at)`)
+    .orderBy(sql`date(created_at)`)
+    .execute();
 
   // Top pages
-  const topPages = db
-    .prepare(
-      `SELECT path, COUNT(*) as views, COUNT(DISTINCT session_fingerprint) as visitors
-     FROM page_views WHERE created_at >= ${since}
-     GROUP BY path ORDER BY views DESC LIMIT 20`,
-    )
-    .all();
+  const topPages = await db
+    .selectFrom("page_views")
+    .select(["path"])
+    .select((eb) => [
+      eb.fn.countAll().as("views"),
+      eb.fn.count(eb.ref("session_fingerprint")).distinct().as("visitors"),
+    ])
+    .where("created_at", ">=", since)
+    .groupBy("path")
+    .orderBy("views", "desc")
+    .limit(20)
+    .execute();
 
   // Top referers
-  const topReferers = db
-    .prepare(
-      `SELECT referer, COUNT(*) as count
-     FROM page_views WHERE referer IS NOT NULL AND referer != '' AND created_at >= ${since}
-     GROUP BY referer ORDER BY count DESC LIMIT 20`,
-    )
-    .all();
+  const topReferers = await db
+    .selectFrom("page_views")
+    .select(["referer"])
+    .select((eb) => eb.fn.countAll().as("count"))
+    .where("referer", "is not", null)
+    .where("referer", "!=", "")
+    .where("created_at", ">=", since)
+    .groupBy("referer")
+    .orderBy("count", "desc")
+    .limit(20)
+    .execute();
 
   // UTM sources
-  const utmSources = db
-    .prepare(
-      `SELECT utm_source, utm_medium, utm_campaign, COUNT(*) as views, COUNT(DISTINCT session_fingerprint) as visitors
-     FROM page_views WHERE utm_source IS NOT NULL AND created_at >= ${since}
-     GROUP BY utm_source, utm_medium, utm_campaign ORDER BY visitors DESC LIMIT 20`,
-    )
-    .all();
+  const utmSources = await db
+    .selectFrom("page_views")
+    .select(["utm_source", "utm_medium", "utm_campaign"])
+    .select((eb) => [
+      eb.fn.countAll().as("views"),
+      eb.fn.count(eb.ref("session_fingerprint")).distinct().as("visitors"),
+    ])
+    .where("utm_source", "is not", null)
+    .where("created_at", ">=", since)
+    .groupBy(["utm_source", "utm_medium", "utm_campaign"])
+    .orderBy("visitors", "desc")
+    .limit(20)
+    .execute();
 
   // Recent visitors (unique fingerprints)
-  const recentVisitors = db
-    .prepare(
-      `SELECT session_fingerprint, ip_address, user_agent, user_id, MAX(created_at) as last_seen, COUNT(*) as page_views
-     FROM page_views WHERE created_at >= ${since}
-     GROUP BY session_fingerprint ORDER BY last_seen DESC LIMIT 50`,
-    )
-    .all();
+  const recentVisitors = await db
+    .selectFrom("page_views")
+    .select(["session_fingerprint", "ip_address", "user_agent", "user_id"])
+    .select((eb) => [eb.fn.max("created_at").as("last_seen"), eb.fn.countAll().as("page_views")])
+    .where("created_at", ">=", since)
+    .groupBy("session_fingerprint")
+    .orderBy("last_seen", "desc")
+    .limit(50)
+    .execute();
 
   return c.json({
     period,
@@ -94,21 +122,24 @@ analyticsRoutes.get("/stats", (c) => {
 });
 
 // Raw access log
-analyticsRoutes.get("/log", (c) => {
+analyticsRoutes.get("/log", async (c) => {
   const limit = Math.min(Number(c.req.query("limit")) || 100, 500);
   const offset = Number(c.req.query("offset")) || 0;
 
-  const rows = db
-    .prepare(
-      `SELECT pv.*, u.display_name, u.email as user_email
-     FROM page_views pv
-     LEFT JOIN users u ON pv.user_id = u.id
-     ORDER BY pv.created_at DESC
-     LIMIT ? OFFSET ?`,
-    )
-    .all(limit, offset);
+  const rows = await db
+    .selectFrom("page_views as pv")
+    .leftJoin("users as u", "pv.user_id", "u.id")
+    .selectAll("pv")
+    .select(["u.display_name", "u.email as user_email"])
+    .orderBy("pv.created_at", "desc")
+    .limit(limit)
+    .offset(offset)
+    .execute();
 
-  const total = db.prepare("SELECT COUNT(*) as count FROM page_views").get() as { count: number };
+  const total = await db
+    .selectFrom("page_views")
+    .select((eb) => eb.fn.countAll().as("count"))
+    .executeTakeFirstOrThrow();
 
   return c.json({ rows, total: total.count, limit, offset });
 });

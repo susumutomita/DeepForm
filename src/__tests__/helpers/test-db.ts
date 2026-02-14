@@ -1,9 +1,14 @@
 /**
  * テスト用データベースヘルパー
- * node:sqlite の DatabaseSync を使い、better-sqlite3 互換の API を提供する。
- * ネイティブバイナリ不要で動作する。
+ * better-sqlite3 + Kysely でインメモリテストDBを作成する。
+ * - createTestDb() → Kysely<Database> インスタンス（vi.mockで使用）
+ * - getRawDb() → better-sqlite3 Database インスタンス（テストのsetup/assertion用）
  */
-import { DatabaseSync } from "node:sqlite";
+
+import type { Database as RawDatabase } from "better-sqlite3";
+import Database from "better-sqlite3";
+import { Kysely, SqliteDialect } from "kysely";
+import type { Database as DB } from "../../db/types.ts";
 
 export const FULL_SCHEMA = `
   CREATE TABLE IF NOT EXISTS users (
@@ -38,7 +43,9 @@ export const FULL_SCHEMA = `
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     campaign_id TEXT,
     user_id TEXT REFERENCES users(id),
-    is_public INTEGER DEFAULT 0
+    is_public INTEGER DEFAULT 0,
+    interview_style TEXT DEFAULT 'depth',
+    deploy_token TEXT
   );
   CREATE TABLE IF NOT EXISTS messages (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -54,7 +61,8 @@ export const FULL_SCHEMA = `
     type TEXT NOT NULL,
     data TEXT NOT NULL,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (session_id) REFERENCES sessions(id)
+    FOREIGN KEY (session_id) REFERENCES sessions(id),
+    UNIQUE(session_id, type)
   );
   CREATE TABLE IF NOT EXISTS campaigns (
     id TEXT PRIMARY KEY,
@@ -74,11 +82,39 @@ export const FULL_SCHEMA = `
     ip_address TEXT,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
   );
+  CREATE TABLE IF NOT EXISTS page_views (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    path TEXT NOT NULL,
+    method TEXT DEFAULT 'GET',
+    status_code INTEGER,
+    referer TEXT,
+    user_agent TEXT,
+    ip_address TEXT,
+    country TEXT,
+    user_id TEXT,
+    session_fingerprint TEXT,
+    utm_source TEXT,
+    utm_medium TEXT,
+    utm_campaign TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  );
 `;
 
-export function createTestDb() {
-  const db = new DatabaseSync(":memory:");
-  db.exec("PRAGMA foreign_keys = ON");
-  db.exec(FULL_SCHEMA);
-  return db;
+let _rawDb: RawDatabase | null = null;
+
+export function createTestDb(): Kysely<DB> {
+  const rawDb = new Database(":memory:");
+  rawDb.pragma("foreign_keys = ON");
+  rawDb.exec(FULL_SCHEMA);
+  _rawDb = rawDb;
+
+  return new Kysely<DB>({
+    dialect: new SqliteDialect({ database: rawDb }),
+  });
+}
+
+/** テストのsetup/cleanup/assertionで直接SQLを実行するためのraw DB */
+export function getRawDb(): RawDatabase {
+  if (!_rawDb) throw new Error("createTestDb() must be called first");
+  return _rawDb;
 }

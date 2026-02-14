@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import { ZodError } from "zod";
-import { db } from "../db.ts";
+import { db } from "../db/index.ts";
 import type { AppEnv } from "../types.ts";
 import { appFeedbackSchema } from "../validation.ts";
 
@@ -45,13 +45,10 @@ feedbackRoutes.post("/", async (c) => {
     const user = c.get("user");
     const userId = user?.id ?? null;
 
-    db.prepare("INSERT INTO feedback (user_id, type, message, page, ip_address) VALUES (?, ?, ?, ?, ?)").run(
-      userId,
-      type,
-      message,
-      page ?? null,
-      ip,
-    );
+    await db
+      .insertInto("feedback")
+      .values({ user_id: userId, type, message, page: page ?? null, ip_address: ip })
+      .execute();
 
     return c.json({ ok: true }, 201);
   } catch (e) {

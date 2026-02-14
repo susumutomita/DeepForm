@@ -1,15 +1,17 @@
-import crypto from "node:crypto";
 import { Hono } from "hono";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 // node:sqlite でテスト用 DB を作成（ネイティブバイナリ不要）
-vi.mock("../../db.ts", async () => {
+vi.mock("../../db/index.ts", async () => {
   const { createTestDb } = await import("../helpers/test-db.ts");
   return { db: createTestDb() };
 });
 
-import { db } from "../../db.ts";
+import { db } from "../../db/index.ts";
 import { authMiddleware, requireAuth } from "../../middleware/auth.ts";
+import { getRawDb } from "../helpers/test-db.ts";
+
+const rawDb = getRawDb();
 
 const TEST_EXE_USER_ID = "exe-user-99999";
 const TEST_EMAIL = "testuser@example.com";
@@ -23,8 +25,8 @@ function authHeaders(exeUserId: string = TEST_EXE_USER_ID, email: string = TEST_
 
 describe("認証ミドルウェア", () => {
   beforeEach(() => {
-    db.exec("DELETE FROM auth_sessions");
-    db.exec("DELETE FROM users");
+    rawDb.exec("DELETE FROM auth_sessions");
+    rawDb.exec("DELETE FROM users");
   });
 
   afterEach(() => {
@@ -124,7 +126,7 @@ describe("認証ミドルウェア", () => {
       // Then: 別のユーザーが作成され、合計2人になる
       const data = (await res.json()) as any;
       expect(data.user.exe_user_id).toBe("other-exe-user");
-      const count = db.prepare("SELECT COUNT(*) as cnt FROM users").get() as any;
+      const count = rawDb.prepare("SELECT COUNT(*) as cnt FROM users").get() as any;
       expect(count.cnt).toBe(2);
     });
 
@@ -177,24 +179,20 @@ describe("認証ミドルウェア", () => {
 
     describe("upsert エラーハンドリング", () => {
       it("DB エラー発生時にユーザーを null に設定しエラーをログ出力すべき", async () => {
-        // Given: db.prepare が例外をスローするように設定する
         const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
-        const originalPrepare = db.prepare.bind(db);
-        vi.spyOn(db, "prepare").mockImplementation(() => {
+        const originalSelectFrom = db.selectFrom.bind(db);
+        vi.spyOn(db, "selectFrom").mockImplementation(() => {
           throw new Error("DB error");
         });
 
-        // When: 有効なヘッダー付きでリクエストを送信する
         const res = await app.request("/test", { headers: authHeaders() });
 
-        // Then: user は null になり、エラーがログ出力される
         expect(res.status).toBe(200);
         const data = (await res.json()) as any;
         expect(data.user).toBeNull();
         expect(consoleSpy).toHaveBeenCalledWith("Auth upsert error:", expect.any(Error));
 
-        // クリーンアップ
-        vi.mocked(db.prepare).mockImplementation(originalPrepare);
+        vi.mocked(db.selectFrom).mockImplementation(originalSelectFrom);
       });
     });
   });

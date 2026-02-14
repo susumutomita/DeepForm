@@ -1,3 +1,5 @@
+export type AppEnv = { Variables: { user: User | null } };
+
 export interface Session {
   id: string;
   theme: string;

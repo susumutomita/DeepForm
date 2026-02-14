@@ -1,10 +1,7 @@
 import { Hono } from "hono";
+import { ADMIN_EMAILS } from "../constants.ts";
 import { db } from "../db.ts";
-import type { User } from "../types.ts";
-
-type AppEnv = { Variables: { user: User | null } };
-
-const ADMIN_EMAILS = ["oyster880@gmail.com"];
+import type { AppEnv } from "../types.ts";
 
 export const analyticsRoutes = new Hono<AppEnv>();
 

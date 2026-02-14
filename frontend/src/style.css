@@ -2741,3 +2741,28 @@ a:hover { color: var(--primary-hover); }
   0%, 100% { opacity: 1; }
   50% { opacity: 0.6; }
 }
+
+/* Analysis start button in chat */
+.analysis-start-area {
+  display: flex;
+  justify-content: center;
+  padding: 1rem 0;
+}
+.analysis-start-card {
+  text-align: center;
+  background: var(--bg-card);
+  border: 2px solid var(--primary);
+  border-radius: 12px;
+  padding: 1.25rem 1.5rem;
+  max-width: 360px;
+}
+.analysis-start-card p {
+  margin: 0 0 0.75rem;
+  color: var(--text-dim);
+  font-size: 0.9rem;
+}
+.analysis-start-btn {
+  width: 100%;
+  font-size: 1rem;
+  padding: 12px 24px;
+}

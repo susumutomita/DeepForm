@@ -179,9 +179,8 @@ export async function sendMessage(choiceText?: string): Promise<void> {
         }
         finalizeStreamingBubble(bubble);
         if (data.readyForAnalysis || (data.turnCount && data.turnCount >= 8)) {
-          // Auto-start pipeline — no button click needed
-          doRunFullPipeline();
-          return;
+          // Show the "start analysis" button — user decides when to proceed
+          showAnalysisButton();
         }
         if (data.choices?.length) {
           showChoiceButtons('chat-container', data.choices);
@@ -199,6 +198,30 @@ export async function sendMessage(choiceText?: string): Promise<void> {
     if (btnSend) btnSend.disabled = false;
     input?.focus();
   }
+}
+
+function showAnalysisButton(): void {
+  const container = document.getElementById('chat-container');
+  if (!container) return;
+  // Remove if already exists
+  container.querySelector('.analysis-start-area')?.remove();
+
+  const area = document.createElement('div');
+  area.className = 'analysis-start-area';
+  area.innerHTML = `
+    <div class="analysis-start-card">
+      <p>✅ 十分な情報が集まりました。続けて質問することもできます。</p>
+      <button class="btn btn-accent btn-lg analysis-start-btn">
+        📝 設計書を作成する
+      </button>
+    </div>
+  `;
+  area.querySelector('.analysis-start-btn')?.addEventListener('click', () => {
+    area.remove();
+    doRunFullPipeline();
+  });
+  container.appendChild(area);
+  container.scrollTop = container.scrollHeight;
 }
 
 function showChoiceButtons(containerId: string, choices: string[]): void {
@@ -541,7 +564,14 @@ CRITICAL RULES — read these before writing ANY code:
 
     const nameParam = encodeURIComponent(vmName);
     const encoded = encodeURIComponent(prompt);
-    window.open(`https://exe.dev/new?name=${nameParam}&prompt=${encoded}`, '_blank');
+    // Use link click instead of window.open to avoid mobile popup blockers
+    const a = document.createElement('a');
+    a.href = `https://exe.dev/new?name=${nameParam}&prompt=${encoded}`;
+    a.target = '_blank';
+    a.rel = 'noopener';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
   } catch (e: any) {
     showToast(e.message, true);
   }

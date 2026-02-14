@@ -88,7 +88,7 @@ severityは "high", "medium", "low" のいずれか。
     let facts: unknown;
     try {
       const jsonMatch = text.match(/\{[\s\S]*\}/);
-      facts = JSON.parse(jsonMatch![0]);
+      facts = JSON.parse(jsonMatch?.[0] as string);
     } catch {
       facts = { facts: [{ id: "F1", type: "fact", content: text, evidence: "", severity: "medium" }] };
     }
@@ -157,7 +157,7 @@ analysisRoutes.post("/sessions/:id/hypotheses", async (c) => {
     let hypotheses: unknown;
     try {
       const jsonMatch = text.match(/\{[\s\S]*\}/);
-      hypotheses = JSON.parse(jsonMatch![0]);
+      hypotheses = JSON.parse(jsonMatch?.[0] as string);
     } catch {
       hypotheses = {
         hypotheses: [
@@ -307,7 +307,7 @@ analysisRoutes.post("/sessions/:id/prd", async (c) => {
     let prd: any;
     try {
       const jsonMatch = text.match(/\{[\s\S]*\}/);
-      prd = JSON.parse(jsonMatch![0]);
+      prd = JSON.parse(jsonMatch?.[0] as string);
     } catch {
       prd = {
         prd: {
@@ -422,7 +422,7 @@ analysisRoutes.post("/sessions/:id/spec", async (c) => {
     let spec: any;
     try {
       const jsonMatch = text.match(/\{[\s\S]*\}/);
-      spec = JSON.parse(jsonMatch![0]);
+      spec = JSON.parse(jsonMatch?.[0] as string);
     } catch {
       spec = { spec: { raw: text } };
     }

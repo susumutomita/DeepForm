@@ -153,7 +153,8 @@ function buildTranscript(sessionId: string): string {
 function parseJSON(text: string, fallback: unknown): unknown {
   try {
     const jsonMatch = text.match(/\{[\s\S]*\}/);
-    return JSON.parse(jsonMatch?.[0]);
+    if (!jsonMatch) return fallback;
+    return JSON.parse(jsonMatch[0]);
   } catch {
     return fallback;
   }

@@ -27,7 +27,9 @@ crudRoutes.post("/sessions", async (c) => {
       };
       if (count >= MAX_SESSIONS_PER_USER) {
         return c.json(
-          { error: `セッション数の上限（${MAX_SESSIONS_PER_USER}件）に達しました。不要なセッションを削除してください。` },
+          {
+            error: `セッション数の上限（${MAX_SESSIONS_PER_USER}件）に達しました。不要なセッションを削除してください。`,
+          },
           429,
         );
       }

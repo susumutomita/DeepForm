@@ -11,8 +11,11 @@ function extractChoices(text: string): { text: string; choices: string[] } {
   const match = text.match(/\[CHOICES\]([\s\S]*?)\[\/CHOICES\]/);
   if (!match) return { text: text.trim(), choices: [] };
   const choicesText = match[1].trim();
-  const choices = choicesText.split('\n').map(c => c.trim()).filter(c => c.length > 0);
-  const cleanText = text.replace(/\[CHOICES\][\s\S]*?\[\/CHOICES\]/, '').trim();
+  const choices = choicesText
+    .split("\n")
+    .map((c) => c.trim())
+    .filter((c) => c.length > 0);
+  const cleanText = text.replace(/\[CHOICES\][\s\S]*?\[\/CHOICES\]/, "").trim();
   return { text: cleanText, choices };
 }
 
@@ -212,11 +215,20 @@ ${turnCount >= 5 ? "十分な情報が集まりました。最後にまとめの
     const rawReply = extractText(response);
     const { text: cleanReply, choices } = extractChoices(rawReply);
 
-    db.prepare("INSERT INTO messages (session_id, role, content) VALUES (?, ?, ?)").run(id, "assistant", cleanReply.replace("[READY_FOR_ANALYSIS]", "").trim());
+    db.prepare("INSERT INTO messages (session_id, role, content) VALUES (?, ?, ?)").run(
+      id,
+      "assistant",
+      cleanReply.replace("[READY_FOR_ANALYSIS]", "").trim(),
+    );
 
     const readyForAnalysis = rawReply.includes("[READY_FOR_ANALYSIS]") || turnCount >= 8;
 
-    return c.json({ reply: cleanReply.replace("[READY_FOR_ANALYSIS]", "").trim(), turnCount, readyForAnalysis, choices });
+    return c.json({
+      reply: cleanReply.replace("[READY_FOR_ANALYSIS]", "").trim(),
+      turnCount,
+      readyForAnalysis,
+      choices,
+    });
   } catch (e) {
     if (e instanceof ZodError) return c.json({ error: formatZodError(e) }, 400);
     console.error("Chat error:", e);

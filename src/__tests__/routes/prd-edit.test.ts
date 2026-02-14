@@ -50,8 +50,8 @@ function setupUserAndSession(): { userId: string; sessionId: string } {
   const userId = `usr-${Date.now()}`;
   const sessionId = `sess-${Date.now()}`;
 
-  (db.prepare("INSERT INTO users (id, exe_user_id, email) VALUES (?, ?, ?)") as any).run(
-    ...([userId, TEST_EXE_USER_ID, TEST_EMAIL] as SQLInputValue[]),
+  (db.prepare("INSERT INTO users (id, exe_user_id, email, plan) VALUES (?, ?, ?, ?)") as any).run(
+    ...([userId, TEST_EXE_USER_ID, TEST_EMAIL, "pro"] as SQLInputValue[]),
   );
 
   (db.prepare("INSERT INTO sessions (id, theme, status, mode, user_id) VALUES (?, ?, ?, ?, ?)") as any).run(
@@ -150,8 +150,8 @@ describe("POST /api/sessions/:id/prd/suggest", () => {
     const { sessionId } = setupUserAndSession();
 
     // Create other user
-    (db.prepare("INSERT INTO users (id, exe_user_id, email) VALUES (?, ?, ?)") as any).run(
-      ...(["other-user", OTHER_EXE_USER_ID, OTHER_EMAIL] as SQLInputValue[]),
+    (db.prepare("INSERT INTO users (id, exe_user_id, email, plan) VALUES (?, ?, ?, ?)") as any).run(
+      ...(["other-user", OTHER_EXE_USER_ID, OTHER_EMAIL, "pro"] as SQLInputValue[]),
     );
 
     const res = await otherUserRequest(`/api/sessions/${sessionId}/prd/suggest`, {

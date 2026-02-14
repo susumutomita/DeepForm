@@ -65,6 +65,9 @@ export interface User {
   github_id?: number | null;
   github_token?: string | null;
   avatar_url?: string | null;
+  plan?: "free" | "pro";
+  stripe_customer_id?: string | null;
+  plan_updated_at?: string | null;
   created_at: string;
   updated_at: string;
 }

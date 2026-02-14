@@ -274,11 +274,7 @@
                 </button>
               </div>
               <div class="chat-hint" data-i18n="interview.hint">Shift + Enter で送信　・　Enter で改行</div>
-              <div class="step-actions">
-                <button class="btn btn-accent" onclick="runAnalysis()" id="btn-analyze" disabled>
-                  <span data-i18n="interview.next">ファクト抽出に進む →</span>
-                </button>
-              </div>
+
             </div>
 
             <!-- Step: Facts -->
@@ -288,11 +284,6 @@
                 <p class="step-desc" data-i18n="facts.desc">インタビューから抽出された事実・困りごと・頻度・回避策</p>
               </div>
               <div id="facts-container" class="cards-grid"></div>
-              <div class="step-actions">
-                <button class="btn btn-accent" onclick="runHypotheses()" id="btn-hypotheses">
-                  <span data-i18n="facts.next">仮説生成に進む →</span>
-                </button>
-              </div>
             </div>
 
             <!-- Step: Hypotheses -->
@@ -302,11 +293,6 @@
                 <p class="step-desc" data-i18n="hypotheses.desc">ファクトに基づく仮説と、それが成り立たない可能性</p>
               </div>
               <div id="hypotheses-container"></div>
-              <div class="step-actions">
-                <button class="btn btn-accent" onclick="runPRD()" id="btn-prd">
-                  <span data-i18n="hypotheses.next">PRD生成に進む →</span>
-                </button>
-              </div>
             </div>
 
             <!-- Step: PRD -->
@@ -316,11 +302,6 @@
                 <p class="step-desc" data-i18n="prd.desc">MVPスコープに圧縮された、テスト可能な受け入れ基準付きのPRD</p>
               </div>
               <div id="prd-container"></div>
-              <div class="step-actions">
-                <button class="btn btn-accent" onclick="runSpec()" id="btn-spec">
-                  <span data-i18n="prd.next">実装仕様を生成 →</span>
-                </button>
-              </div>
             </div>
 
             <!-- Step: Spec -->

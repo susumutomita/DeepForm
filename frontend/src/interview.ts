@@ -9,7 +9,48 @@ import {
 } from './ui';
 import { initInlineEdit, destroyInlineEdit } from './inline-edit';
 
+const PAYMENT_LINK = 'https://buy.stripe.com/test_dRmcMXbrh3Q8ggx8DA48000';
+
 let currentSessionId: string | null = null;
+
+function showUpgradeModal(upgradeUrl: string): void {
+  const overlay = document.createElement('div');
+  overlay.className = 'completion-feedback-overlay';
+  overlay.onclick = () => overlay.remove();
+
+  const card = document.createElement('div');
+  card.className = 'completion-feedback-card';
+  card.onclick = (e) => e.stopPropagation();
+  card.innerHTML = `
+    <h3>🚀 Upgrade to Pro</h3>
+    <p style="margin: 1rem 0; color: var(--text-dim);">
+      PRD generation, spec export, and readiness checks are available on the Pro plan.
+    </p>
+    <div style="background: var(--bg-input); border-radius: 8px; padding: 1rem; margin: 1rem 0;">
+      <div style="font-size: 2rem; font-weight: 700;">$29<span style="font-size: 1rem; font-weight: 400; color: var(--text-dim);">/month</span></div>
+      <ul style="text-align: left; margin: 0.5rem 0; padding-left: 1.2rem; color: var(--text-dim); font-size: 0.9rem;">
+        <li>Unlimited sessions</li>
+        <li>PRD &amp; Spec generation</li>
+        <li>Deploy to exe.dev</li>
+        <li>Private sessions</li>
+        <li>Export (spec.json, PRD.md)</li>
+      </ul>
+    </div>
+    <a href="${upgradeUrl}" target="_blank" style="
+      display: block; background: var(--primary); color: white; text-decoration: none;
+      padding: 12px 24px; border-radius: 8px; font-weight: 600; text-align: center;
+      margin-bottom: 0.5rem;
+    ">Subscribe — $29/month</a>
+    <button class="upgrade-dismiss-btn" style="
+      background: none; border: none; color: var(--text-muted); cursor: pointer;
+      font-size: 0.9rem; padding: 8px;
+    ">Maybe later</button>
+  `;
+  overlay.appendChild(card);
+  document.body.appendChild(overlay);
+
+  card.querySelector('.upgrade-dismiss-btn')?.addEventListener('click', () => overlay.remove());
+}
 
 export function getCurrentSessionId(): string | null { return currentSessionId; }
 
@@ -137,9 +178,10 @@ export async function sendMessage(choiceText?: string): Promise<void> {
           bubble.textContent = bubble.textContent.replace(/\[CHOICES\][\s\S]*?\[\/CHOICES\]/, '').trim();
         }
         finalizeStreamingBubble(bubble);
-        if (data.readyForAnalysis || (data.turnCount && data.turnCount >= 3)) {
-          const btn = document.getElementById('btn-analyze') as HTMLButtonElement | null;
-          if (btn) btn.disabled = false;
+        if (data.readyForAnalysis || (data.turnCount && data.turnCount >= 8)) {
+          // Auto-start pipeline — no button click needed
+          doRunFullPipeline();
+          return;
         }
         if (data.choices?.length) {
           showChoiceButtons('chat-container', data.choices);
@@ -258,6 +300,11 @@ export async function doRunPRD(): Promise<void> {
     initInlineEdit();
     showToast(t('toast.prdDone'));
   } catch (e: any) {
+    hideLoading();
+    if (e.status === 402 || e.upgrade) {
+      showUpgradeModal(e.upgradeUrl || PAYMENT_LINK);
+      return;
+    }
     showToast(e.message, true);
   } finally {
     hideLoading();
@@ -274,6 +321,11 @@ export async function doRunSpec(): Promise<void> {
     activateStep('spec');
     showToast(t('toast.specDone'));
   } catch (e: any) {
+    hideLoading();
+    if (e.status === 402 || e.upgrade) {
+      showUpgradeModal(e.upgradeUrl || PAYMENT_LINK);
+      return;
+    }
     showToast(e.message, true);
   } finally {
     hideLoading();
@@ -292,10 +344,128 @@ export async function doRunReadiness(): Promise<void> {
     showToast(t('toast.readinessDone'));
     showCompletionFeedback(currentSessionId);
   } catch (e: any) {
+    hideLoading();
+    if (e.status === 402 || e.upgrade) {
+      showUpgradeModal(e.upgradeUrl || PAYMENT_LINK);
+      return;
+    }
     showToast(e.message, true);
   } finally {
     hideLoading();
   }
+}
+
+// --- Auto Pipeline: triggered after interview completes ---
+let pipelineRunning = false;
+
+export async function doRunFullPipeline(): Promise<void> {
+  if (!currentSessionId || pipelineRunning) return;
+  pipelineRunning = true;
+
+  const stageLabels: Record<string, string> = {
+    facts: t('loading.facts'),
+    hypotheses: t('loading.hypotheses'),
+    design: t('loading.prd'),
+  };
+
+  // Show pipeline progress UI
+  showPipelineUI();
+
+  try {
+    await api.runPipeline(currentSessionId, {
+      onStageRunning: (stage) => {
+        updatePipelineStage(stage, 'running', stageLabels[stage] || stage);
+      },
+      onStageData: (stage, data) => {
+        updatePipelineStage(stage, 'done', stageLabels[stage] || stage);
+        switch (stage) {
+          case 'facts':
+            renderFacts(data.facts || []);
+            updateStepNav('analyzed');
+            break;
+          case 'hypotheses':
+            renderHypotheses(data.hypotheses || []);
+            updateStepNav('hypothesized');
+            break;
+          case 'design':
+            if (data.prd) renderPRD(data.prd);
+            if (data.spec) renderSpec(data.spec);
+            updateStepNav('spec_generated');
+            activateStep('spec');
+            initInlineEdit();
+            break;
+        }
+      },
+      onDone: () => {
+        hidePipelineUI();
+        showToast(t('toast.specDone'));
+      },
+      onError: (error) => {
+        hidePipelineUI();
+        showToast(error, true);
+      },
+    });
+  } catch (e: any) {
+    hidePipelineUI();
+    if (e.status === 402 || e.upgrade) {
+      showUpgradeModal(e.upgradeUrl || PAYMENT_LINK);
+      return;
+    }
+    showToast(e.message, true);
+  } finally {
+    pipelineRunning = false;
+  }
+}
+
+function showPipelineUI(): void {
+  // Replace chat area with pipeline progress
+  let el = document.getElementById('pipeline-overlay');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'pipeline-overlay';
+    el.className = 'pipeline-overlay';
+    document.getElementById('step-interview')?.appendChild(el);
+  }
+  el.innerHTML = `
+    <div class="pipeline-card">
+      <h3>🔍 分析中...</h3>
+      <div class="pipeline-stages">
+        <div class="pipeline-stage" data-pipeline="facts">
+          <span class="pipeline-icon">⏳</span>
+          <span class="pipeline-label">ファクト抽出</span>
+        </div>
+        <div class="pipeline-stage" data-pipeline="hypotheses">
+          <span class="pipeline-icon">⏳</span>
+          <span class="pipeline-label">仮説生成</span>
+        </div>
+        <div class="pipeline-stage" data-pipeline="design">
+          <span class="pipeline-icon">⏳</span>
+          <span class="pipeline-label">設計書作成</span>
+        </div>
+      </div>
+    </div>
+  `;
+  el.style.display = 'flex';
+}
+
+function updatePipelineStage(stage: string, status: 'running' | 'done', _label: string): void {
+  const el = document.querySelector(`[data-pipeline="${stage}"]`);
+  if (!el) return;
+  const icon = el.querySelector('.pipeline-icon');
+  if (status === 'running') {
+    el.classList.add('running');
+    el.classList.remove('done');
+    if (icon) icon.textContent = '⚡';
+  } else {
+    el.classList.remove('running');
+    el.classList.add('done');
+    if (icon) icon.textContent = '✅';
+  }
+}
+
+function hidePipelineUI(): void {
+  const el = document.getElementById('pipeline-overlay');
+  if (el) el.style.display = 'none';
 }
 
 // --- Export ---

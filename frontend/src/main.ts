@@ -5,7 +5,7 @@ import { checkAuth, doLogout, isLoggedIn, redirectToLogin } from './auth';
 import { loadSessions, doToggleVisibility, doCreateCampaign } from './sessions';
 import {
   showHome, openSession, sendMessage, handleChatKeydown,
-  doRunAnalysis, doRunHypotheses, doRunPRD, doRunSpec, doRunReadiness,
+  doRunAnalysis, doRunHypotheses, doRunPRD, doRunSpec, doRunReadiness, doRunFullPipeline,
   exportSpecJSON, exportPRDMarkdown, doDeployToExeDev, activateStep,
   getCurrentSessionId,
 } from './interview';
@@ -43,6 +43,7 @@ w.runHypotheses = doRunHypotheses;
 w.runPRD = doRunPRD;
 w.runSpec = doRunSpec;
 w.runReadiness = doRunReadiness;
+w.runFullPipeline = doRunFullPipeline;
 w.exportSpecJSON = exportSpecJSON;
 w.exportPRDMarkdown = exportPRDMarkdown;
 w.deployToExeDev = doDeployToExeDev;
@@ -117,6 +118,28 @@ async function init(): Promise<void> {
 
   // Auth
   await checkAuth();
+
+  // Plan badge in header
+  try {
+    const planData = await api.getPlan();
+    const userInfo = document.getElementById('user-info');
+    if (userInfo && planData.loggedIn) {
+      const existing = userInfo.querySelector('.plan-badge');
+      if (existing) existing.remove();
+      const badge = document.createElement('span');
+      badge.className = 'plan-badge';
+      if (planData.plan === 'pro') {
+        badge.textContent = 'PRO';
+        badge.style.cssText = 'background: var(--primary); color: white; font-size: 0.7rem; padding: 2px 6px; border-radius: 4px; font-weight: 700; margin-left: 6px;';
+      } else {
+        badge.textContent = 'Free';
+        badge.style.cssText = 'background: var(--bg-input); color: var(--text-dim); font-size: 0.7rem; padding: 2px 6px; border-radius: 4px; font-weight: 600; margin-left: 6px;';
+      }
+      userInfo.appendChild(badge);
+    }
+  } catch {
+    // Plan check is non-critical
+  }
 
   // Step nav clicks
   document.querySelectorAll('.step-nav .step').forEach(el => {

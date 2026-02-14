@@ -9,6 +9,7 @@ import { analyticsMiddleware } from "./middleware/analytics.ts";
 import { authMiddleware } from "./middleware/auth.ts";
 import { analyticsRoutes } from "./routes/analytics.ts";
 import { authRoutes } from "./routes/auth.ts";
+import { billingRoutes } from "./routes/billing.ts";
 import { feedbackRoutes } from "./routes/feedback.ts";
 import { prdEditRoutes } from "./routes/prd-edit.ts";
 import { sessionRoutes } from "./routes/sessions/index.ts";
@@ -49,6 +50,9 @@ app.route("/api", sessionRoutes);
 
 // Feedback routes
 app.route("/api/feedback", feedbackRoutes);
+
+// Billing routes (Stripe webhook + plan check)
+app.route("/api/billing", billingRoutes);
 
 // Admin analytics routes
 app.route("/api/admin/analytics", analyticsRoutes);

@@ -86,17 +86,19 @@ describe("セッション API", () => {
     db.exec("DELETE FROM sessions");
     db.exec("DELETE FROM users");
     // Insert test users
-    db.prepare("INSERT INTO users (id, exe_user_id, email, display_name) VALUES (?, ?, ?, ?)").run(
+    db.prepare("INSERT INTO users (id, exe_user_id, email, display_name, plan) VALUES (?, ?, ?, ?, ?)").run(
       TEST_USER_ID,
       TEST_EXE_USER_ID,
       TEST_EMAIL,
       "testuser",
+      "pro",
     );
-    db.prepare("INSERT INTO users (id, exe_user_id, email, display_name) VALUES (?, ?, ?, ?)").run(
+    db.prepare("INSERT INTO users (id, exe_user_id, email, display_name, plan) VALUES (?, ?, ?, ?, ?)").run(
       OTHER_USER_ID,
       OTHER_EXE_USER_ID,
       OTHER_EMAIL,
       "otheruser",
+      "pro",
     );
   });
 
@@ -961,9 +963,9 @@ describe("セッション API", () => {
       expect(res.status).toBe(403);
     });
 
-    it("未認証でもセッションオーナー以外は 403 を返すべき", async () => {
+    it("未認証の場合に 401 を返すべき（Pro 必須）", async () => {
       const res = await app.request("/api/sessions/sready/readiness", { method: "POST" });
-      expect(res.status).toBe(403);
+      expect(res.status).toBe(401);
     });
 
     it("既存のレディネスを上書き更新できること", async () => {

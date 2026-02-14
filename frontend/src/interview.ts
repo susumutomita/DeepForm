@@ -115,9 +115,11 @@ export async function openSession(sessionId: string, isNew = false): Promise<voi
       return;
     }
 
+    // Show analysis button for existing sessions that are ready
     const userMsgCount = (session.messages || []).filter(m => m.role === 'user').length;
-    const btn = document.getElementById('btn-analyze') as HTMLButtonElement | null;
-    if (btn) btn.disabled = userMsgCount < 3;
+    if (session.status === 'interviewing' && userMsgCount >= 3 && !session.analysis?.facts) {
+      showAnalysisButton();
+    }
   } catch (e: any) {
     showToast(e.message, true);
   } finally {

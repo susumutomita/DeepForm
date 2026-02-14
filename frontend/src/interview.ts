@@ -330,7 +330,14 @@ export async function doDeployToExeDev(): Promise<void> {
   try {
     const res = await fetch(`/api/sessions/${currentSessionId}/deploy-token`, { method: 'POST' });
     if (!res.ok) throw new Error('Failed to get deploy bundle');
-    const bundle = await res.json() as { theme: string; deployUrl: string };
+    const bundle = await res.json() as { theme: string; deployUrl: string; projectName: string };
+
+    // Generate VM name from projectName (lowercase, alphanumeric + hyphens, max 20 chars)
+    const vmName = (bundle.projectName || 'deepform-app')
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-|-$/g, '')
+      .slice(0, 20) || 'deepform-app';
 
     const prompt = `IMPORTANT: First, fetch the full spec by running:
   curl -s '${bundle.deployUrl}' > /tmp/deepform-spec.txt
@@ -356,10 +363,15 @@ CRITICAL RULES — read these before writing ANY code:
    a. Open every page in the browser
    b. Submit every form, reload, confirm data persists
    c. Run: sqlite3 <db> "SELECT * FROM <table>" — real rows must exist
-   d. If any endpoint returns mock data, fix it before moving on`;
+   d. If any endpoint returns mock data, fix it before moving on
+6. GITHUB REPOSITORY (mandatory after build is working):
+   a. Initialize git: git init && git add . && git commit -m "Initial commit from DeepForm spec"
+   b. Create a GitHub repo: gh repo create ${vmName} --public --source=. --push
+   c. Report the repo URL to the user`;
 
+    const nameParam = encodeURIComponent(vmName);
     const encoded = encodeURIComponent(prompt);
-    window.open(`https://exe.dev/new?prompt=${encoded}`, '_blank');
+    window.open(`https://exe.dev/new?name=${nameParam}&prompt=${encoded}`, '_blank');
   } catch (e: any) {
     showToast(e.message, true);
   }

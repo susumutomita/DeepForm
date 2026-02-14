@@ -9,9 +9,9 @@
  *   event: done\ndata: {}\n\n
  *   event: error\ndata: {"stage":"facts","error":"..."}\n\n
  */
+
 import { Hono } from "hono";
-import { Writable } from "node:stream";
-import { ANALYSIS_TYPE, SESSION_STATUS, requiresProForStep } from "../../constants.ts";
+import { ANALYSIS_TYPE, requiresProForStep, SESSION_STATUS } from "../../constants.ts";
 import { db } from "../../db.ts";
 import { saveAnalysisResult } from "../../helpers/analysis-store.ts";
 import { generatePRDMarkdown } from "../../helpers/format.ts";
@@ -147,15 +147,13 @@ function buildTranscript(sessionId: string): string {
   const messages = db
     .prepare("SELECT role, content FROM messages WHERE session_id = ? ORDER BY created_at")
     .all(sessionId) as unknown as { role: string; content: string }[];
-  return messages
-    .map((m) => `${m.role === "user" ? "回答者" : "インタビュアー"}: ${m.content}`)
-    .join("\n\n");
+  return messages.map((m) => `${m.role === "user" ? "回答者" : "インタビュアー"}: ${m.content}`).join("\n\n");
 }
 
 function parseJSON(text: string, fallback: unknown): unknown {
   try {
     const jsonMatch = text.match(/\{[\s\S]*\}/);
-    return JSON.parse(jsonMatch![0]);
+    return JSON.parse(jsonMatch?.[0]);
   } catch {
     return fallback;
   }
@@ -214,45 +212,65 @@ pipelineRoutes.post("/sessions/:id/pipeline", async (c) => {
         });
         saveAnalysisResult(id, ANALYSIS_TYPE.FACTS, facts);
         db.prepare("UPDATE sessions SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?").run(
-          SESSION_STATUS.ANALYZED, id,
+          SESSION_STATUS.ANALYZED,
+          id,
         );
         send("stage", { stage: "facts", status: "done", data: facts });
 
         // --- Stage 2: Hypotheses ---
         send("stage", { stage: "hypotheses", status: "running" });
         const hypoResp = await callClaude(
-          [{ role: "user", content: `以下のファクトから仮説を生成してください：\n\n${JSON.stringify(facts, null, 2)}` }],
+          [
+            {
+              role: "user",
+              content: `以下のファクトから仮説を生成してください：\n\n${JSON.stringify(facts, null, 2)}`,
+            },
+          ],
           HYPOTHESES_SYSTEM,
           4096,
         );
         const hypoText = extractText(hypoResp);
         const hypotheses = parseJSON(hypoText, {
-          hypotheses: [{ id: "H1", title: hypoText, description: "", supportingFacts: [], counterEvidence: "", unverifiedPoints: [] }],
+          hypotheses: [
+            {
+              id: "H1",
+              title: hypoText,
+              description: "",
+              supportingFacts: [],
+              counterEvidence: "",
+              unverifiedPoints: [],
+            },
+          ],
         });
         saveAnalysisResult(id, ANALYSIS_TYPE.HYPOTHESES, hypotheses);
         db.prepare("UPDATE sessions SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?").run(
-          SESSION_STATUS.HYPOTHESIZED, id,
+          SESSION_STATUS.HYPOTHESIZED,
+          id,
         );
         send("stage", { stage: "hypotheses", status: "done", data: hypotheses });
 
         // --- Stage 3: Design (PRD + Spec merged) ---
         send("stage", { stage: "design", status: "running" });
         const designResp = await callClaude(
-          [{
-            role: "user",
-            content: `以下のファクトと仮説から設計書を生成してください：\n\nテーマ: ${session.theme}\n\nファクト:\n${JSON.stringify(facts, null, 2)}\n\n仮説:\n${JSON.stringify(hypotheses, null, 2)}`,
-          }],
+          [
+            {
+              role: "user",
+              content: `以下のファクトと仮説から設計書を生成してください：\n\nテーマ: ${session.theme}\n\nファクト:\n${JSON.stringify(facts, null, 2)}\n\n仮説:\n${JSON.stringify(hypotheses, null, 2)}`,
+            },
+          ],
           DESIGN_SYSTEM,
           8192,
         );
         const designText = extractText(designResp);
+        // biome-ignore lint/suspicious/noExplicitAny: dynamic LLM JSON output
         const design = parseJSON(designText, { prd: { problemDefinition: designText }, spec: {} }) as any;
 
         // Save PRD and spec separately for backward compatibility
         const prdData = design.prd ? { prd: design.prd } : design;
         saveAnalysisResult(id, ANALYSIS_TYPE.PRD, prdData);
         db.prepare("UPDATE sessions SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?").run(
-          SESSION_STATUS.PRD_GENERATED, id,
+          SESSION_STATUS.PRD_GENERATED,
+          id,
         );
 
         // Generate PRD markdown
@@ -260,11 +278,13 @@ pipelineRoutes.post("/sessions/:id/pipeline", async (c) => {
         const specData = { ...(design.spec || {}), prdMarkdown };
         saveAnalysisResult(id, ANALYSIS_TYPE.SPEC, { spec: specData });
         db.prepare("UPDATE sessions SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?").run(
-          SESSION_STATUS.SPEC_GENERATED, id,
+          SESSION_STATUS.SPEC_GENERATED,
+          id,
         );
 
         send("stage", { stage: "design", status: "done", data: { prd: design.prd, spec: specData } });
         send("done", {});
+        // biome-ignore lint/suspicious/noExplicitAny: error handling
       } catch (e: any) {
         console.error("Pipeline error:", e);
         send("error", { error: e.message || "Internal Server Error" });

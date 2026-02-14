@@ -1,10 +1,10 @@
-import { type Context, Hono } from "hono";
+import { Hono } from "hono";
 import { z } from "zod";
 import { db } from "../db.ts";
+import { getOwnedSession, isResponse } from "../helpers/session-ownership.ts";
 import { callClaude, extractText } from "../llm.ts";
-import type { Session, User } from "../types.ts";
+import type { AppEnv } from "../types.ts";
 
-type AppEnv = { Variables: { user: User | null } };
 const prdEditRoutes = new Hono<AppEnv>();
 
 // ---------------------------------------------------------------------------
@@ -30,22 +30,6 @@ const applySchema = z.object({
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
-
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function getOwnedSession(c: Context<AppEnv, any>): Session | Response {
-  const user = c.get("user");
-  if (!user) return c.json({ error: "ログインが必要です" }, 401);
-  const session = db.prepare("SELECT * FROM sessions WHERE id = ?").get(c.req.param("id")) as unknown as
-    | Session
-    | undefined;
-  if (!session) return c.json({ error: "セッションが見つかりません" }, 404);
-  if (session.user_id !== user.id) return c.json({ error: "アクセス権限がありません" }, 403);
-  return session;
-}
-
-function isResponse(result: Session | Response): result is Response {
-  return result instanceof Response;
-}
 
 const SECTION_LABELS: Record<string, string> = {
   qualityRequirements: "品質要件",

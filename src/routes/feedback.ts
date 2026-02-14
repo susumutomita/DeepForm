@@ -1,10 +1,9 @@
 import { Hono } from "hono";
 import { ZodError } from "zod";
 import { db } from "../db.ts";
-import type { User } from "../types.ts";
+import type { AppEnv } from "../types.ts";
 import { appFeedbackSchema } from "../validation.ts";
 
-type AppEnv = { Variables: { user: User | null } };
 const feedbackRoutes = new Hono<AppEnv>();
 
 // ---------------------------------------------------------------------------

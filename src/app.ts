@@ -11,7 +11,7 @@ import { analyticsRoutes } from "./routes/analytics.ts";
 import { authRoutes } from "./routes/auth.ts";
 import { feedbackRoutes } from "./routes/feedback.ts";
 import { prdEditRoutes } from "./routes/prd-edit.ts";
-import { sessionRoutes } from "./routes/sessions.ts";
+import { sessionRoutes } from "./routes/sessions/index.ts";
 
 const app = new Hono();
 

@@ -171,6 +171,64 @@ export function runReadiness(sessionId: string): Promise<ReadinessData> {
   return post(`/api/sessions/${sessionId}/readiness`);
 }
 
+// Pipeline (one-shot: facts → hypotheses → design)
+export interface PipelineCallbacks {
+  onStageRunning: (stage: string) => void;
+  onStageData: (stage: string, data: any) => void;
+  onDone: () => void;
+  onError: (error: string) => void;
+}
+
+export async function runPipeline(sessionId: string, cb: PipelineCallbacks): Promise<void> {
+  const res = await fetch(`/api/sessions/${sessionId}/pipeline`, {
+    method: 'POST',
+    headers: { 'Accept': 'text/event-stream', 'Content-Type': 'application/json' },
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    const err = data as any;
+    if (err.upgrade) {
+      const e = new Error(err.error || `HTTP ${res.status}`);
+      (e as any).status = res.status;
+      (e as any).upgrade = true;
+      (e as any).upgradeUrl = err.upgradeUrl;
+      throw e;
+    }
+    throw new Error(err.error || `HTTP ${res.status}`);
+  }
+  const reader = res.body?.getReader();
+  if (!reader) throw new Error('No response body');
+  const decoder = new TextDecoder();
+  let buffer = '';
+  let currentEvent = '';
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    const lines = buffer.split('\n');
+    buffer = lines.pop() || '';
+    for (const line of lines) {
+      if (line.startsWith('event: ')) {
+        currentEvent = line.slice(7).trim();
+      } else if (line.startsWith('data: ')) {
+        try {
+          const data = JSON.parse(line.slice(6));
+          if (currentEvent === 'stage' || (!currentEvent && data.stage)) {
+            if (data.status === 'running') cb.onStageRunning(data.stage);
+            else if (data.status === 'done') cb.onStageData(data.stage, data.data);
+          } else if (currentEvent === 'error' || data.error) {
+            cb.onError(data.error || 'Unknown error');
+          } else if (currentEvent === 'done') {
+            cb.onDone();
+          }
+        } catch { /* skip */ }
+        currentEvent = '';
+      }
+    }
+  }
+}
+
 // Spec Export
 export function getSpecExport(sessionId: string): Promise<{ theme: string; spec: unknown; prdMarkdown: string | null; exportedAt: string }> {
   return request(`/api/sessions/${sessionId}/spec-export`);

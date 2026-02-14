@@ -148,7 +148,9 @@ function buildTranscript(sessionId: string): string {
 
 function parseJSON(text: string, fallback: unknown): unknown {
   try {
-    const jsonMatch = text.match(/\{[\s\S]*\}/);
+    // Strip markdown code fences (```json ... ```)
+    const stripped = text.replace(/```(?:json)?\s*/gi, "").replace(/```\s*/g, "");
+    const jsonMatch = stripped.match(/\{[\s\S]*\}/);
     if (!jsonMatch) return fallback;
     return JSON.parse(jsonMatch[0]);
   } catch {

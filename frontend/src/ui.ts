@@ -44,13 +44,27 @@ export function factTypeLabel(type: string): string {
   return t(`factType.${type}`) || type;
 }
 
+// Simple markdown → HTML (safe: escapes first, then converts)
+function renderMarkdown(text: string): string {
+  let html = escapeHtml(text);
+  // Bold: **text**
+  html = html.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+  // Italic: *text*
+  html = html.replace(/(?<!\*)\*(?!\*)(.+?)(?<!\*)\*(?!\*)/g, '<em>$1</em>');
+  // Line breaks
+  html = html.replace(/\n/g, '<br>');
+  // List items: lines starting with - 
+  html = html.replace(/(?:^|<br>)- (.+?)(?=<br>|$)/g, '<br>• $1');
+  return html;
+}
+
 // Chat helpers
 export function addMessageToContainer(containerId: string, role: string, content: string): void {
   const container = document.getElementById(containerId);
   if (!container) return;
   const msg = document.createElement('div');
   msg.className = `chat-msg ${role}`;
-  msg.textContent = content;
+  msg.innerHTML = renderMarkdown(content);
   msg.setAttribute('aria-label', role === 'assistant' ? `AI: ${content}` : content);
   container.appendChild(msg);
   container.scrollTop = container.scrollHeight;
@@ -76,13 +90,11 @@ export function appendToStreamingBubble(el: HTMLElement, text: string): void {
   if (container) container.scrollTop = container.scrollHeight;
 }
 
-/** Finalize streaming bubble (remove streaming class) */
+/** Finalize streaming bubble — convert plain text to rendered markdown */
 export function finalizeStreamingBubble(el: HTMLElement): void {
   el.classList.remove('streaming');
-  // Strip [READY_FOR_ANALYSIS] tag
-  if (el.textContent) {
-    el.textContent = el.textContent.replace('[READY_FOR_ANALYSIS]', '').trim();
-  }
+  const raw = (el.textContent || '').replace('[READY_FOR_ANALYSIS]', '').trim();
+  el.innerHTML = renderMarkdown(raw);
 }
 
 export function showTypingIndicator(containerId: string): void {

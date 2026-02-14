@@ -520,8 +520,16 @@ analysisRoutes.get("/sessions/:id/deploy-bundle", (c) => {
       return c.json({ error: "Forbidden" }, 403);
     }
 
-    const specResult = db.prepare("SELECT data FROM analysis_results WHERE session_id = ? AND type = 'spec' ORDER BY created_at DESC LIMIT 1").get(id) as { data: string } | undefined;
-    const prdResult = db.prepare("SELECT data FROM analysis_results WHERE session_id = ? AND type = 'prd' ORDER BY created_at DESC LIMIT 1").get(id) as { data: string } | undefined;
+    const specResult = db
+      .prepare(
+        "SELECT data FROM analysis_results WHERE session_id = ? AND type = 'spec' ORDER BY created_at DESC LIMIT 1",
+      )
+      .get(id) as { data: string } | undefined;
+    const prdResult = db
+      .prepare(
+        "SELECT data FROM analysis_results WHERE session_id = ? AND type = 'prd' ORDER BY created_at DESC LIMIT 1",
+      )
+      .get(id) as { data: string } | undefined;
 
     const format = c.req.query("format");
     if (format === "text") {

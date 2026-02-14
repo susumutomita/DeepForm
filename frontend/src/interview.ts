@@ -179,8 +179,12 @@ export async function sendMessage(choiceText?: string): Promise<void> {
         }
         finalizeStreamingBubble(bubble);
         if (data.readyForAnalysis || (data.turnCount && data.turnCount >= 8)) {
-          // Auto-start pipeline — no button click needed
-          doRunFullPipeline();
+          // Show transition message, then auto-start pipeline
+          removeChoiceButtons('chat-container');
+          addMessageToContainer('chat-container', 'assistant',
+            '📝 インタビューが完了しました。\nこれから自動で分析を行い、設計書を作成します…');
+          // Brief pause so user can read the transition
+          setTimeout(() => doRunFullPipeline(), 1500);
           return;
         }
         if (data.choices?.length) {
@@ -541,7 +545,14 @@ CRITICAL RULES — read these before writing ANY code:
 
     const nameParam = encodeURIComponent(vmName);
     const encoded = encodeURIComponent(prompt);
-    window.open(`https://exe.dev/new?name=${nameParam}&prompt=${encoded}`, '_blank');
+    // Use link click instead of window.open to avoid mobile popup blockers
+    const a = document.createElement('a');
+    a.href = `https://exe.dev/new?name=${nameParam}&prompt=${encoded}`;
+    a.target = '_blank';
+    a.rel = 'noopener';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
   } catch (e: any) {
     showToast(e.message, true);
   }

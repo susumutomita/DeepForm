@@ -173,8 +173,8 @@ describe("セッション API", () => {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ theme: "テスト" }),
       });
-      // Then: 401
-      expect(res.status).toBe(401);
+      // Then: ゲストアクセスでセッション作成可能 (201)
+      expect(res.status).toBe(200);
     });
 
     it("不正な JSON の場合に 400 を返すべき", async () => {
@@ -350,8 +350,8 @@ describe("セッション API", () => {
       // Given: 認証なし
       // When: DELETE
       const res = await app.request("/api/sessions/sdel", { method: "DELETE" });
-      // Then: 401
-      expect(res.status).toBe(401);
+      // Then: 403 (ゲストではオーナー以外のセッション削除不可)
+      expect(res.status).toBe(403);
     });
 
     it("存在しないセッションの場合に 404 を返すべき", async () => {
@@ -420,8 +420,8 @@ describe("セッション API", () => {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ is_public: true }),
       });
-      // Then: 401
-      expect(res.status).toBe(401);
+      // Then: 403 (ゲストではオーナー以外のセッション変更不可)
+      expect(res.status).toBe(403);
     });
 
     it("他人のセッションは変更できないべき", async () => {
@@ -481,9 +481,9 @@ describe("セッション API", () => {
       expect(res.status).toBe(403);
     });
 
-    it("未認証の場合に 401 を返すべき", async () => {
+    it("未認証でもセッションオーナー以外は 403 を返すべき", async () => {
       const res = await app.request("/api/sessions/sstart/start", { method: "POST" });
-      expect(res.status).toBe(401);
+      expect(res.status).toBe(403);
     });
   });
 
@@ -961,9 +961,9 @@ describe("セッション API", () => {
       expect(res.status).toBe(403);
     });
 
-    it("未認証の場合に 401 を返すべき", async () => {
+    it("未認証でもセッションオーナー以外は 403 を返すべき", async () => {
       const res = await app.request("/api/sessions/sready/readiness", { method: "POST" });
-      expect(res.status).toBe(401);
+      expect(res.status).toBe(403);
     });
 
     it("既存のレディネスを上書き更新できること", async () => {

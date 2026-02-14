@@ -7,6 +7,15 @@ import { callClaude, callClaudeStream, extractText } from "../../llm.ts";
 import type { AppEnv } from "../../types.ts";
 import { chatMessageSchema } from "../../validation.ts";
 
+function extractChoices(text: string): { text: string; choices: string[] } {
+  const match = text.match(/\[CHOICES\]([\s\S]*?)\[\/CHOICES\]/);
+  if (!match) return { text: text.trim(), choices: [] };
+  const choicesText = match[1].trim();
+  const choices = choicesText.split('\n').map(c => c.trim()).filter(c => c.length > 0);
+  const cleanText = text.replace(/\[CHOICES\][\s\S]*?\[\/CHOICES\]/, '').trim();
+  return { text: cleanText, choices };
+}
+
 export const interviewRoutes = new Hono<AppEnv>();
 
 // 5. POST /sessions/:id/start — Get first interview question from LLM (owner only)
@@ -31,7 +40,18 @@ interviewRoutes.post("/sessions/:id/start", async (c) => {
 テーマ: 「${session.theme}」
 
 最初の質問を1つだけ聞いてください。テーマについて、まず現状の状況を理解するための質問をしてください。
-共感的で親しみやすいトーンで、日本語で話してください。200文字以内で。`;
+共感的で親しみやすいトーンで、日本語で話してください。
+
+重要: 質問の後に、ユーザーが選べる回答の選択肢を3〜5個提示してください。
+選択肢は以下の形式で質問文の最後に付けてください:
+[CHOICES]
+選択肢1のテキスト
+選択肢2のテキスト
+選択肢3のテキスト
+[/CHOICES]
+
+選択肢は具体的で、異なる状況や回答パターンをカバーするようにしてください。
+最後の選択肢は「その他（自分で入力）」にしてください。`;
 
     const startMessages = [
       { role: "user" as const, content: `テーマ「${session.theme}」についてインタビューを始めてください。` },
@@ -53,12 +73,13 @@ interviewRoutes.post("/sessions/:id/start", async (c) => {
             });
             stream.on("end", () => {
               const fullText = getFullText();
+              const { text: cleanText, choices } = extractChoices(fullText);
               db.prepare("INSERT INTO messages (session_id, role, content) VALUES (?, ?, ?)").run(
                 id,
                 "assistant",
-                fullText,
+                cleanText,
               );
-              controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: "done" })}\n\n`));
+              controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: "done", choices })}\n\n`));
               controller.close();
             });
             stream.on("error", (err: Error) => {
@@ -79,11 +100,12 @@ interviewRoutes.post("/sessions/:id/start", async (c) => {
 
     // Non-streaming fallback
     const response = await callClaude(startMessages, systemPrompt, 512);
-    const reply = extractText(response);
+    const rawReply = extractText(response);
+    const { text: reply, choices } = extractChoices(rawReply);
 
     db.prepare("INSERT INTO messages (session_id, role, content) VALUES (?, ?, ?)").run(id, "assistant", reply);
 
-    return c.json({ reply });
+    return c.json({ reply, choices });
   } catch (e) {
     console.error("Start interview error:", e);
     return c.json({ error: "Internal Server Error" }, 500);
@@ -125,6 +147,17 @@ interviewRoutes.post("/sessions/:id/chat", async (c) => {
 6. 日本語で回答する
 7. 回答は簡潔に、200文字以内で
 
+重要: 質問の後に、ユーザーが選べる回答の選択肢を3〜5個提示してください。
+選択肢は以下の形式で質問文の最後に付けてください:
+[CHOICES]
+選択肢1のテキスト
+選択肢2のテキスト
+選択肢3のテキスト
+[/CHOICES]
+
+選択肢は具体的で、異なる状況や回答パターンをカバーするようにしてください。
+最後の選択肢は「その他（自分で入力）」にしてください。
+
 ${turnCount >= 5 ? "十分な情報が集まりました。最後にまとめの質問をして、回答の最後に「[READY_FOR_ANALYSIS]」タグを付けてください。ただし、ユーザーがまだ話したそうなら続けてください。" : ""}`;
 
     // Streaming response
@@ -146,15 +179,15 @@ ${turnCount >= 5 ? "十分な情報が集まりました。最後にまとめの
             });
             stream.on("end", () => {
               const fullText = getFullText();
-              // Save to DB
+              const { text: cleanText, choices } = extractChoices(fullText);
               db.prepare("INSERT INTO messages (session_id, role, content) VALUES (?, ?, ?)").run(
                 id,
                 "assistant",
-                fullText,
+                cleanText,
               );
-              const readyForAnalysis = fullText.includes("[READY_FOR_ANALYSIS]") || turnCount >= 8;
+              const readyForAnalysis = cleanText.includes("[READY_FOR_ANALYSIS]") || turnCount >= 8;
               controller.enqueue(
-                encoder.encode(`data: ${JSON.stringify({ type: "done", readyForAnalysis, turnCount })}\n\n`),
+                encoder.encode(`data: ${JSON.stringify({ type: "done", readyForAnalysis, turnCount, choices })}\n\n`),
               );
               controller.close();
             });
@@ -176,15 +209,14 @@ ${turnCount >= 5 ? "十分な情報が集まりました。最後にまとめの
 
     // Non-streaming fallback
     const response = await callClaude(chatMessages, systemPrompt, 1024);
-    const reply = extractText(response);
+    const rawReply = extractText(response);
+    const { text: cleanReply, choices } = extractChoices(rawReply);
 
-    // Save assistant message
-    db.prepare("INSERT INTO messages (session_id, role, content) VALUES (?, ?, ?)").run(id, "assistant", reply);
+    db.prepare("INSERT INTO messages (session_id, role, content) VALUES (?, ?, ?)").run(id, "assistant", cleanReply.replace("[READY_FOR_ANALYSIS]", "").trim());
 
-    const readyForAnalysis = reply.includes("[READY_FOR_ANALYSIS]") || turnCount >= 8;
-    const cleanReply = reply.replace("[READY_FOR_ANALYSIS]", "").trim();
+    const readyForAnalysis = rawReply.includes("[READY_FOR_ANALYSIS]") || turnCount >= 8;
 
-    return c.json({ reply: cleanReply, turnCount, readyForAnalysis });
+    return c.json({ reply: cleanReply.replace("[READY_FOR_ANALYSIS]", "").trim(), turnCount, readyForAnalysis, choices });
   } catch (e) {
     if (e instanceof ZodError) return c.json({ error: formatZodError(e) }, 400);
     console.error("Chat error:", e);

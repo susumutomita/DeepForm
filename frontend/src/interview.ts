@@ -91,7 +91,16 @@ async function startInterviewChat(): Promise<void> {
   try {
     await api.startInterviewStream(currentSessionId, {
       onDelta: (text) => appendToStreamingBubble(bubble, text),
-      onDone: () => finalizeStreamingBubble(bubble),
+      onDone: (data) => {
+        // Strip [CHOICES]...[/CHOICES] from displayed text
+        if (bubble.textContent) {
+          bubble.textContent = bubble.textContent.replace(/\[CHOICES\][\s\S]*?\[\/CHOICES\]/, '').trim();
+        }
+        finalizeStreamingBubble(bubble);
+        if (data.choices?.length) {
+          showChoiceButtons('chat-container', data.choices);
+        }
+      },
       onError: (err) => {
         finalizeStreamingBubble(bubble);
         showToast(err, true);
@@ -103,13 +112,15 @@ async function startInterviewChat(): Promise<void> {
   }
 }
 
-export async function sendMessage(): Promise<void> {
+export async function sendMessage(choiceText?: string): Promise<void> {
   const input = document.getElementById('chat-input') as HTMLTextAreaElement | null;
-  if (!input || !currentSessionId) return;
-  const message = input.value.trim();
+  if (!currentSessionId) return;
+
+  const message = choiceText || input?.value.trim() || '';
   if (!message) return;
 
-  input.value = '';
+  if (input) input.value = '';
+  removeChoiceButtons('chat-container');
   addMessageToContainer('chat-container', 'user', message);
 
   const btnSend = document.getElementById('btn-send') as HTMLButtonElement | null;
@@ -121,10 +132,17 @@ export async function sendMessage(): Promise<void> {
       onDelta: (text) => appendToStreamingBubble(bubble, text),
       onMeta: () => {},
       onDone: (data) => {
+        // Strip [CHOICES]...[/CHOICES] from displayed text
+        if (bubble.textContent) {
+          bubble.textContent = bubble.textContent.replace(/\[CHOICES\][\s\S]*?\[\/CHOICES\]/, '').trim();
+        }
         finalizeStreamingBubble(bubble);
         if (data.readyForAnalysis || (data.turnCount && data.turnCount >= 3)) {
           const btn = document.getElementById('btn-analyze') as HTMLButtonElement | null;
           if (btn) btn.disabled = false;
+        }
+        if (data.choices?.length) {
+          showChoiceButtons('chat-container', data.choices);
         }
       },
       onError: (err) => {
@@ -137,8 +155,48 @@ export async function sendMessage(): Promise<void> {
     showToast(e.message, true);
   } finally {
     if (btnSend) btnSend.disabled = false;
-    input.focus();
+    input?.focus();
   }
+}
+
+function showChoiceButtons(containerId: string, choices: string[]): void {
+  const container = document.getElementById(containerId);
+  if (!container) return;
+
+  const choicesDiv = document.createElement('div');
+  choicesDiv.className = 'chat-choices';
+
+  for (const choice of choices) {
+    if (choice.includes('その他') || choice.includes('自分で入力')) {
+      // "Other" choice - focus the text input instead
+      const btn = document.createElement('button');
+      btn.className = 'chat-choice-btn chat-choice-other';
+      btn.textContent = '✏️ ' + choice;
+      btn.addEventListener('click', () => {
+        removeChoiceButtons(containerId);
+        const input = document.getElementById('chat-input') as HTMLTextAreaElement | null;
+        if (input) input.focus();
+      });
+      choicesDiv.appendChild(btn);
+    } else {
+      const btn = document.createElement('button');
+      btn.className = 'chat-choice-btn';
+      btn.textContent = choice;
+      btn.addEventListener('click', () => {
+        sendMessage(choice);
+      });
+      choicesDiv.appendChild(btn);
+    }
+  }
+
+  container.appendChild(choicesDiv);
+  container.scrollTop = container.scrollHeight;
+}
+
+function removeChoiceButtons(containerId: string): void {
+  const container = document.getElementById(containerId);
+  if (!container) return;
+  container.querySelectorAll('.chat-choices').forEach(el => el.remove());
 }
 
 export function handleChatKeydown(event: KeyboardEvent): void {

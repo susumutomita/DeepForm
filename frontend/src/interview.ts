@@ -369,7 +369,8 @@ export async function doRunFullPipeline(): Promise<void> {
   const stageLabels: Record<string, string> = {
     facts: t('loading.facts'),
     hypotheses: t('loading.hypotheses'),
-    design: t('loading.prd'),
+    prd: t('loading.prd'),
+    spec: t('loading.spec'),
   };
 
   // Show progress via step nav + loading indicator
@@ -390,8 +391,11 @@ export async function doRunFullPipeline(): Promise<void> {
             renderHypotheses(data.hypotheses || []);
             updateStepNav('hypothesized');
             break;
-          case 'design':
+          case 'prd':
             if (data.prd) renderPRD(data.prd);
+            updateStepNav('prd_generated');
+            break;
+          case 'spec':
             if (data.spec) renderSpec(data.spec);
             updateStepNav('spec_generated');
             activateStep('spec');

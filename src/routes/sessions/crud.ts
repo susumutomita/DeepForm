@@ -2,7 +2,8 @@ import crypto from "node:crypto";
 import { Hono } from "hono";
 import { ZodError } from "zod";
 import { SESSION_STATUS } from "../../constants.ts";
-import { db } from "../../db.ts";
+import { now } from "../../db/helpers.ts";
+import { db } from "../../db/index.ts";
 import { formatZodError } from "../../helpers/format.ts";
 import { getOwnedSession, isResponse } from "../../helpers/session-ownership.ts";
 import type { AnalysisResult, AppEnv, Message, Session } from "../../types.ts";
@@ -22,9 +23,11 @@ crudRoutes.post("/sessions", async (c) => {
 
     if (user) {
       // Enforce session limit per user
-      const { count } = db.prepare("SELECT COUNT(*) as count FROM sessions WHERE user_id = ?").get(user.id) as {
-        count: number;
-      };
+      const { count } = (await db
+        .selectFrom("sessions")
+        .select((eb) => eb.fn.countAll().as("count"))
+        .where("user_id", "=", user.id)
+        .executeTakeFirstOrThrow()) as unknown as { count: number };
       if (count >= MAX_SESSIONS_PER_USER) {
         return c.json(
           {
@@ -37,9 +40,9 @@ crudRoutes.post("/sessions", async (c) => {
 
     const id = crypto.randomUUID();
     if (user) {
-      db.prepare("INSERT INTO sessions (id, theme, user_id) VALUES (?, ?, ?)").run(id, theme.trim(), user.id);
+      await db.insertInto("sessions").values({ id, theme: theme.trim(), user_id: user.id }).execute();
     } else {
-      db.prepare("INSERT INTO sessions (id, theme, user_id, is_public) VALUES (?, ?, NULL, 1)").run(id, theme.trim());
+      await db.insertInto("sessions").values({ id, theme: theme.trim(), user_id: null, is_public: 1 }).execute();
     }
     return c.json({ sessionId: id, theme: theme.trim() });
   } catch (e) {
@@ -51,22 +54,30 @@ crudRoutes.post("/sessions", async (c) => {
 });
 
 // 2. GET /sessions — List sessions (own + public if logged in, public only otherwise)
-crudRoutes.get("/sessions", (c) => {
+crudRoutes.get("/sessions", async (c) => {
   try {
     const user = c.get("user");
     let sessions: (Session & { message_count: number; display_status?: string })[];
     if (user) {
-      sessions = db
-        .prepare(
-          "SELECT s.*, COUNT(m.id) as message_count FROM sessions s LEFT JOIN messages m ON s.id = m.session_id WHERE s.user_id = ? OR s.is_public = 1 GROUP BY s.id ORDER BY s.updated_at DESC",
-        )
-        .all(user.id) as unknown as (Session & { message_count: number; display_status?: string })[];
+      sessions = (await db
+        .selectFrom("sessions as s")
+        .leftJoin("messages as m", "s.id", "m.session_id")
+        .selectAll("s")
+        .select((eb) => eb.fn.count<number>("m.id").as("message_count"))
+        .where((eb) => eb.or([eb("s.user_id", "=", user.id), eb("s.is_public", "=", 1)]))
+        .groupBy("s.id")
+        .orderBy("s.updated_at", "desc")
+        .execute()) as unknown as (Session & { message_count: number; display_status?: string })[];
     } else {
-      sessions = db
-        .prepare(
-          "SELECT s.*, COUNT(m.id) as message_count FROM sessions s LEFT JOIN messages m ON s.id = m.session_id WHERE s.is_public = 1 GROUP BY s.id ORDER BY s.updated_at DESC",
-        )
-        .all() as unknown as (Session & { message_count: number; display_status?: string })[];
+      sessions = (await db
+        .selectFrom("sessions as s")
+        .leftJoin("messages as m", "s.id", "m.session_id")
+        .selectAll("s")
+        .select((eb) => eb.fn.count<number>("m.id").as("message_count"))
+        .where("s.is_public", "=", 1)
+        .groupBy("s.id")
+        .orderBy("s.updated_at", "desc")
+        .execute()) as unknown as (Session & { message_count: number; display_status?: string })[];
     }
     sessions.forEach((s) => {
       if (s.status === SESSION_STATUS.RESPONDENT_DONE) s.display_status = "analyzed";
@@ -79,11 +90,13 @@ crudRoutes.get("/sessions", (c) => {
 });
 
 // 3. GET /sessions/:id — Get session with messages & analysis (owner or public)
-crudRoutes.get("/sessions/:id", (c) => {
+crudRoutes.get("/sessions/:id", async (c) => {
   try {
     const id = c.req.param("id");
     const user = c.get("user");
-    const session = db.prepare("SELECT * FROM sessions WHERE id = ?").get(id) as unknown as Session | undefined;
+    const session = (await db.selectFrom("sessions").selectAll().where("id", "=", id).executeTakeFirst()) as unknown as
+      | Session
+      | undefined;
     if (!session) return c.json({ error: "Session not found" }, 404);
 
     // Access control: owner or public
@@ -91,12 +104,18 @@ crudRoutes.get("/sessions/:id", (c) => {
     const isPublic = session.is_public === 1;
     if (!isOwner && !isPublic) return c.json({ error: "アクセス権限がありません" }, 403);
 
-    const messages = db
-      .prepare("SELECT * FROM messages WHERE session_id = ? ORDER BY created_at")
-      .all(id) as unknown as Message[];
-    const analyses = db
-      .prepare("SELECT * FROM analysis_results WHERE session_id = ? ORDER BY created_at")
-      .all(id) as unknown as AnalysisResult[];
+    const messages = (await db
+      .selectFrom("messages")
+      .selectAll()
+      .where("session_id", "=", id)
+      .orderBy("created_at")
+      .execute()) as unknown as Message[];
+    const analyses = (await db
+      .selectFrom("analysis_results")
+      .selectAll()
+      .where("session_id", "=", id)
+      .orderBy("created_at")
+      .execute()) as unknown as AnalysisResult[];
 
     const analysisMap: Record<string, unknown> = {};
     for (const a of analyses) {
@@ -111,15 +130,15 @@ crudRoutes.get("/sessions/:id", (c) => {
 });
 
 // 4. DELETE /sessions/:id — Delete session + related data (owner only)
-crudRoutes.delete("/sessions/:id", (c) => {
+crudRoutes.delete("/sessions/:id", async (c) => {
   try {
-    const result = getOwnedSession(c);
+    const result = await getOwnedSession(c);
     if (isResponse(result)) return result;
 
     const id = result.id;
-    db.prepare("DELETE FROM analysis_results WHERE session_id = ?").run(id);
-    db.prepare("DELETE FROM messages WHERE session_id = ?").run(id);
-    db.prepare("DELETE FROM sessions WHERE id = ?").run(id);
+    await db.deleteFrom("analysis_results").where("session_id", "=", id).execute();
+    await db.deleteFrom("messages").where("session_id", "=", id).execute();
+    await db.deleteFrom("sessions").where("id", "=", id).execute();
     return c.json({ ok: true });
   } catch (e) {
     console.error("Delete session error:", e);
@@ -130,15 +149,19 @@ crudRoutes.delete("/sessions/:id", (c) => {
 // 4b. PATCH /sessions/:id/visibility — Toggle public/private (owner only)
 crudRoutes.patch("/sessions/:id/visibility", async (c) => {
   try {
-    const result = getOwnedSession(c);
+    const result = await getOwnedSession(c);
     if (isResponse(result)) return result;
 
     const body = await c.req.json();
     const { is_public } = visibilitySchema.parse(body);
     const value = is_public ? 1 : 0;
-    db.prepare("UPDATE sessions SET is_public = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?").run(value, result.id);
+    await db.updateTable("sessions").set({ is_public: value, updated_at: now() }).where("id", "=", result.id).execute();
 
-    const updated = db.prepare("SELECT * FROM sessions WHERE id = ?").get(result.id) as unknown as Session;
+    const updated = (await db
+      .selectFrom("sessions")
+      .selectAll()
+      .where("id", "=", result.id)
+      .executeTakeFirst()) as unknown as Session;
     return c.json(updated);
   } catch (e) {
     if (e instanceof ZodError) return c.json({ error: formatZodError(e) }, 400);

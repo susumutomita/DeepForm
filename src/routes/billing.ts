@@ -1,5 +1,6 @@
 import { Hono } from "hono";
-import { db } from "../db.ts";
+import { now } from "../db/helpers.ts";
+import { db } from "../db/index.ts";
 import type { AppEnv } from "../types.ts";
 
 export const billingRoutes = new Hono<AppEnv>();
@@ -17,9 +18,15 @@ billingRoutes.post("/webhook", async (c) => {
       const customerId = session.customer;
 
       if (userId) {
-        db.prepare(
-          "UPDATE users SET plan = 'pro', stripe_customer_id = ?, plan_updated_at = datetime('now') WHERE id = ?",
-        ).run(customerId, userId);
+        await db
+          .updateTable("users")
+          .set({
+            plan: "pro",
+            stripe_customer_id: customerId,
+            plan_updated_at: now(),
+          })
+          .where("id", "=", userId)
+          .execute();
         console.log(`User ${userId} upgraded to pro`);
       }
     }
@@ -29,9 +36,14 @@ billingRoutes.post("/webhook", async (c) => {
       const subscription = event.data.object;
       const customerId = subscription.customer;
 
-      db.prepare("UPDATE users SET plan = 'free', plan_updated_at = datetime('now') WHERE stripe_customer_id = ?").run(
-        customerId,
-      );
+      await db
+        .updateTable("users")
+        .set({
+          plan: "free",
+          plan_updated_at: now(),
+        })
+        .where("stripe_customer_id", "=", customerId)
+        .execute();
       console.log(`Customer ${customerId} downgraded to free`);
     }
 
@@ -43,10 +55,10 @@ billingRoutes.post("/webhook", async (c) => {
 });
 
 // GET /billing/plan — Get current user's plan
-billingRoutes.get("/plan", (c) => {
+billingRoutes.get("/plan", async (c) => {
   const user = c.get("user");
   if (!user) return c.json({ plan: "free", loggedIn: false });
 
-  const row = db.prepare("SELECT plan FROM users WHERE id = ?").get(user.id) as { plan: string } | undefined;
+  const row = await db.selectFrom("users").select("plan").where("id", "=", user.id).executeTakeFirst();
   return c.json({ plan: row?.plan || "free", loggedIn: true });
 });

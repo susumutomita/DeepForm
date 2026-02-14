@@ -1,7 +1,8 @@
 import crypto from "node:crypto";
 import { Hono } from "hono";
 import { deleteCookie, getCookie, setCookie } from "hono/cookie";
-import { db } from "../db.ts";
+import { now } from "../db/helpers.ts";
+import { db } from "../db/index.ts";
 import type { User } from "../types.ts";
 
 const auth = new Hono<{ Variables: { user: User | null } }>();
@@ -115,32 +116,67 @@ auth.get("/github/callback", async (c) => {
     const displayName = ghUser.name || ghUser.login;
 
     // Upsert user by github_id
-    let user = db.prepare("SELECT * FROM users WHERE github_id = ?").get(ghUser.id) as unknown as User | undefined;
+    let user = (await db
+      .selectFrom("users")
+      .selectAll()
+      .where("github_id", "=", ghUser.id)
+      .executeTakeFirst()) as unknown as User | undefined;
 
     if (user) {
-      db.prepare(
-        "UPDATE users SET github_token = ?, avatar_url = ?, email = ?, display_name = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
-      ).run(accessToken, ghUser.avatar_url, email, displayName, user.id);
-      user = db.prepare("SELECT * FROM users WHERE id = ?").get(user.id) as unknown as User;
+      await db
+        .updateTable("users")
+        .set({
+          github_token: accessToken,
+          avatar_url: ghUser.avatar_url,
+          email,
+          display_name: displayName,
+          updated_at: now(),
+        })
+        .where("id", "=", user.id)
+        .execute();
+      user = (await db.selectFrom("users").selectAll().where("id", "=", user.id).executeTakeFirst()) as unknown as User;
     } else {
       // Check if user exists by email (link GitHub to existing exe.dev account)
-      const existingByEmail = db.prepare("SELECT * FROM users WHERE email = ?").get(email) as unknown as
-        | User
-        | undefined;
+      const existingByEmail = (await db
+        .selectFrom("users")
+        .selectAll()
+        .where("email", "=", email)
+        .executeTakeFirst()) as unknown as User | undefined;
 
       if (existingByEmail) {
-        db.prepare(
-          "UPDATE users SET github_id = ?, github_token = ?, avatar_url = ?, display_name = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
-        ).run(ghUser.id, accessToken, ghUser.avatar_url, displayName, existingByEmail.id);
-        user = db.prepare("SELECT * FROM users WHERE id = ?").get(existingByEmail.id) as unknown as User;
+        await db
+          .updateTable("users")
+          .set({
+            github_id: ghUser.id,
+            github_token: accessToken,
+            avatar_url: ghUser.avatar_url,
+            display_name: displayName,
+            updated_at: now(),
+          })
+          .where("id", "=", existingByEmail.id)
+          .execute();
+        user = (await db
+          .selectFrom("users")
+          .selectAll()
+          .where("id", "=", existingByEmail.id)
+          .executeTakeFirst()) as unknown as User;
       } else {
         // Create new user
         const id = crypto.randomUUID();
         const exeUserId = `github_${ghUser.id}`;
-        db.prepare(
-          "INSERT INTO users (id, exe_user_id, email, display_name, github_id, github_token, avatar_url) VALUES (?, ?, ?, ?, ?, ?, ?)",
-        ).run(id, exeUserId, email, displayName, ghUser.id, accessToken, ghUser.avatar_url);
-        user = db.prepare("SELECT * FROM users WHERE id = ?").get(id) as unknown as User;
+        await db
+          .insertInto("users")
+          .values({
+            id,
+            exe_user_id: exeUserId,
+            email,
+            display_name: displayName,
+            github_id: ghUser.id,
+            github_token: accessToken,
+            avatar_url: ghUser.avatar_url,
+          })
+          .execute();
+        user = (await db.selectFrom("users").selectAll().where("id", "=", id).executeTakeFirst()) as unknown as User;
       }
     }
 
@@ -151,15 +187,18 @@ auth.get("/github/callback", async (c) => {
     // Create auth session
     const sessionId = crypto.randomUUID();
     const expiresAt = new Date(Date.now() + SESSION_MAX_AGE_DAYS * 24 * 60 * 60 * 1000).toISOString();
-    db.prepare("INSERT INTO auth_sessions (id, user_id, expires_at) VALUES (?, ?, ?)").run(
-      sessionId,
-      user.id,
-      expiresAt,
-    );
+    await db
+      .insertInto("auth_sessions")
+      .values({
+        id: sessionId,
+        user_id: user.id,
+        expires_at: expiresAt,
+      })
+      .execute();
 
     // Clean up expired sessions
     try {
-      db.prepare("DELETE FROM auth_sessions WHERE expires_at < datetime('now')").run();
+      await db.deleteFrom("auth_sessions").where("expires_at", "<", new Date().toISOString()).execute();
     } catch {
       /* ignore */
     }
@@ -203,11 +242,11 @@ auth.get("/me", (c) => {
 /**
  * POST /api/auth/logout — Clear session cookie and delete session
  */
-auth.post("/logout", (c) => {
+auth.post("/logout", async (c) => {
   const sessionId = getCookie(c, "deepform_session");
   if (sessionId) {
     try {
-      db.prepare("DELETE FROM auth_sessions WHERE id = ?").run(sessionId);
+      await db.deleteFrom("auth_sessions").where("id", "=", sessionId).execute();
     } catch {
       /* ignore */
     }

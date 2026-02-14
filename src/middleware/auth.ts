@@ -1,7 +1,8 @@
 import crypto from "node:crypto";
 import { getCookie } from "hono/cookie";
 import { createMiddleware } from "hono/factory";
-import { db } from "../db.ts";
+import { now } from "../db/helpers.ts";
+import { db } from "../db/index.ts";
 import type { User } from "../types.ts";
 
 /**
@@ -11,24 +12,25 @@ import type { User } from "../types.ts";
  * 3. Dev env var fallback (EXEDEV_DEV_USER)
  */
 
-function upsertUser(exeUserId: string, email: string): User {
-  const existing = db.prepare("SELECT * FROM users WHERE exe_user_id = ?").get(exeUserId) as unknown as
-    | User
-    | undefined;
+async function upsertUser(exeUserId: string, email: string): Promise<User> {
+  const existing = (await db
+    .selectFrom("users")
+    .selectAll()
+    .where("exe_user_id", "=", exeUserId)
+    .executeTakeFirst()) as unknown as User | undefined;
 
   if (existing) {
-    db.prepare("UPDATE users SET email = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?").run(email, existing.id);
-    return db.prepare("SELECT * FROM users WHERE id = ?").get(existing.id) as unknown as User;
+    await db.updateTable("users").set({ email, updated_at: now() }).where("id", "=", existing.id).execute();
+    return (await db
+      .selectFrom("users")
+      .selectAll()
+      .where("id", "=", existing.id)
+      .executeTakeFirst()) as unknown as User;
   }
 
   const id = crypto.randomUUID();
   const displayName = email.split("@")[0];
-  db.prepare("INSERT INTO users (id, exe_user_id, email, display_name) VALUES (?, ?, ?, ?)").run(
-    id,
-    exeUserId,
-    email,
-    displayName,
-  );
+  await db.insertInto("users").values({ id, exe_user_id: exeUserId, email, display_name: displayName }).execute();
 
   return {
     id,
@@ -40,14 +42,14 @@ function upsertUser(exeUserId: string, email: string): User {
   };
 }
 
-function getUserFromSession(sessionId: string): User | null {
-  const row = db
-    .prepare(
-      `SELECT u.* FROM users u
-       JOIN auth_sessions s ON s.user_id = u.id
-       WHERE s.id = ? AND s.expires_at > datetime('now')`,
-    )
-    .get(sessionId) as unknown as User | undefined;
+async function getUserFromSession(sessionId: string): Promise<User | null> {
+  const row = (await db
+    .selectFrom("users as u")
+    .innerJoin("auth_sessions as s", "s.user_id", "u.id")
+    .selectAll("u")
+    .where("s.id", "=", sessionId)
+    .where("s.expires_at", ">", new Date().toISOString())
+    .executeTakeFirst()) as unknown as User | undefined;
   return row ?? null;
 }
 
@@ -59,7 +61,7 @@ export const authMiddleware = createMiddleware<{
   const sessionId = getCookie(c, "deepform_session");
   if (sessionId) {
     try {
-      const user = getUserFromSession(sessionId);
+      const user = await getUserFromSession(sessionId);
       if (user) {
         c.set("user", user);
         return next();
@@ -81,7 +83,7 @@ export const authMiddleware = createMiddleware<{
 
   if (exeUserId && email) {
     try {
-      const user = upsertUser(exeUserId, email);
+      const user = await upsertUser(exeUserId, email);
       c.set("user", user);
     } catch (e) {
       console.error("Auth upsert error:", e);

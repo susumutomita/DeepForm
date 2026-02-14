@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import { ZodError } from "zod";
-import { db } from "../../db.ts";
+import { now } from "../../db/helpers.ts";
+import { db } from "../../db/index.ts";
 import { formatZodError } from "../../helpers/format.ts";
 import { getOwnedSession, isResponse } from "../../helpers/session-ownership.ts";
 import { callClaude, callClaudeStream, extractText } from "../../llm.ts";
@@ -24,17 +25,17 @@ export const interviewRoutes = new Hono<AppEnv>();
 // 5. POST /sessions/:id/start — Get first interview question from LLM (owner only)
 interviewRoutes.post("/sessions/:id/start", async (c) => {
   try {
-    const result = getOwnedSession(c);
+    const result = await getOwnedSession(c);
     if (isResponse(result)) return result;
     const session = result;
     const id = session.id;
 
-    const existingMessages = db
-      .prepare("SELECT COUNT(*) as count FROM messages WHERE session_id = ?")
-      .get(id) as unknown as {
-      count: number;
-    };
-    if (existingMessages.count > 0) {
+    const existingMessages = await db
+      .selectFrom("messages")
+      .select((eb) => eb.fn.countAll().as("count"))
+      .where("session_id", "=", id)
+      .executeTakeFirstOrThrow();
+    if (Number(existingMessages.count) > 0) {
       return c.json({ reply: "インタビューは既に開始されています。", alreadyStarted: true });
     }
 
@@ -77,11 +78,10 @@ interviewRoutes.post("/sessions/:id/start", async (c) => {
             stream.on("end", () => {
               const fullText = getFullText();
               const { text: cleanText, choices } = extractChoices(fullText);
-              db.prepare("INSERT INTO messages (session_id, role, content) VALUES (?, ?, ?)").run(
-                id,
-                "assistant",
-                cleanText,
-              );
+              db.insertInto("messages")
+                .values({ session_id: id, role: "assistant", content: cleanText })
+                .execute()
+                .catch((err) => console.error("Failed to save message:", err));
               controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: "done", choices })}\n\n`));
               controller.close();
             });
@@ -106,7 +106,7 @@ interviewRoutes.post("/sessions/:id/start", async (c) => {
     const rawReply = extractText(response);
     const { text: reply, choices } = extractChoices(rawReply);
 
-    db.prepare("INSERT INTO messages (session_id, role, content) VALUES (?, ?, ?)").run(id, "assistant", reply);
+    await db.insertInto("messages").values({ session_id: id, role: "assistant", content: reply }).execute();
 
     return c.json({ reply, choices });
   } catch (e) {
@@ -118,7 +118,7 @@ interviewRoutes.post("/sessions/:id/start", async (c) => {
 // 6. POST /sessions/:id/chat — Send message, get AI reply (owner only)
 interviewRoutes.post("/sessions/:id/chat", async (c) => {
   try {
-    const result = getOwnedSession(c);
+    const result = await getOwnedSession(c);
     if (isResponse(result)) return result;
     const session = result;
     const id = session.id;
@@ -126,13 +126,16 @@ interviewRoutes.post("/sessions/:id/chat", async (c) => {
     const { message } = chatMessageSchema.parse(body);
 
     // Save user message
-    db.prepare("INSERT INTO messages (session_id, role, content) VALUES (?, ?, ?)").run(id, "user", message);
-    db.prepare("UPDATE sessions SET updated_at = CURRENT_TIMESTAMP WHERE id = ?").run(id);
+    await db.insertInto("messages").values({ session_id: id, role: "user", content: message }).execute();
+    await db.updateTable("sessions").set({ updated_at: now() }).where("id", "=", id).execute();
 
     // Build conversation history
-    const allMessages = db
-      .prepare("SELECT role, content FROM messages WHERE session_id = ? ORDER BY created_at")
-      .all(id) as unknown as { role: string; content: string }[];
+    const allMessages = await db
+      .selectFrom("messages")
+      .select(["role", "content"])
+      .where("session_id", "=", id)
+      .orderBy("created_at")
+      .execute();
     const chatMessages = allMessages.map((m) => ({ role: m.role as "user" | "assistant", content: m.content }));
 
     const turnCount = allMessages.filter((m) => m.role === "user").length;
@@ -183,11 +186,10 @@ ${turnCount >= 5 ? "十分な情報が集まりました。最後にまとめの
             stream.on("end", () => {
               const fullText = getFullText();
               const { text: cleanText, choices } = extractChoices(fullText);
-              db.prepare("INSERT INTO messages (session_id, role, content) VALUES (?, ?, ?)").run(
-                id,
-                "assistant",
-                cleanText,
-              );
+              db.insertInto("messages")
+                .values({ session_id: id, role: "assistant", content: cleanText })
+                .execute()
+                .catch((err) => console.error("Failed to save message:", err));
               const readyForAnalysis = cleanText.includes("[READY_FOR_ANALYSIS]") || turnCount >= 8;
               controller.enqueue(
                 encoder.encode(`data: ${JSON.stringify({ type: "done", readyForAnalysis, turnCount, choices })}\n\n`),
@@ -215,11 +217,14 @@ ${turnCount >= 5 ? "十分な情報が集まりました。最後にまとめの
     const rawReply = extractText(response);
     const { text: cleanReply, choices } = extractChoices(rawReply);
 
-    db.prepare("INSERT INTO messages (session_id, role, content) VALUES (?, ?, ?)").run(
-      id,
-      "assistant",
-      cleanReply.replace("[READY_FOR_ANALYSIS]", "").trim(),
-    );
+    await db
+      .insertInto("messages")
+      .values({
+        session_id: id,
+        role: "assistant",
+        content: cleanReply.replace("[READY_FOR_ANALYSIS]", "").trim(),
+      })
+      .execute();
 
     const readyForAnalysis = rawReply.includes("[READY_FOR_ANALYSIS]") || turnCount >= 8;
 

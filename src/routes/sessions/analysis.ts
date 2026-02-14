@@ -2,7 +2,8 @@ import crypto from "node:crypto";
 import type { Context } from "hono";
 import { Hono } from "hono";
 import { ANALYSIS_TYPE, requiresProForStep, SESSION_STATUS } from "../../constants.ts";
-import { db } from "../../db.ts";
+import { now } from "../../db/helpers.ts";
+import { db } from "../../db/index.ts";
 import { saveAnalysisResult } from "../../helpers/analysis-store.ts";
 import { generatePRDMarkdown } from "../../helpers/format.ts";
 import { getOwnedSession, isResponse } from "../../helpers/session-ownership.ts";
@@ -16,7 +17,7 @@ const PAYMENT_LINK = "https://buy.stripe.com/test_dRmcMXbrh3Q8ggx8DA48000";
  * PRO_GATE 環境変数で制御: "prd"(default) | "spec" | "readiness" | "none" | "analyze" | "hypotheses"
  */
 // biome-ignore lint/suspicious/noExplicitAny: Hono の Context 型パラメータ制約
-function requireProForStep(c: Context<AppEnv, any>, step: string): Response | null {
+async function requireProForStep(c: Context<AppEnv, any>, step: string): Promise<Response | null> {
   if (!requiresProForStep(step)) return null;
 
   const user = c.get("user");
@@ -24,7 +25,7 @@ function requireProForStep(c: Context<AppEnv, any>, step: string): Response | nu
     return c.json({ error: "Login required for this feature", upgrade: true }, 401);
   }
 
-  const row = db.prepare("SELECT plan FROM users WHERE id = ?").get(user.id) as { plan: string } | undefined;
+  const row = await db.selectFrom("users").select("plan").where("id", "=", user.id).executeTakeFirst();
   if (row?.plan !== "pro") {
     return c.json(
       {
@@ -43,16 +44,19 @@ export const analysisRoutes = new Hono<AppEnv>();
 // 7. POST /sessions/:id/analyze — Extract facts from transcript (owner only)
 analysisRoutes.post("/sessions/:id/analyze", async (c) => {
   try {
-    const blocked = requireProForStep(c, "analyze");
+    const blocked = await requireProForStep(c, "analyze");
     if (blocked) return blocked;
-    const result = getOwnedSession(c);
+    const result = await getOwnedSession(c);
     if (isResponse(result)) return result;
     const session = result;
     const id = session.id;
 
-    const messages = db
-      .prepare("SELECT role, content FROM messages WHERE session_id = ? ORDER BY created_at")
-      .all(id) as unknown as { role: string; content: string }[];
+    const messages = await db
+      .selectFrom("messages")
+      .select(["role", "content"])
+      .where("session_id", "=", id)
+      .orderBy("created_at")
+      .execute();
     const transcript = messages
       .map((m) => `${m.role === "user" ? "回答者" : "インタビュアー"}: ${m.content}`)
       .join("\n\n");
@@ -94,12 +98,13 @@ severityは "high", "medium", "low" のいずれか。
     }
 
     // Save analysis
-    saveAnalysisResult(id, ANALYSIS_TYPE.FACTS, facts);
+    await saveAnalysisResult(id, ANALYSIS_TYPE.FACTS, facts);
 
-    db.prepare("UPDATE sessions SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?").run(
-      SESSION_STATUS.ANALYZED,
-      id,
-    );
+    await db
+      .updateTable("sessions")
+      .set({ status: SESSION_STATUS.ANALYZED, updated_at: now() })
+      .where("id", "=", id)
+      .execute();
     return c.json(facts);
   } catch (e) {
     console.error("Analyze error:", e);
@@ -110,16 +115,19 @@ severityは "high", "medium", "low" のいずれか。
 // 8. POST /sessions/:id/hypotheses — Generate hypotheses from facts (owner only)
 analysisRoutes.post("/sessions/:id/hypotheses", async (c) => {
   try {
-    const blocked = requireProForStep(c, "hypotheses");
+    const blocked = await requireProForStep(c, "hypotheses");
     if (blocked) return blocked;
-    const result = getOwnedSession(c);
+    const result = await getOwnedSession(c);
     if (isResponse(result)) return result;
     const session = result;
     const id = session.id;
 
-    const factsRow = db
-      .prepare("SELECT data FROM analysis_results WHERE session_id = ? AND type = ?")
-      .get(id, ANALYSIS_TYPE.FACTS) as unknown as { data: string } | undefined;
+    const factsRow = await db
+      .selectFrom("analysis_results")
+      .select("data")
+      .where("session_id", "=", id)
+      .where("type", "=", ANALYSIS_TYPE.FACTS)
+      .executeTakeFirst();
     if (!factsRow) return c.json({ error: "ファクト抽出を先に実行してください" }, 400);
 
     const facts = JSON.parse(factsRow.data);
@@ -166,12 +174,13 @@ analysisRoutes.post("/sessions/:id/hypotheses", async (c) => {
       };
     }
 
-    saveAnalysisResult(id, ANALYSIS_TYPE.HYPOTHESES, hypotheses);
+    await saveAnalysisResult(id, ANALYSIS_TYPE.HYPOTHESES, hypotheses);
 
-    db.prepare("UPDATE sessions SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?").run(
-      SESSION_STATUS.HYPOTHESIZED,
-      id,
-    );
+    await db
+      .updateTable("sessions")
+      .set({ status: SESSION_STATUS.HYPOTHESIZED, updated_at: now() })
+      .where("id", "=", id)
+      .execute();
     return c.json(hypotheses);
   } catch (e) {
     console.error("Hypotheses error:", e);
@@ -182,19 +191,25 @@ analysisRoutes.post("/sessions/:id/hypotheses", async (c) => {
 // 9. POST /sessions/:id/prd — Generate PRD from facts & hypotheses (owner only)
 analysisRoutes.post("/sessions/:id/prd", async (c) => {
   try {
-    const blocked = requireProForStep(c, "prd");
+    const blocked = await requireProForStep(c, "prd");
     if (blocked) return blocked;
-    const result = getOwnedSession(c);
+    const result = await getOwnedSession(c);
     if (isResponse(result)) return result;
     const session = result;
     const id = session.id;
 
-    const factsRow = db
-      .prepare("SELECT data FROM analysis_results WHERE session_id = ? AND type = ?")
-      .get(id, ANALYSIS_TYPE.FACTS) as unknown as { data: string } | undefined;
-    const hypothesesRow = db
-      .prepare("SELECT data FROM analysis_results WHERE session_id = ? AND type = ?")
-      .get(id, ANALYSIS_TYPE.HYPOTHESES) as unknown as { data: string } | undefined;
+    const factsRow = await db
+      .selectFrom("analysis_results")
+      .select("data")
+      .where("session_id", "=", id)
+      .where("type", "=", ANALYSIS_TYPE.FACTS)
+      .executeTakeFirst();
+    const hypothesesRow = await db
+      .selectFrom("analysis_results")
+      .select("data")
+      .where("session_id", "=", id)
+      .where("type", "=", ANALYSIS_TYPE.HYPOTHESES)
+      .executeTakeFirst();
     if (!factsRow || !hypothesesRow) return c.json({ error: "先にファクト抽出と仮説生成を実行してください" }, 400);
 
     const facts = JSON.parse(factsRow.data);
@@ -322,12 +337,13 @@ analysisRoutes.post("/sessions/:id/prd", async (c) => {
       };
     }
 
-    saveAnalysisResult(id, ANALYSIS_TYPE.PRD, prd);
+    await saveAnalysisResult(id, ANALYSIS_TYPE.PRD, prd);
 
-    db.prepare("UPDATE sessions SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?").run(
-      SESSION_STATUS.PRD_GENERATED,
-      id,
-    );
+    await db
+      .updateTable("sessions")
+      .set({ status: SESSION_STATUS.PRD_GENERATED, updated_at: now() })
+      .where("id", "=", id)
+      .execute();
     return c.json(prd);
   } catch (e) {
     console.error("PRD error:", e);
@@ -338,16 +354,19 @@ analysisRoutes.post("/sessions/:id/prd", async (c) => {
 // 10. POST /sessions/:id/spec — Generate spec from PRD (owner only)
 analysisRoutes.post("/sessions/:id/spec", async (c) => {
   try {
-    const blocked = requireProForStep(c, "spec");
+    const blocked = await requireProForStep(c, "spec");
     if (blocked) return blocked;
-    const result = getOwnedSession(c);
+    const result = await getOwnedSession(c);
     if (isResponse(result)) return result;
     const session = result;
     const id = session.id;
 
-    const prdRow = db
-      .prepare("SELECT data FROM analysis_results WHERE session_id = ? AND type = ?")
-      .get(id, ANALYSIS_TYPE.PRD) as unknown as { data: string } | undefined;
+    const prdRow = await db
+      .selectFrom("analysis_results")
+      .select("data")
+      .where("session_id", "=", id)
+      .where("type", "=", ANALYSIS_TYPE.PRD)
+      .executeTakeFirst();
     if (!prdRow) return c.json({ error: "先にPRD生成を実行してください" }, 400);
 
     const prd = JSON.parse(prdRow.data);
@@ -432,12 +451,13 @@ analysisRoutes.post("/sessions/:id/spec", async (c) => {
     const prdMarkdown = generatePRDMarkdown(prdData, session.theme);
     spec.prdMarkdown = prdMarkdown;
 
-    saveAnalysisResult(id, ANALYSIS_TYPE.SPEC, spec);
+    await saveAnalysisResult(id, ANALYSIS_TYPE.SPEC, spec);
 
-    db.prepare("UPDATE sessions SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?").run(
-      SESSION_STATUS.SPEC_GENERATED,
-      id,
-    );
+    await db
+      .updateTable("sessions")
+      .set({ status: SESSION_STATUS.SPEC_GENERATED, updated_at: now() })
+      .where("id", "=", id)
+      .execute();
     return c.json(spec);
   } catch (e) {
     console.error("Spec error:", e);
@@ -448,22 +468,28 @@ analysisRoutes.post("/sessions/:id/spec", async (c) => {
 // 10b. POST /sessions/:id/readiness — Generate production readiness checklist (owner only)
 analysisRoutes.post("/sessions/:id/readiness", async (c) => {
   try {
-    const blocked = requireProForStep(c, "readiness");
+    const blocked = await requireProForStep(c, "readiness");
     if (blocked) return blocked;
-    const result = getOwnedSession(c);
+    const result = await getOwnedSession(c);
     if (isResponse(result)) return result;
     const session = result;
     const id = session.id;
 
-    const specRow = db
-      .prepare("SELECT data FROM analysis_results WHERE session_id = ? AND type = ?")
-      .get(id, ANALYSIS_TYPE.SPEC) as unknown as { data: string } | undefined;
+    const specRow = await db
+      .selectFrom("analysis_results")
+      .select("data")
+      .where("session_id", "=", id)
+      .where("type", "=", ANALYSIS_TYPE.SPEC)
+      .executeTakeFirst();
     if (!specRow) return c.json({ error: "先に実装仕様の生成を実行してください" }, 400);
 
     const spec = JSON.parse(specRow.data);
-    const prdRow = db
-      .prepare("SELECT data FROM analysis_results WHERE session_id = ? AND type = ?")
-      .get(id, ANALYSIS_TYPE.PRD) as unknown as { data: string } | undefined;
+    const prdRow = await db
+      .selectFrom("analysis_results")
+      .select("data")
+      .where("session_id", "=", id)
+      .where("type", "=", ANALYSIS_TYPE.PRD)
+      .executeTakeFirst();
     const prd = prdRow ? JSON.parse(prdRow.data) : {};
 
     const systemPrompt = `あなたはプロダクション品質のレビューエキスパートです。PRDと実装仕様に基づいて、ISO/IEC 25010 の8品質特性に沿った本番リリース前チェックリストを生成してください。
@@ -534,12 +560,13 @@ analysisRoutes.post("/sessions/:id/readiness", async (c) => {
       };
     }
 
-    saveAnalysisResult(id, ANALYSIS_TYPE.READINESS, readiness);
+    await saveAnalysisResult(id, ANALYSIS_TYPE.READINESS, readiness);
 
-    db.prepare("UPDATE sessions SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?").run(
-      SESSION_STATUS.READINESS_CHECKED,
-      id,
-    );
+    await db
+      .updateTable("sessions")
+      .set({ status: SESSION_STATUS.READINESS_CHECKED, updated_at: now() })
+      .where("id", "=", id)
+      .execute();
     return c.json(readiness);
   } catch (e) {
     console.error("Readiness error:", e);
@@ -548,11 +575,13 @@ analysisRoutes.post("/sessions/:id/readiness", async (c) => {
 });
 
 // GET /sessions/:id/deploy-bundle — Public endpoint for exe.dev Shelley to fetch spec + PRD
-analysisRoutes.get("/sessions/:id/deploy-bundle", (c) => {
+analysisRoutes.get("/sessions/:id/deploy-bundle", async (c) => {
   try {
     const id = c.req.param("id");
     const token = c.req.query("token");
-    const session = db.prepare("SELECT * FROM sessions WHERE id = ?").get(id) as unknown as Session | undefined;
+    const session = (await db.selectFrom("sessions").selectAll().where("id", "=", id).executeTakeFirst()) as unknown as
+      | Session
+      | undefined;
     if (!session) return c.json({ error: "Not found" }, 404);
 
     // Verify deploy token or allow public sessions
@@ -560,16 +589,22 @@ analysisRoutes.get("/sessions/:id/deploy-bundle", (c) => {
       return c.json({ error: "Forbidden" }, 403);
     }
 
-    const specResult = db
-      .prepare(
-        "SELECT data FROM analysis_results WHERE session_id = ? AND type = 'spec' ORDER BY created_at DESC LIMIT 1",
-      )
-      .get(id) as { data: string } | undefined;
-    const prdResult = db
-      .prepare(
-        "SELECT data FROM analysis_results WHERE session_id = ? AND type = 'prd' ORDER BY created_at DESC LIMIT 1",
-      )
-      .get(id) as { data: string } | undefined;
+    const specResult = (await db
+      .selectFrom("analysis_results")
+      .select("data")
+      .where("session_id", "=", id)
+      .where("type", "=", "spec")
+      .orderBy("created_at", "desc")
+      .limit(1)
+      .executeTakeFirst()) as { data: string } | undefined;
+    const prdResult = (await db
+      .selectFrom("analysis_results")
+      .select("data")
+      .where("session_id", "=", id)
+      .where("type", "=", "prd")
+      .orderBy("created_at", "desc")
+      .limit(1)
+      .executeTakeFirst()) as { data: string } | undefined;
 
     const format = c.req.query("format");
     if (format === "text") {
@@ -591,25 +626,30 @@ analysisRoutes.get("/sessions/:id/deploy-bundle", (c) => {
 });
 
 // POST /sessions/:id/deploy-token — Generate a deploy token for the session
-analysisRoutes.post("/sessions/:id/deploy-token", (c) => {
+analysisRoutes.post("/sessions/:id/deploy-token", async (c) => {
   try {
     const id = c.req.param("id");
-    const session = db.prepare("SELECT * FROM sessions WHERE id = ?").get(id) as unknown as Session | undefined;
+    const session = (await db.selectFrom("sessions").selectAll().where("id", "=", id).executeTakeFirst()) as unknown as
+      | Session
+      | undefined;
     if (!session) return c.json({ error: "Not found" }, 404);
 
     const token = crypto.randomUUID();
-    db.prepare("UPDATE sessions SET deploy_token = ? WHERE id = ?").run(token, id);
+    await db.updateTable("sessions").set({ deploy_token: token }).where("id", "=", id).execute();
 
     const baseUrl = process.env.BASE_URL || "https://deepform.exe.xyz:8000";
     const deployUrl = `${baseUrl}/api/sessions/${id}/deploy-bundle?token=${token}&format=text`;
 
     // Extract projectName from spec if available
     let projectName = "";
-    const specResult = db
-      .prepare(
-        "SELECT data FROM analysis_results WHERE session_id = ? AND type = 'spec' ORDER BY created_at DESC LIMIT 1",
-      )
-      .get(id) as { data: string } | undefined;
+    const specResult = (await db
+      .selectFrom("analysis_results")
+      .select("data")
+      .where("session_id", "=", id)
+      .where("type", "=", "spec")
+      .orderBy("created_at", "desc")
+      .limit(1)
+      .executeTakeFirst()) as { data: string } | undefined;
     if (specResult) {
       try {
         const parsed = JSON.parse(specResult.data);
@@ -630,11 +670,13 @@ analysisRoutes.post("/sessions/:id/deploy-token", (c) => {
 });
 
 // GET /sessions/:id/spec-export — Return formatted spec.json for external tools
-analysisRoutes.get("/sessions/:id/spec-export", (c) => {
+analysisRoutes.get("/sessions/:id/spec-export", async (c) => {
   try {
     const id = c.req.param("id");
     const user = c.get("user");
-    const session = db.prepare("SELECT * FROM sessions WHERE id = ?").get(id) as unknown as Session | undefined;
+    const session = (await db.selectFrom("sessions").selectAll().where("id", "=", id).executeTakeFirst()) as unknown as
+      | Session
+      | undefined;
     if (!session) return c.json({ error: "Session not found" }, 404);
 
     // Access control: owner or public
@@ -642,9 +684,12 @@ analysisRoutes.get("/sessions/:id/spec-export", (c) => {
     const isPublic = session.is_public === 1;
     if (!isOwner && !isPublic) return c.json({ error: "アクセス権限がありません" }, 403);
 
-    const specRow = db
-      .prepare("SELECT data FROM analysis_results WHERE session_id = ? AND type = ?")
-      .get(id, ANALYSIS_TYPE.SPEC) as unknown as { data: string } | undefined;
+    const specRow = await db
+      .selectFrom("analysis_results")
+      .select("data")
+      .where("session_id", "=", id)
+      .where("type", "=", ANALYSIS_TYPE.SPEC)
+      .executeTakeFirst();
     if (!specRow) return c.json({ error: "Spec が未生成です。先に実装仕様を生成してください" }, 400);
 
     const spec = JSON.parse(specRow.data);

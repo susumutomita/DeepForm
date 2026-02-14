@@ -6,7 +6,7 @@ vi.mock("@hono/node-server/serve-static", () => ({
 }));
 
 // node:sqlite でテスト用 DB を作成（ネイティブバイナリ不要）
-vi.mock("../../db.ts", async () => {
+vi.mock("../../db/index.ts", async () => {
   const { createTestDb } = await import("../helpers/test-db.ts");
   return { db: createTestDb() };
 });
@@ -20,8 +20,10 @@ vi.mock("../../llm.ts", () => ({
 }));
 
 import { app } from "../../app.ts";
-import { db } from "../../db.ts";
 import { clearRateLimitMap } from "../../routes/feedback.ts";
+import { getRawDb } from "../helpers/test-db.ts";
+
+const rawDb = getRawDb();
 
 // ---------------------------------------------------------------------------
 // Auth helpers
@@ -62,8 +64,8 @@ function postFeedback(
 // Helper: clean tables using parameterized DELETE (not exec)
 // ---------------------------------------------------------------------------
 function cleanTables(): void {
-  db.prepare("DELETE FROM feedback").run();
-  db.prepare("DELETE FROM users").run();
+  rawDb.prepare("DELETE FROM feedback").run();
+  rawDb.prepare("DELETE FROM users").run();
 }
 
 // ---------------------------------------------------------------------------
@@ -95,7 +97,7 @@ describe("フィードバック API", () => {
       expect(data.ok).toBe(true);
 
       // DB に保存されていることを確認
-      const row = db.prepare("SELECT * FROM feedback").get() as any;
+      const row = rawDb.prepare("SELECT * FROM feedback").get() as any;
       expect(row.type).toBe("bug");
       expect(row.message).toBe("ボタンが動きません");
       expect(row.page).toBe("/session/abc");
@@ -109,7 +111,7 @@ describe("フィードバック API", () => {
 
       // Then: 201で user_id 付きで保存される
       expect(res.status).toBe(201);
-      const row = db.prepare("SELECT * FROM feedback").get() as any;
+      const row = rawDb.prepare("SELECT * FROM feedback").get() as any;
       expect(row.type).toBe("feature");
       expect(row.message).toBe("ダークモードが欲しい");
       expect(row.user_id).toBeTruthy();
@@ -129,7 +131,7 @@ describe("フィードバック API", () => {
         message: "ページ指定なし",
       });
       expect(res.status).toBe(201);
-      const row = db.prepare("SELECT * FROM feedback").get() as any;
+      const row = rawDb.prepare("SELECT * FROM feedback").get() as any;
       expect(row.page).toBeNull();
     });
   });

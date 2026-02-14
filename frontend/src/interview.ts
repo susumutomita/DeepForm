@@ -115,11 +115,9 @@ export async function openSession(sessionId: string, isNew = false): Promise<voi
       return;
     }
 
-    // Show analysis button for existing sessions that are ready
     const userMsgCount = (session.messages || []).filter(m => m.role === 'user').length;
-    if (session.status === 'interviewing' && userMsgCount >= 3 && !session.analysis?.facts) {
-      showAnalysisButton();
-    }
+    const btn = document.getElementById('btn-analyze') as HTMLButtonElement | null;
+    if (btn) btn.disabled = userMsgCount < 3;
   } catch (e: any) {
     showToast(e.message, true);
   } finally {
@@ -203,27 +201,8 @@ export async function sendMessage(choiceText?: string): Promise<void> {
 }
 
 function showAnalysisButton(): void {
-  const container = document.getElementById('chat-container');
-  if (!container) return;
-  // Remove if already exists
-  container.querySelector('.analysis-start-area')?.remove();
-
-  const area = document.createElement('div');
-  area.className = 'analysis-start-area';
-  area.innerHTML = `
-    <div class="analysis-start-card">
-      <p>✅ 十分な情報が集まりました。続けて質問することもできます。</p>
-      <button class="btn btn-accent btn-lg analysis-start-btn">
-        📝 設計書を作成する
-      </button>
-    </div>
-  `;
-  area.querySelector('.analysis-start-btn')?.addEventListener('click', () => {
-    area.remove();
-    doRunFullPipeline();
-  });
-  container.appendChild(area);
-  container.scrollTop = container.scrollHeight;
+  const btn = document.getElementById('btn-analyze') as HTMLButtonElement | null;
+  if (btn) btn.disabled = false;
 }
 
 function showChoiceButtons(containerId: string, choices: string[]): void {
@@ -393,16 +372,15 @@ export async function doRunFullPipeline(): Promise<void> {
     design: t('loading.prd'),
   };
 
-  // Show pipeline progress UI
-  showPipelineUI();
+  // Show progress via step nav + loading indicator
+  showLoading(stageLabels.facts);
 
   try {
     await api.runPipeline(currentSessionId, {
       onStageRunning: (stage) => {
-        updatePipelineStage(stage, 'running', stageLabels[stage] || stage);
+        showLoading(stageLabels[stage] || stage);
       },
       onStageData: (stage, data) => {
-        updatePipelineStage(stage, 'done', stageLabels[stage] || stage);
         switch (stage) {
           case 'facts':
             renderFacts(data.facts || []);
@@ -422,16 +400,16 @@ export async function doRunFullPipeline(): Promise<void> {
         }
       },
       onDone: () => {
-        hidePipelineUI();
+        hideLoading();
         showToast(t('toast.specDone'));
       },
       onError: (error) => {
-        hidePipelineUI();
+        hideLoading();
         showToast(error, true);
       },
     });
   } catch (e: any) {
-    hidePipelineUI();
+    hideLoading();
     if (e.status === 402 || e.upgrade) {
       showUpgradeModal(e.upgradeUrl || PAYMENT_LINK);
       return;
@@ -440,57 +418,6 @@ export async function doRunFullPipeline(): Promise<void> {
   } finally {
     pipelineRunning = false;
   }
-}
-
-function showPipelineUI(): void {
-  // Replace chat area with pipeline progress
-  let el = document.getElementById('pipeline-overlay');
-  if (!el) {
-    el = document.createElement('div');
-    el.id = 'pipeline-overlay';
-    el.className = 'pipeline-overlay';
-    document.getElementById('step-interview')?.appendChild(el);
-  }
-  el.innerHTML = `
-    <div class="pipeline-card">
-      <h3>🔍 分析中...</h3>
-      <div class="pipeline-stages">
-        <div class="pipeline-stage" data-pipeline="facts">
-          <span class="pipeline-icon">⏳</span>
-          <span class="pipeline-label">ファクト抽出</span>
-        </div>
-        <div class="pipeline-stage" data-pipeline="hypotheses">
-          <span class="pipeline-icon">⏳</span>
-          <span class="pipeline-label">仮説生成</span>
-        </div>
-        <div class="pipeline-stage" data-pipeline="design">
-          <span class="pipeline-icon">⏳</span>
-          <span class="pipeline-label">設計書作成</span>
-        </div>
-      </div>
-    </div>
-  `;
-  el.style.display = 'flex';
-}
-
-function updatePipelineStage(stage: string, status: 'running' | 'done', _label: string): void {
-  const el = document.querySelector(`[data-pipeline="${stage}"]`);
-  if (!el) return;
-  const icon = el.querySelector('.pipeline-icon');
-  if (status === 'running') {
-    el.classList.add('running');
-    el.classList.remove('done');
-    if (icon) icon.textContent = '⚡';
-  } else {
-    el.classList.remove('running');
-    el.classList.add('done');
-    if (icon) icon.textContent = '✅';
-  }
-}
-
-function hidePipelineUI(): void {
-  const el = document.getElementById('pipeline-overlay');
-  if (el) el.style.display = 'none';
 }
 
 // --- Export ---

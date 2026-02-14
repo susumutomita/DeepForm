@@ -14,6 +14,9 @@ export const FULL_SCHEMA = `
     github_id INTEGER,
     github_token TEXT,
     avatar_url TEXT,
+    plan TEXT DEFAULT 'free',
+    stripe_customer_id TEXT,
+    plan_updated_at DATETIME,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
   );

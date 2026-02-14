@@ -9,12 +9,14 @@ import type { AppEnv, Campaign, Session } from "../types.ts";
 // biome-ignore lint/suspicious/noExplicitAny: Hono の Context 型パラメータ制約
 export function getOwnedSession(c: Context<AppEnv, any>): Session | Response {
   const user = c.get("user");
-  if (!user) return c.json({ error: "ログインが必要です" }, 401);
   const session = db.prepare("SELECT * FROM sessions WHERE id = ?").get(c.req.param("id")) as unknown as
     | Session
     | undefined;
   if (!session) return c.json({ error: "セッションが見つかりません" }, 404);
-  if (session.user_id !== user.id) return c.json({ error: "アクセス権限がありません" }, 403);
+  // Allow access if: owner, guest session (no user_id), or public session
+  if (session.user_id && (!user || session.user_id !== user.id) && !session.is_public) {
+    return c.json({ error: "アクセス権限がありません" }, 403);
+  }
   return session;
 }
 

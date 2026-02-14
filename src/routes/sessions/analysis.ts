@@ -1,3 +1,4 @@
+import crypto from "node:crypto";
 import { Hono } from "hono";
 import { ANALYSIS_TYPE, SESSION_STATUS } from "../../constants.ts";
 import { db } from "../../db.ts";
@@ -502,6 +503,60 @@ analysisRoutes.post("/sessions/:id/readiness", async (c) => {
     return c.json(readiness);
   } catch (e) {
     console.error("Readiness error:", e);
+    return c.json({ error: "Internal Server Error" }, 500);
+  }
+});
+
+// GET /sessions/:id/deploy-bundle — Public endpoint for exe.dev Shelley to fetch spec + PRD
+analysisRoutes.get("/sessions/:id/deploy-bundle", (c) => {
+  try {
+    const id = c.req.param("id");
+    const token = c.req.query("token");
+    const session = db.prepare("SELECT * FROM sessions WHERE id = ?").get(id) as unknown as Session | undefined;
+    if (!session) return c.json({ error: "Not found" }, 404);
+
+    // Verify deploy token or allow public sessions
+    if (!session.is_public && session.deploy_token !== token) {
+      return c.json({ error: "Forbidden" }, 403);
+    }
+
+    const specResult = db.prepare("SELECT data FROM analysis_results WHERE session_id = ? AND type = 'spec' ORDER BY created_at DESC LIMIT 1").get(id) as { data: string } | undefined;
+    const prdResult = db.prepare("SELECT data FROM analysis_results WHERE session_id = ? AND type = 'prd' ORDER BY created_at DESC LIMIT 1").get(id) as { data: string } | undefined;
+
+    const format = c.req.query("format");
+    if (format === "text") {
+      let text = `# DeepForm Deploy Bundle\n# Theme: ${session.theme}\n\n`;
+      if (specResult) text += `## spec.json\n\n${specResult.data}\n\n`;
+      if (prdResult) text += `## PRD\n\n${prdResult.data}\n`;
+      return c.text(text);
+    }
+
+    return c.json({
+      theme: session.theme,
+      spec: specResult ? JSON.parse(specResult.data) : null,
+      prd: prdResult ? JSON.parse(prdResult.data) : null,
+    });
+  } catch (e) {
+    console.error("Deploy bundle error:", e);
+    return c.json({ error: "Internal Server Error" }, 500);
+  }
+});
+
+// POST /sessions/:id/deploy-token — Generate a deploy token for the session
+analysisRoutes.post("/sessions/:id/deploy-token", (c) => {
+  try {
+    const id = c.req.param("id");
+    const session = db.prepare("SELECT * FROM sessions WHERE id = ?").get(id) as unknown as Session | undefined;
+    if (!session) return c.json({ error: "Not found" }, 404);
+
+    const token = crypto.randomUUID();
+    db.prepare("UPDATE sessions SET deploy_token = ? WHERE id = ?").run(token, id);
+
+    const baseUrl = process.env.BASE_URL || "https://deepform.exe.xyz:8000";
+    const deployUrl = `${baseUrl}/api/sessions/${id}/deploy-bundle?token=${token}&format=text`;
+    return c.json({ deployUrl, theme: session.theme });
+  } catch (e) {
+    console.error("Deploy token error:", e);
     return c.json({ error: "Internal Server Error" }, 500);
   }
 });

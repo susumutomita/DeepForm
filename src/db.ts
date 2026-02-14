@@ -75,6 +75,14 @@ try {
   if (!msg.includes("duplicate column")) throw e;
 }
 
+// Migration: deploy_token column for sessions
+try {
+  db.exec("ALTER TABLE sessions ADD COLUMN deploy_token TEXT");
+} catch (e: unknown) {
+  const msg = e instanceof Error ? e.message : "";
+  if (!msg.includes("duplicate column")) throw e;
+}
+
 // Migration: github_id → exe_user_id
 try {
   db.exec("ALTER TABLE users ADD COLUMN exe_user_id TEXT");

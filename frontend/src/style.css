@@ -2588,3 +2588,51 @@ a:hover { color: var(--primary-hover); }
 .analytics-error p {
   margin-bottom: 0.5rem;
 }
+
+/* === Completion Feedback === */
+.completion-feedback-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+.completion-feedback-card {
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+  padding: 2rem;
+  max-width: 400px;
+  width: 90%;
+  text-align: center;
+}
+.completion-feedback-card h3 { margin: 0 0 0.5rem; }
+.completion-feedback-card p { margin: 0 0 1rem; color: var(--color-muted); }
+.feedback-emoji-row { display: flex; gap: 1rem; justify-content: center; margin-bottom: 1rem; }
+.feedback-emoji-btn {
+  font-size: 2rem;
+  background: none;
+  border: 2px solid transparent;
+  border-radius: 12px;
+  padding: 0.5rem;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.feedback-emoji-btn:hover { border-color: var(--color-border); transform: scale(1.1); }
+.feedback-emoji-btn.selected { border-color: var(--color-accent); background: var(--color-surface); transform: scale(1.15); }
+.feedback-text {
+  width: 100%;
+  padding: 0.5rem;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  background: var(--color-surface);
+  color: var(--color-text);
+  resize: none;
+  margin-bottom: 1rem;
+  font-family: inherit;
+}
+.feedback-actions { display: flex; gap: 0.5rem; justify-content: center; }
+.btn-ghost { background: none; border: none; color: var(--color-muted); }
+.btn-ghost:hover { color: var(--color-text); }

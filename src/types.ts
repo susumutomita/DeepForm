@@ -20,6 +20,7 @@ export interface Session {
   campaign_id: string | null;
   user_id?: string | null;
   is_public?: number;
+  deploy_token?: string | null;
 }
 
 export interface Message {

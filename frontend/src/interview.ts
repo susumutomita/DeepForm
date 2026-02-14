@@ -232,6 +232,7 @@ export async function doRunReadiness(): Promise<void> {
     updateStepNav('readiness_checked');
     activateStep('readiness');
     showToast(t('toast.readinessDone'));
+    showCompletionFeedback(currentSessionId);
   } catch (e: any) {
     showToast(e.message, true);
   } finally {
@@ -269,16 +270,38 @@ export async function exportPRDMarkdown(): Promise<void> {
 export async function doDeployToExeDev(): Promise<void> {
   if (!currentSessionId) return;
   try {
-    const data = await api.getSpecExport(currentSessionId);
-    const specJson = JSON.stringify(data.spec, null, 2);
-    await navigator.clipboard.writeText(specJson);
-    showToast('Spec をクリップボードにコピーしました。exe.dev で新しいプロジェクトを作成してください');
+    const res = await fetch(`/api/sessions/${currentSessionId}/deploy-token`, { method: 'POST' });
+    if (!res.ok) throw new Error('Failed to get deploy bundle');
+    const bundle = await res.json() as { theme: string; deployUrl: string };
 
-    // Show the exe.dev link section
-    const linkContainer = document.getElementById('exedev-link-container');
-    if (linkContainer) {
-      linkContainer.classList.remove('hidden');
-    }
+    const prompt = `IMPORTANT: First, fetch the full spec by running:
+  curl -s '${bundle.deployUrl}' > /tmp/deepform-spec.txt
+  cat /tmp/deepform-spec.txt
+
+Then build the app according to that spec.
+
+Theme: ${bundle.theme}
+
+CRITICAL RULES — read these before writing ANY code:
+1. NO MOCKS. NO STUBS. NO HARDCODED ARRAYS. NO FAKE DATA.
+   Every feature must have real database tables, real queries, real API endpoints.
+2. "Looks like it works" is NOT done. DONE = data survives a page reload.
+   After building, open the browser, submit a form, reload the page.
+   If the data is gone, you are not done.
+3. Build Order (mandatory):
+   a. Database tables + seed data FIRST
+   b. Backend API with real DB queries SECOND
+   c. Frontend LAST, connected to real API
+4. If a feature's backend isn't ready, show "Not implemented" in the UI.
+   Never fake it with hardcoded data.
+5. VERIFICATION (mandatory before reporting done):
+   a. Open every page in the browser
+   b. Submit every form, reload, confirm data persists
+   c. Run: sqlite3 <db> "SELECT * FROM <table>" — real rows must exist
+   d. If any endpoint returns mock data, fix it before moving on`;
+
+    const encoded = encodeURIComponent(prompt);
+    window.open(`https://exe.dev/new?prompt=${encoded}`, '_blank');
   } catch (e: any) {
     showToast(e.message, true);
   }
@@ -462,6 +485,67 @@ function renderReadiness(categories: ReadinessCategory[]): void {
     }
   };
   allCheckboxes.forEach(cb => cb.addEventListener('change', updateReadinessCompletion));
+}
+
+// --- Completion Feedback ---
+function showCompletionFeedback(sessionId: string): void {
+  const storageKey = `deepform_feedback_${sessionId}`;
+  if (localStorage.getItem(storageKey)) return;
+
+  const overlay = document.createElement('div');
+  overlay.className = 'completion-feedback-overlay';
+  const card = document.createElement('div');
+  card.className = 'completion-feedback-card';
+  card.innerHTML = `
+    <h3>🎉 分析が完了しました！</h3>
+    <p>DeepForm の体験はいかがでしたか？</p>
+    <div class="feedback-emoji-row">
+      <button class="feedback-emoji-btn" data-rating="love">😍</button>
+      <button class="feedback-emoji-btn" data-rating="ok">🙂</button>
+      <button class="feedback-emoji-btn" data-rating="bad">😕</button>
+    </div>
+    <textarea class="feedback-text" placeholder="一言フィードバック（任意）" rows="2"></textarea>
+    <div class="feedback-actions">
+      <button class="btn btn-sm feedback-submit-btn" disabled>送信</button>
+      <button class="btn btn-sm btn-ghost feedback-skip-btn">スキップ</button>
+    </div>
+  `;
+  overlay.appendChild(card);
+  document.body.appendChild(overlay);
+
+  let selectedRating = '';
+  card.querySelectorAll('.feedback-emoji-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      card.querySelectorAll('.feedback-emoji-btn').forEach(b => b.classList.remove('selected'));
+      (btn as HTMLElement).classList.add('selected');
+      selectedRating = (btn as HTMLElement).dataset.rating || '';
+      (card.querySelector('.feedback-submit-btn') as HTMLButtonElement).disabled = false;
+    });
+  });
+
+  card.querySelector('.feedback-submit-btn')?.addEventListener('click', async () => {
+    const text = (card.querySelector('.feedback-text') as HTMLTextAreaElement).value;
+    try {
+      await fetch('/api/feedback', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          type: 'completion',
+          message: `${selectedRating}: ${text}`.trim(),
+          page: `/session/${sessionId}`,
+          sessionId,
+        }),
+      });
+    } catch {}
+    localStorage.setItem(storageKey, '1');
+    overlay.remove();
+    showToast('フィードバックありがとうございます！');
+  });
+
+  card.querySelector('.feedback-skip-btn')?.addEventListener('click', () => {
+    localStorage.setItem(storageKey, '1');
+    overlay.remove();
+  });
 }
 
 // --- Step Navigation ---

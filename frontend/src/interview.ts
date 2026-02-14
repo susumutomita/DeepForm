@@ -179,13 +179,8 @@ export async function sendMessage(choiceText?: string): Promise<void> {
         }
         finalizeStreamingBubble(bubble);
         if (data.readyForAnalysis || (data.turnCount && data.turnCount >= 8)) {
-          // Show transition message, then auto-start pipeline
-          removeChoiceButtons('chat-container');
-          addMessageToContainer('chat-container', 'assistant',
-            '📝 インタビューが完了しました。\nこれから自動で分析を行い、設計書を作成します…');
-          // Brief pause so user can read the transition
-          setTimeout(() => doRunFullPipeline(), 1500);
-          return;
+          // Show the "start analysis" button — user decides when to proceed
+          showAnalysisButton();
         }
         if (data.choices?.length) {
           showChoiceButtons('chat-container', data.choices);
@@ -203,6 +198,30 @@ export async function sendMessage(choiceText?: string): Promise<void> {
     if (btnSend) btnSend.disabled = false;
     input?.focus();
   }
+}
+
+function showAnalysisButton(): void {
+  const container = document.getElementById('chat-container');
+  if (!container) return;
+  // Remove if already exists
+  container.querySelector('.analysis-start-area')?.remove();
+
+  const area = document.createElement('div');
+  area.className = 'analysis-start-area';
+  area.innerHTML = `
+    <div class="analysis-start-card">
+      <p>✅ 十分な情報が集まりました。続けて質問することもできます。</p>
+      <button class="btn btn-accent btn-lg analysis-start-btn">
+        📝 設計書を作成する
+      </button>
+    </div>
+  `;
+  area.querySelector('.analysis-start-btn')?.addEventListener('click', () => {
+    area.remove();
+    doRunFullPipeline();
+  });
+  container.appendChild(area);
+  container.scrollTop = container.scrollHeight;
 }
 
 function showChoiceButtons(containerId: string, choices: string[]): void {

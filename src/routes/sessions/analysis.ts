@@ -1,7 +1,7 @@
 import crypto from "node:crypto";
 import type { Context } from "hono";
 import { Hono } from "hono";
-import { ANALYSIS_TYPE, SESSION_STATUS } from "../../constants.ts";
+import { ANALYSIS_TYPE, SESSION_STATUS, requiresProForStep } from "../../constants.ts";
 import { db } from "../../db.ts";
 import { saveAnalysisResult } from "../../helpers/analysis-store.ts";
 import { generatePRDMarkdown } from "../../helpers/format.ts";
@@ -11,8 +11,14 @@ import type { AppEnv, Session } from "../../types.ts";
 
 const PAYMENT_LINK = "https://buy.stripe.com/test_dRmcMXbrh3Q8ggx8DA48000";
 
+/**
+ * Pro ゲートチェック。requiresProForStep() が true の場合のみ課金壁を適用する。
+ * PRO_GATE 環境変数で制御: "prd"(default) | "spec" | "readiness" | "none" | "analyze" | "hypotheses"
+ */
 // biome-ignore lint/suspicious/noExplicitAny: Hono の Context 型パラメータ制約
-function requirePro(c: Context<AppEnv, any>): Response | null {
+function requireProForStep(c: Context<AppEnv, any>, step: string): Response | null {
+  if (!requiresProForStep(step)) return null;
+
   const user = c.get("user");
   if (!user) {
     return c.json({ error: "Login required for this feature", upgrade: true }, 401);
@@ -37,6 +43,8 @@ export const analysisRoutes = new Hono<AppEnv>();
 // 7. POST /sessions/:id/analyze — Extract facts from transcript (owner only)
 analysisRoutes.post("/sessions/:id/analyze", async (c) => {
   try {
+    const blocked = requireProForStep(c, "analyze");
+    if (blocked) return blocked;
     const result = getOwnedSession(c);
     if (isResponse(result)) return result;
     const session = result;
@@ -102,6 +110,8 @@ severityは "high", "medium", "low" のいずれか。
 // 8. POST /sessions/:id/hypotheses — Generate hypotheses from facts (owner only)
 analysisRoutes.post("/sessions/:id/hypotheses", async (c) => {
   try {
+    const blocked = requireProForStep(c, "hypotheses");
+    if (blocked) return blocked;
     const result = getOwnedSession(c);
     if (isResponse(result)) return result;
     const session = result;
@@ -169,10 +179,10 @@ analysisRoutes.post("/sessions/:id/hypotheses", async (c) => {
   }
 });
 
-// 9. POST /sessions/:id/prd — Generate PRD from facts & hypotheses (owner only, pro)
+// 9. POST /sessions/:id/prd — Generate PRD from facts & hypotheses (owner only)
 analysisRoutes.post("/sessions/:id/prd", async (c) => {
   try {
-    const blocked = requirePro(c);
+    const blocked = requireProForStep(c, "prd");
     if (blocked) return blocked;
     const result = getOwnedSession(c);
     if (isResponse(result)) return result;
@@ -325,10 +335,10 @@ analysisRoutes.post("/sessions/:id/prd", async (c) => {
   }
 });
 
-// 10. POST /sessions/:id/spec — Generate spec from PRD (owner only, pro)
+// 10. POST /sessions/:id/spec — Generate spec from PRD (owner only)
 analysisRoutes.post("/sessions/:id/spec", async (c) => {
   try {
-    const blocked = requirePro(c);
+    const blocked = requireProForStep(c, "spec");
     if (blocked) return blocked;
     const result = getOwnedSession(c);
     if (isResponse(result)) return result;
@@ -435,10 +445,10 @@ analysisRoutes.post("/sessions/:id/spec", async (c) => {
   }
 });
 
-// 10b. POST /sessions/:id/readiness — Generate production readiness checklist (owner only, pro)
+// 10b. POST /sessions/:id/readiness — Generate production readiness checklist (owner only)
 analysisRoutes.post("/sessions/:id/readiness", async (c) => {
   try {
-    const blocked = requirePro(c);
+    const blocked = requireProForStep(c, "readiness");
     if (blocked) return blocked;
     const result = getOwnedSession(c);
     if (isResponse(result)) return result;

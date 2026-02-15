@@ -142,6 +142,155 @@ function renderAIAnalysis(analysis: CampaignAIAnalysis): string {
   return html;
 }
 
+/**
+ * Render a compact campaign summary in the sidebar panel.
+ * Called from interview.ts when opening a session that has a campaign.
+ * Security: All dynamic strings pass through escapeHtml() (textContent-based).
+ */
+export async function renderCampaignSidebarPanel(
+  campaignId: string,
+  shareToken: string,
+  respondentCount: number,
+): Promise<void> {
+  const panel = document.getElementById('campaign-results-panel');
+  if (!panel) return;
+
+  panel.style.display = 'block';
+
+  // Update the campaign button to "copy share URL" (preserve <span> for i18n)
+  const createBtn = document.getElementById('btn-create-campaign') as HTMLButtonElement | null;
+  if (createBtn) {
+    const span = createBtn.querySelector('span');
+    if (span) {
+      span.textContent = 'URL をコピー';
+      span.removeAttribute('data-i18n');
+    }
+    createBtn.removeAttribute('onclick');
+    createBtn.onclick = () => {
+      const url = `${window.location.origin}/c/${shareToken}`;
+      navigator.clipboard.writeText(url).then(() => {
+        showToast('URLをコピーしました');
+      });
+    };
+  }
+
+  if (respondentCount === 0) {
+    // Safe: no user input, static text only
+    panel.innerHTML = [
+      '<div class="campaign-panel-empty">',
+      '<div class="campaign-panel-count">まだ回答がありません</div>',
+      '<p class="campaign-panel-hint">共有URLを送って回答を集めましょう</p>',
+      '</div>',
+    ].join('');
+    return;
+  }
+
+  panel.textContent = '読み込み中...';
+
+  try {
+    const analytics = await api.getCampaignAnalytics(campaignId);
+    currentCampaignId = campaignId;
+    currentAnalytics = analytics;
+
+    // Safe: all dynamic content goes through escapeHtml
+    const topPainPoints = analytics.painPoints
+      .slice(0, 3)
+      .map((p) => `<li>${escapeHtml(p.content)} <span class="campaign-panel-badge">${p.count}人</span></li>`)
+      .join('');
+
+    const topFacts = analytics.commonFacts
+      .filter((f) => f.type !== 'pain')
+      .slice(0, 3)
+      .map((f) => `<li>${escapeHtml(f.content)} <span class="campaign-panel-badge">${f.count}人</span></li>`)
+      .join('');
+
+    // Safe: all interpolated values are either escaped or numeric
+    const parts = [
+      '<div class="campaign-panel-header">',
+      `<strong>${analytics.completedSessions}人が回答済み</strong>`,
+      '</div>',
+    ];
+    if (topPainPoints) {
+      parts.push(
+        '<div class="campaign-panel-section">',
+        '<div class="campaign-panel-label">よくある困りごと</div>',
+        `<ul class="campaign-panel-list">${topPainPoints}</ul>`,
+        '</div>',
+      );
+    }
+    if (topFacts) {
+      parts.push(
+        '<div class="campaign-panel-section">',
+        '<div class="campaign-panel-label">共通のファクト</div>',
+        `<ul class="campaign-panel-list">${topFacts}</ul>`,
+        '</div>',
+      );
+    }
+    parts.push(
+      '<button class="btn btn-sm btn-secondary campaign-panel-more" id="btn-show-full-analytics">',
+      '全回答を見る →',
+      '</button>',
+    );
+
+    panel.innerHTML = parts.join(''); // Safe: all dynamic content escaped via escapeHtml
+
+    document.getElementById('btn-show-full-analytics')?.addEventListener('click', () => {
+      showCampaignAnalyticsInStep(campaignId);
+    });
+  } catch (e: any) {
+    panel.textContent = e.message;
+  }
+}
+
+/**
+ * Show full campaign analytics inside the interview page as a step content.
+ * Security: Delegates to renderDashboardInline which uses escapeHtml for all user content.
+ */
+export async function showCampaignAnalyticsInStep(campaignId: string): Promise<void> {
+  const container = document.getElementById('campaign-analytics-container');
+  if (!container) return;
+
+  // Activate the step
+  document.querySelectorAll('.step-content').forEach((el) => el.classList.remove('active'));
+  document.getElementById('step-campaign-analytics')?.classList.add('active');
+
+  if (currentAnalytics && currentCampaignId === campaignId) {
+    renderDashboardInline(container, currentAnalytics);
+    return;
+  }
+
+  container.textContent = '分析データを読み込んでいます...';
+
+  try {
+    currentCampaignId = campaignId;
+    currentAnalytics = await api.getCampaignAnalytics(campaignId);
+    renderDashboardInline(container, currentAnalytics);
+  } catch (e: any) {
+    container.textContent = `エラー: ${e.message}`;
+  }
+}
+
+/**
+ * Render analytics dashboard inline (within the interview page step).
+ * Security: All dynamic content goes through escapeHtml or is numeric.
+ */
+function renderDashboardInline(container: HTMLElement, analytics: CampaignAnalytics): void {
+  // Safe: all render functions use escapeHtml for user-facing strings
+  const parts = [
+    renderStatsCards(analytics),
+    '<div class="analytics-section"><h3>共通ファクト</h3>',
+    renderCommonFacts(analytics.commonFacts),
+    '</div>',
+    '<div class="analytics-section"><h3>ペインポイント（頻度順）</h3>',
+    renderPainPoints(analytics.painPoints),
+    '</div>',
+    '<div class="analytics-section"><h3>キーワード頻度</h3>',
+    renderKeywordCounts(analytics.keywordCounts),
+    '</div>',
+  ];
+  container.innerHTML = parts.join(''); // Safe: all interpolated values escaped
+}
+
 export async function showCampaignAnalytics(campaignId: string): Promise<void> {
   currentCampaignId = campaignId;
   currentAIAnalysis = null;

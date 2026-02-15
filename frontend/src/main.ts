@@ -1,7 +1,7 @@
 // === DeepForm Frontend Entry Point ===
 import './style.css';
 import { applyTranslations, setLang, currentLang } from './i18n';
-import { checkAuth, doLogout, isLoggedIn, redirectToLogin } from './auth';
+import { checkAuth, doLogout } from './auth';
 import { loadSessions, doToggleVisibility, doCreateCampaign } from './sessions';
 import {
   showHome, openSession, sendMessage, handleChatKeydown,

@@ -14,7 +14,7 @@ const PAYMENT_LINK = "https://buy.stripe.com/test_dRmcMXbrh3Q8ggx8DA48000";
 
 /**
  * Pro ゲートチェック。requiresProForStep() が true の場合のみ課金壁を適用する。
- * PRO_GATE 環境変数で制御: "prd"(default) | "spec" | "readiness" | "none" | "analyze" | "hypotheses"
+ * PRO_GATE 環境変数で制御: "none"(default) | "prd" | "spec" | "readiness" | "analyze" | "hypotheses"
  */
 // biome-ignore lint/suspicious/noExplicitAny: Hono の Context 型パラメータ制約
 async function requireProForStep(c: Context<AppEnv, any>, step: string): Promise<Response | null> {

@@ -122,7 +122,36 @@ crudRoutes.get("/sessions/:id", async (c) => {
       analysisMap[a.type] = JSON.parse(a.data);
     }
 
-    return c.json({ ...session, messages, analysis: analysisMap });
+    // Lookup campaign created from this session
+    const campaign = await db
+      .selectFrom("campaigns")
+      .select(["id", "share_token"])
+      .where("owner_session_id", "=", id)
+      .executeTakeFirst();
+
+    let campaignId: string | undefined;
+    let campaignShareToken: string | undefined;
+    let campaignRespondentCount: number | undefined;
+
+    if (campaign) {
+      campaignId = campaign.id;
+      campaignShareToken = campaign.share_token;
+      const { count } = (await db
+        .selectFrom("sessions")
+        .select((eb) => eb.fn.countAll().as("count"))
+        .where("campaign_id", "=", campaign.id)
+        .executeTakeFirstOrThrow()) as unknown as { count: number };
+      campaignRespondentCount = Number(count);
+    }
+
+    return c.json({
+      ...session,
+      messages,
+      analysis: analysisMap,
+      campaignId,
+      campaignShareToken,
+      campaignRespondentCount,
+    });
   } catch (e) {
     console.error("Get session error:", e);
     return c.json({ error: "Internal Server Error" }, 500);

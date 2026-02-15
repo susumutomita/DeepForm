@@ -2686,3 +2686,83 @@ a:hover { color: var(--primary-hover); }
   color: var(--text);
   border-color: var(--text);
 }
+
+/* --- Campaign Results Sidebar Panel --- */
+.campaign-results-panel {
+  margin-top: 12px;
+  padding: 12px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-size: 0.85rem;
+}
+
+.campaign-panel-header {
+  margin-bottom: 8px;
+  color: var(--primary);
+}
+
+.campaign-panel-empty {
+  text-align: center;
+  color: var(--text-muted);
+}
+
+.campaign-panel-count {
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+
+.campaign-panel-hint {
+  font-size: 0.8rem;
+  margin: 0;
+}
+
+.campaign-panel-section {
+  margin-top: 8px;
+}
+
+.campaign-panel-label {
+  font-weight: 600;
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  margin-bottom: 4px;
+}
+
+.campaign-panel-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.campaign-panel-list li {
+  padding: 3px 0;
+  border-bottom: 1px solid var(--border-light, var(--border));
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 4px;
+}
+
+.campaign-panel-list li:last-child {
+  border-bottom: none;
+}
+
+.campaign-panel-badge {
+  flex-shrink: 0;
+  background: var(--primary);
+  color: white;
+  font-size: 0.7rem;
+  padding: 1px 6px;
+  border-radius: 10px;
+  font-weight: 600;
+}
+
+.campaign-panel-more {
+  width: 100%;
+  margin-top: 8px;
+}
+
+.campaign-panel-error {
+  color: var(--danger, #e74c3c);
+  font-size: 0.85rem;
+}

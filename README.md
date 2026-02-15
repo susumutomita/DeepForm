@@ -2,7 +2,7 @@
 
 <img src="https://img.shields.io/badge/AI-Depth_Interview-81a2be?style=for-the-badge" alt="AI Depth Interview">
 <img src="https://img.shields.io/badge/spec.json-Export-8c9440?style=for-the-badge" alt="spec.json Export">
-<img src="https://img.shields.io/badge/exe.dev-Powered-de935f?style=for-the-badge" alt="exe.dev Powered">
+<img src="https://img.shields.io/badge/Open_Source-Free-b5bd68?style=for-the-badge" alt="Open Source">
 
 # DeepForm
 
@@ -11,7 +11,7 @@
 AI-powered depth interviews that extract requirements non-engineers miss,
 then generate production-ready PRDs and implementation specs.
 
-[Live Demo](https://deepform.exe.xyz:8000) · [日本語](./README.ja.md)
+[Live Demo](https://deepform.exe.xyz) · [Product Hunt](https://www.producthunt.com/products/deepform) · [GitHub](https://github.com/susumutomita/DeepForm) · [日本語](./README.ja.md)
 
 </div>
 
@@ -33,7 +33,7 @@ AI can build a PoC in minutes. But shipping requires more:
 ```
 Your idea → AI Depth Interview → Facts → Hypotheses → PRD → spec.json
                                                               ↓
-                                              exe.dev + Shelley / Claude Code / Cursor
+                                              Claude Code / Cursor / Any Agent
 ```
 
 ### 5 Steps
@@ -46,34 +46,39 @@ Your idea → AI Depth Interview → Facts → Hypotheses → PRD → spec.json
 | **4. PRD Generation** | MVP-scoped PRD with testable acceptance criteria (ISO 25010) | PRD.md |
 | **5. Spec Export** | API specs, DB schema, test cases | spec.json |
 
+### Campaign Mode
+
+Share an interview link with your users to collect feedback at scale:
+
+1. Create a campaign from any interview
+2. Share the link — respondents go through the same AI interview
+3. View aggregated pain points, common facts, and keyword analysis in real-time
+4. Use AI cross-analysis to find patterns across all responses
+
 ## Key Differentiators
 
 - **Evidence-linked specs** — Every requirement traces back to actual user statements
 - **Counter-evidence on hypotheses** — Prevents confirmation bias with falsification patterns
-- **Purpose-built interview AI** — Not generic chat; specialized depth interview logic
+- **Purpose-built interview AI** — Not generic chat; specialized depth interview techniques
+- **Campaign interviews** — Collect and aggregate feedback from multiple users
 - **Agent-ready export** — `spec.json` drops directly into coding agents
+- **Production readiness check** — ISO/IEC 25010 quality checklist before you ship
 
 ## Quick Start
 
 ### Use the hosted version
 
-Visit [deepform.exe.xyz:8000](https://deepform.exe.xyz:8000) and sign in with your exe.dev account.
+Visit [deepform.exe.xyz](https://deepform.exe.xyz) and sign in with GitHub.
 
-### Self-host on exe.dev
+### Self-host
 
 ```bash
-# SSH into your exe.dev VM
-ssh your-vm.exe.xyz
-
-# Clone and setup
 git clone https://github.com/susumutomita/DeepForm.git
 cd DeepForm
-npm install
-cd frontend && npm install && npx vite build && cd ..
-
-# Start
-npx tsx src/index.ts
+make start
 ```
+
+Requires [Bun](https://bun.sh) runtime. Set `ANTHROPIC_API_KEY` for Claude API access.
 
 ### From spec.json to working app
 
@@ -81,7 +86,6 @@ Once DeepForm generates your spec, hand it to a coding agent:
 
 | Agent | How |
 |-------|-----|
-| **exe.dev + Shelley** ⭐ | Paste spec.json → Shelley builds & deploys on your VM |
 | **Claude Code** | Place PRD.md in repo root → `claude` |
 | **Cursor** | Paste spec.json into Composer |
 | **Any agent** | spec.json is standard JSON |
@@ -89,68 +93,60 @@ Once DeepForm generates your spec, hand it to a coding agent:
 ## Architecture
 
 ```
-frontend/          Vite + TypeScript (vanilla)
+frontend/              Vite + TypeScript (vanilla)
   src/
-    main.ts        Entry point
-    api.ts         Typed API client
-    auth.ts        exe.dev Login integration
-    i18n.ts        JA / EN / ES
-    interview.ts   Core interview & analysis flow
-    sessions.ts    Session list management
-    shared.ts      Shared & campaign interviews
-    ui.ts          UI utilities
-    pages/         Legal pages (privacy, terms, security)
+    main.ts            Entry point & routing
+    api.ts             Typed API client
+    interview.ts       Core interview & analysis flow
+    campaign-analytics.ts  Campaign results dashboard
+    shared.ts          Campaign respondent interview
+    sessions.ts        Session list management
+    auth.ts            GitHub OAuth login
+    i18n.ts            JA / EN / ES
+    ui.ts              UI utilities
 
-src/               Hono + TypeScript server
-  index.ts         Entry point
-  app.ts           Hono app with middleware
-  db.ts            SQLite (node:sqlite)
-  llm.ts           Claude API client
+src/                   Hono + TypeScript server
+  app.ts               Hono app with middleware
+  llm.ts               Claude API client (API key / OAuth / gateway)
+  db/
+    index.ts           Kysely database setup + migrations
+    migrations/        Schema migrations (001–003)
   routes/
-    auth.ts        exe.dev auth endpoints
-    sessions.ts    Session CRUD & AI pipeline
+    auth.ts            GitHub OAuth + exe.dev auth
+    analytics.ts       Page view tracking
+    billing.ts         Stripe webhook handler
+    feedback.ts        User feedback
+    sessions/
+      crud.ts          Session CRUD
+      interview.ts     AI interview (streaming)
+      analysis.ts      Facts / hypotheses / PRD / spec / readiness
+      campaigns.ts     Campaign management
+      pipeline.ts      Full analysis pipeline (SSE)
   middleware/
-    auth.ts        X-ExeDev-* header auth
+    auth.ts            Auth middleware (GitHub OAuth + proxy headers)
+    analytics.ts       Request analytics
 ```
-
-## Auth: Login with exe.dev
-
-DeepForm uses [Login with exe](https://exe.dev/docs/login-with-exe.md) — zero OAuth setup required.
-
-The exe.dev HTTPS proxy adds `X-ExeDev-UserID` and `X-ExeDev-Email` headers automatically. No passwords, no cookies, no client secrets.
 
 ## Tech Stack
 
-- **Runtime**: Node.js 22+ (experimental `node:sqlite`)
+- **Runtime**: [Bun](https://bun.sh)
 - **Server**: [Hono](https://hono.dev) + TypeScript
 - **Frontend**: Vite + TypeScript (vanilla, no framework)
-- **Database**: SQLite (WAL mode)
+- **Database**: SQLite via [Kysely](https://kysely.dev) (WAL mode)
 - **AI**: Claude API (Anthropic)
-- **Auth**: exe.dev proxy headers
-- **Hosting**: [exe.dev](https://exe.dev)
-
-## Roadmap
-
-- [ ] **Production readiness check** — AI-guided checklist for non-functional requirements (security, ops, legal)
-- [ ] **exe.dev deep integration** — "Deploy to exe.dev" button with spec.json pre-loaded
-- [ ] **Campaign analytics** — Aggregate insights from multiple user interviews
-- [ ] **Export to GitHub Issues** — Convert PRD into actionable issues
+- **Auth**: GitHub OAuth + exe.dev proxy headers
+- **Payments**: Stripe (optional, disabled by default)
+- **i18n**: Japanese / English / Spanish
 
 ## Contributing
 
-See [CLAUDE.md](./CLAUDE.md) for development guidelines.
-
 ```bash
-# Development
-cd frontend && npx vite          # Frontend dev server (port 5173)
-npx tsx --watch src/index.ts     # Backend dev server (port 8000)
-
-# Checks
-npx biome check src/             # Lint
-npx tsc --noEmit                 # Type check
-npx vitest run                   # Tests
-cd frontend && npx vite build    # Build
+make install           # Install dependencies
+make dev               # Start dev server (hot reload)
+make before-commit     # Run lint + typecheck + test (317 tests)
 ```
+
+See [CLAUDE.md](./CLAUDE.md) for development guidelines.
 
 ## License
 
@@ -160,8 +156,8 @@ See [LICENSE](./LICENSE).
 
 <div align="center">
 
-**Built with Claude AI × [exe.dev](https://exe.dev)**
+**Built with Claude AI**
 
-*DeepForm is an [exe.dev](https://exe.dev) showcase project — demonstrating how AI agents can go from idea to production on exe.dev VMs.*
+*Open source. Self-hostable. Free.*
 
 </div>

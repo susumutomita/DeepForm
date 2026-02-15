@@ -67,9 +67,10 @@ The last choice should always be "${l.otherChoice}".`;
 
 function buildChatPrompt(lang: Lang, theme: string, turnCount: number): string {
   const l = LANG_LABEL[lang];
-  const readyNote = turnCount >= 5
-    ? `\nWe have gathered enough information. Ask a final summary question and add "[READY_FOR_ANALYSIS]" at the end of your reply. However, if the user still wants to share more, continue the interview.`
-    : "";
+  const readyNote =
+    turnCount >= 5
+      ? `\nWe have gathered enough information. Ask a final summary question and add "[READY_FOR_ANALYSIS]" at the end of your reply. However, if the user still wants to share more, continue the interview.`
+      : "";
   return `You are an expert depth interviewer conducting a depth interview about the user's problem/idea.
 
 Topic: "${theme}"
@@ -131,9 +132,7 @@ interviewRoutes.post("/sessions/:id/start", async (c) => {
     const body = await c.req.json().catch(() => ({}));
     const lang = resolveLang(body.lang);
     const systemPrompt = buildStartPrompt(lang, session.theme);
-    const startMessages = [
-      { role: "user" as const, content: getStartMsg(lang, session.theme) },
-    ];
+    const startMessages = [{ role: "user" as const, content: getStartMsg(lang, session.theme) }];
 
     // Streaming response
     const wantsStream = c.req.header("accept")?.includes("text/event-stream");

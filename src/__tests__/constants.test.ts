@@ -72,10 +72,10 @@ describe("PRO_GATE フィーチャーフラグ", () => {
   });
 
   describe("不正な PRO_GATE 値の場合", () => {
-    it("デフォルトの prd にフォールバックすべき", async () => {
+    it("デフォルトの none にフォールバックすべき", async () => {
       const fn = await loadWithGate("invalid_value");
       expect(fn("hypotheses")).toBe(false);
-      expect(fn("prd")).toBe(true);
+      expect(fn("prd")).toBe(false);
     });
   });
 

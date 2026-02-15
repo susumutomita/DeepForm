@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 // Mock static file serving to avoid filesystem access in tests
 vi.mock("@hono/node-server/serve-static", () => ({
@@ -954,9 +954,10 @@ describe("セッション API", () => {
       expect(res.status).toBe(403);
     });
 
-    it("未認証の場合に 401 を返すべき（Pro 必須）", async () => {
+    it("未認証の場合にアクセス拒否されるべき", async () => {
       const res = await app.request("/api/sessions/sready/readiness", { method: "POST" });
-      expect(res.status).toBe(401);
+      // PRO_GATE=none: Pro gate をスキップし、オーナーシップチェックで 403
+      expect(res.status).toBe(403);
     });
 
     it("既存のレディネスを上書き更新できること", async () => {
@@ -972,6 +973,402 @@ describe("セッション API", () => {
       expect(rows).toHaveLength(1);
       const parsed = JSON.parse(rows[0].data);
       expect(parsed.readiness.categories[0].id).toBe("functionalSuitability");
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // Interview choices extraction (extractChoices)
+  // -------------------------------------------------------------------------
+  describe("POST /api/sessions/:id/start - choices extraction", () => {
+    it("[CHOICES] ブロックから選択肢を抽出して choices 配列を返すこと", async () => {
+      // Given: LLM が [CHOICES] ブロック付きの返答を返す
+      insertSession("schoice-start", "選択肢テスト", TEST_USER_ID);
+      vi.mocked(extractText).mockReturnValueOnce(
+        "テーマについて教えてください。\n[CHOICES]\nオプションA\nオプションB\nオプションC\n[/CHOICES]",
+      );
+      // When: start
+      const res = await authedRequest("/api/sessions/schoice-start/start", { method: "POST" });
+      // Then: choices が返る
+      expect(res.status).toBe(200);
+      const data = (await res.json()) as any;
+      expect(data.choices).toEqual(["オプションA", "オプションB", "オプションC"]);
+      expect(data.reply).toBe("テーマについて教えてください。");
+      expect(data.reply).not.toContain("[CHOICES]");
+    });
+
+    it("[CHOICES] ブロックがない場合は空の choices 配列を返すこと", async () => {
+      // Given: LLM が [CHOICES] ブロックなしの返答を返す
+      insertSession("schoice-none", "選択肢なしテスト", TEST_USER_ID);
+      vi.mocked(extractText).mockReturnValueOnce("選択肢のない質問です。");
+      // When: start
+      const res = await authedRequest("/api/sessions/schoice-none/start", { method: "POST" });
+      // Then: 空の choices
+      expect(res.status).toBe(200);
+      const data = (await res.json()) as any;
+      expect(data.choices).toEqual([]);
+      expect(data.reply).toBe("選択肢のない質問です。");
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // Chat choices extraction
+  // -------------------------------------------------------------------------
+  describe("POST /api/sessions/:id/chat - choices extraction", () => {
+    it("chat レスポンスに [CHOICES] ブロックがある場合 choices を返すこと", async () => {
+      // Given: LLM が [CHOICES] 付きの返答を返す
+      insertSession("schat-choice", "チャット選択肢", TEST_USER_ID);
+      insertMessage("schat-choice", "assistant", "最初の質問");
+      vi.mocked(extractText).mockReturnValueOnce(
+        "次の質問です。\n[CHOICES]\n選択肢1\n選択肢2\nその他（自分で入力）\n[/CHOICES]",
+      );
+      // When: chat
+      const res = await authedRequest("/api/sessions/schat-choice/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ message: "テスト回答" }),
+      });
+      // Then: choices が含まれる
+      expect(res.status).toBe(200);
+      const data = (await res.json()) as any;
+      expect(data.choices).toEqual(["選択肢1", "選択肢2", "その他（自分で入力）"]);
+      expect(data.reply).not.toContain("[CHOICES]");
+      expect(data.reply).not.toContain("[/CHOICES]");
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // GET /api/sessions/:id/deploy-bundle
+  // -------------------------------------------------------------------------
+  describe("GET /api/sessions/:id/deploy-bundle", () => {
+    const specData = { spec: { projectName: "デプロイプロジェクト" } };
+    const prdData = { prd: { problemDefinition: "デプロイ問題" } };
+
+    beforeEach(() => {
+      insertSession("sdeploy-pub", "デプロイテーマ", TEST_USER_ID, { is_public: 1 });
+      insertAnalysis("sdeploy-pub", "spec", specData);
+      insertAnalysis("sdeploy-pub", "prd", prdData);
+      insertSession("sdeploy-priv", "非公開デプロイ", TEST_USER_ID);
+      insertAnalysis("sdeploy-priv", "spec", specData);
+      insertAnalysis("sdeploy-priv", "prd", prdData);
+    });
+
+    it("公開セッションの spec と prd を返すこと", async () => {
+      // Given: 公開セッション + spec + prd
+      // When: GET deploy-bundle
+      const res = await app.request("/api/sessions/sdeploy-pub/deploy-bundle");
+      // Then: spec と prd が返る
+      expect(res.status).toBe(200);
+      const data = (await res.json()) as any;
+      expect(data.theme).toBe("デプロイテーマ");
+      expect(data.spec).toEqual(specData);
+      expect(data.prd).toEqual(prdData);
+    });
+
+    it("非公開セッションで token なしの場合 403 を返すこと", async () => {
+      // Given: 非公開セッション
+      // When: token なしで GET
+      const res = await app.request("/api/sessions/sdeploy-priv/deploy-bundle");
+      // Then: 403
+      expect(res.status).toBe(403);
+    });
+
+    it("非公開セッションでも有効な deploy_token があればアクセスできること", async () => {
+      // Given: deploy_token が設定された非公開セッション
+      rawDb.prepare("UPDATE sessions SET deploy_token = ? WHERE id = ?").run("valid-deploy-token", "sdeploy-priv");
+      // When: 正しい token で GET
+      const res = await app.request("/api/sessions/sdeploy-priv/deploy-bundle?token=valid-deploy-token");
+      // Then: 200
+      expect(res.status).toBe(200);
+      const data = (await res.json()) as any;
+      expect(data.spec).toEqual(specData);
+      expect(data.prd).toEqual(prdData);
+    });
+
+    it("非公開セッションで無効な token の場合 403 を返すこと", async () => {
+      // Given: deploy_token が設定された非公開セッション
+      rawDb.prepare("UPDATE sessions SET deploy_token = ? WHERE id = ?").run("correct-token", "sdeploy-priv");
+      // When: 不正な token で GET
+      const res = await app.request("/api/sessions/sdeploy-priv/deploy-bundle?token=wrong-token");
+      // Then: 403
+      expect(res.status).toBe(403);
+    });
+
+    it("存在しないセッションの場合 404 を返すこと", async () => {
+      const res = await app.request("/api/sessions/nonexistent/deploy-bundle");
+      expect(res.status).toBe(404);
+    });
+
+    it("format=text の場合テキスト形式で返すこと", async () => {
+      // Given: 公開セッション
+      // When: format=text で GET
+      const res = await app.request("/api/sessions/sdeploy-pub/deploy-bundle?format=text");
+      // Then: テキスト形式のレスポンス
+      expect(res.status).toBe(200);
+      const text = await res.text();
+      expect(text).toContain("# DeepForm Deploy Bundle");
+      expect(text).toContain("デプロイテーマ");
+      expect(text).toContain("## spec.json");
+      expect(text).toContain("## PRD");
+    });
+
+    it("spec/prd が未生成の場合 null を返すこと", async () => {
+      // Given: 分析結果のない公開セッション
+      insertSession("sdeploy-empty", "空テーマ", TEST_USER_ID, { is_public: 1 });
+      // When: GET deploy-bundle
+      const res = await app.request("/api/sessions/sdeploy-empty/deploy-bundle");
+      // Then: spec/prd は null
+      expect(res.status).toBe(200);
+      const data = (await res.json()) as any;
+      expect(data.spec).toBeNull();
+      expect(data.prd).toBeNull();
+      expect(data.theme).toBe("空テーマ");
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // POST /api/sessions/:id/deploy-token
+  // -------------------------------------------------------------------------
+  describe("POST /api/sessions/:id/deploy-token", () => {
+    beforeEach(() => {
+      insertSession("stoken", "トークンテーマ", TEST_USER_ID);
+      insertAnalysis("stoken", "spec", { spec: { projectName: "トークンプロジェクト" } });
+    });
+
+    it("deploy token を生成して deployUrl を返すこと", async () => {
+      // When: deploy-token
+      const res = await authedRequest("/api/sessions/stoken/deploy-token", { method: "POST" });
+      // Then: deployUrl, theme, projectName が返る
+      expect(res.status).toBe(200);
+      const data = (await res.json()) as any;
+      expect(data.deployUrl).toBeDefined();
+      expect(data.deployUrl).toContain("stoken");
+      expect(data.deployUrl).toContain("token=");
+      expect(data.deployUrl).toContain("format=text");
+      expect(data.theme).toBe("トークンテーマ");
+      expect(data.projectName).toBe("トークンプロジェクト");
+      // DB に token が保存されること
+      const session = rawDb.prepare("SELECT deploy_token FROM sessions WHERE id = ?").get("stoken") as any;
+      expect(session.deploy_token).toBeDefined();
+      expect(session.deploy_token).not.toBeNull();
+    });
+
+    it("存在しないセッションの場合 404 を返すこと", async () => {
+      const res = await authedRequest("/api/sessions/nonexistent/deploy-token", { method: "POST" });
+      expect(res.status).toBe(404);
+    });
+
+    it("spec がない場合でも token を生成できること（projectName は空文字）", async () => {
+      // Given: spec なしのセッション
+      insertSession("stoken-nospec", "テーマ", TEST_USER_ID);
+      // When: deploy-token
+      const res = await authedRequest("/api/sessions/stoken-nospec/deploy-token", { method: "POST" });
+      // Then: projectName は空文字
+      expect(res.status).toBe(200);
+      const data = (await res.json()) as any;
+      expect(data.projectName).toBe("");
+      expect(data.deployUrl).toBeDefined();
+    });
+
+    it("生成された token で deploy-bundle にアクセスできること", async () => {
+      // Given: deploy-token を生成
+      const tokenRes = await authedRequest("/api/sessions/stoken/deploy-token", { method: "POST" });
+      const tokenData = (await tokenRes.json()) as any;
+      // DB から直接 token を取得
+      const session = rawDb.prepare("SELECT deploy_token FROM sessions WHERE id = ?").get("stoken") as any;
+      const token = session.deploy_token;
+      expect(token).toBeDefined();
+      // When: 生成された token で deploy-bundle にアクセス
+      const bundleRes = await app.request(`/api/sessions/stoken/deploy-bundle?token=${token}`);
+      // Then: 200
+      expect(bundleRes.status).toBe(200);
+      const bundleData = (await bundleRes.json()) as any;
+      expect(bundleData.theme).toBe("トークンテーマ");
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // POST /api/sessions - ゲストセッション作成
+  // -------------------------------------------------------------------------
+  describe("POST /api/sessions - ゲストセッション作成", () => {
+    it("未認証の場合 is_public=1 かつ user_id=null でセッションが作成されること", async () => {
+      // Given: 認証なし
+      // When: テーマを指定して POST
+      const res = await app.request("/api/sessions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ theme: "ゲストテーマ" }),
+      });
+      // Then: セッションが is_public=1, user_id=null で作成される
+      expect(res.status).toBe(200);
+      const data = (await res.json()) as any;
+      expect(data.sessionId).toBeDefined();
+      expect(data.theme).toBe("ゲストテーマ");
+      const row = rawDb.prepare("SELECT * FROM sessions WHERE id = ?").get(data.sessionId) as any;
+      expect(row.is_public).toBe(1);
+      expect(row.user_id).toBeNull();
+    });
+
+    it("ゲストセッションにはセッション上限が適用されないこと", async () => {
+      // Given: 認証なし（上限チェックはスキップされる）
+      // When: 複数のゲストセッションを作成
+      const res1 = await app.request("/api/sessions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ theme: "ゲスト1" }),
+      });
+      const res2 = await app.request("/api/sessions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ theme: "ゲスト2" }),
+      });
+      // Then: 両方とも成功
+      expect(res1.status).toBe(200);
+      expect(res2.status).toBe(200);
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // Pro ゲートのエッジケース
+  // -------------------------------------------------------------------------
+  describe("Pro ゲートのエッジケース", () => {
+    const FREE_USER_ID = "free-user-001";
+    const FREE_EXE_USER_ID = "exe-free-001";
+    const FREE_EMAIL = "freeuser@example.com";
+
+    async function freeUserRequest(path: string, options: RequestInit = {}): Promise<Response> {
+      const headers = new Headers(options.headers);
+      headers.set("x-exedev-userid", FREE_EXE_USER_ID);
+      headers.set("x-exedev-email", FREE_EMAIL);
+      return await app.request(path, { ...options, headers });
+    }
+
+    beforeEach(() => {
+      // Enable Pro gate for these tests (default is "none")
+      process.env.PRO_GATE = "prd";
+      rawDb
+        .prepare("INSERT INTO users (id, exe_user_id, email, display_name, plan) VALUES (?, ?, ?, ?, ?)")
+        .run(FREE_USER_ID, FREE_EXE_USER_ID, FREE_EMAIL, "freeuser", "free");
+    });
+
+    afterEach(() => {
+      delete process.env.PRO_GATE;
+    });
+
+    it("無料ユーザーが PRD 生成しようとした場合 402 を返すこと", async () => {
+      // Given: 無料ユーザーのセッション + ファクト + 仮説
+      insertSession("spro-prd", "PRDテスト", FREE_USER_ID);
+      insertAnalysis("spro-prd", "facts", { facts: [] });
+      insertAnalysis("spro-prd", "hypotheses", { hypotheses: [] });
+      // When: PRD 生成
+      const res = await freeUserRequest("/api/sessions/spro-prd/prd", { method: "POST" });
+      // Then: 402 Pro plan required
+      expect(res.status).toBe(402);
+      const data = (await res.json()) as any;
+      expect(data.error).toContain("Pro plan required");
+      expect(data.upgrade).toBe(true);
+      expect(data.upgradeUrl).toBeDefined();
+      expect(data.upgradeUrl).toContain(FREE_USER_ID);
+    });
+
+    it("無料ユーザーが spec 生成しようとした場合 402 を返すこと", async () => {
+      // Given: 無料ユーザーのセッション
+      insertSession("spro-spec", "Specテスト", FREE_USER_ID);
+      // When: spec 生成
+      const res = await freeUserRequest("/api/sessions/spro-spec/spec", { method: "POST" });
+      // Then: 402
+      expect(res.status).toBe(402);
+      const data = (await res.json()) as any;
+      expect(data.upgrade).toBe(true);
+    });
+
+    it("未認証ユーザーが PRD 生成しようとした場合 401 を返すこと", async () => {
+      // Given: セッション（認証なしでアクセス）
+      insertSession("spro-unauth-prd", "未認証PRD", TEST_USER_ID, { is_public: 1 });
+      // When: 認証なしで PRD 生成
+      const res = await app.request("/api/sessions/spro-unauth-prd/prd", { method: "POST" });
+      // Then: 401 Login required
+      expect(res.status).toBe(401);
+      const data = (await res.json()) as any;
+      expect(data.error).toContain("Login required");
+      expect(data.upgrade).toBe(true);
+    });
+
+    it("未認証ユーザーが spec 生成しようとした場合 401 を返すこと", async () => {
+      // Given: 公開セッション
+      insertSession("spro-unauth-spec", "未認証Spec", TEST_USER_ID, { is_public: 1 });
+      // When: 認証なしで spec 生成
+      const res = await app.request("/api/sessions/spro-unauth-spec/spec", { method: "POST" });
+      // Then: 401
+      expect(res.status).toBe(401);
+      const data = (await res.json()) as any;
+      expect(data.upgrade).toBe(true);
+    });
+
+    it("無料ユーザーでも analyze（Pro 不要）は実行できること", async () => {
+      // Given: 無料ユーザーのセッション + メッセージ
+      insertSession("spro-analyze", "分析テスト", FREE_USER_ID);
+      insertMessage("spro-analyze", "assistant", "質問");
+      insertMessage("spro-analyze", "user", "回答");
+      const mockFacts = { facts: [{ id: "F1", type: "fact", content: "テスト", evidence: "", severity: "high" }] };
+      vi.mocked(extractText).mockReturnValueOnce(JSON.stringify(mockFacts));
+      // When: analyze
+      const res = await freeUserRequest("/api/sessions/spro-analyze/analyze", { method: "POST" });
+      // Then: 200（Pro 不要なので成功）
+      expect(res.status).toBe(200);
+      const data = (await res.json()) as any;
+      expect(data.facts).toBeDefined();
+    });
+
+    it("無料ユーザーでも hypotheses（Pro 不要）は実行できること", async () => {
+      // Given: 無料ユーザーのセッション + ファクト
+      insertSession("spro-hyp", "仮説テスト", FREE_USER_ID);
+      insertAnalysis("spro-hyp", "facts", { facts: [{ id: "F1" }] });
+      const mockHyp = {
+        hypotheses: [
+          { id: "H1", title: "仮説", description: "", supportingFacts: [], counterEvidence: "", unverifiedPoints: [] },
+        ],
+      };
+      vi.mocked(extractText).mockReturnValueOnce(JSON.stringify(mockHyp));
+      // When: hypotheses
+      const res = await freeUserRequest("/api/sessions/spro-hyp/hypotheses", { method: "POST" });
+      // Then: 200（Pro 不要なので成功）
+      expect(res.status).toBe(200);
+      const data = (await res.json()) as any;
+      expect(data.hypotheses).toBeDefined();
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // CRUD エラーハンドリング
+  // -------------------------------------------------------------------------
+  describe("CRUD エラーハンドリング", () => {
+    it("GET /api/sessions/:id で不正な analysis_results データがあっても 500 を返すこと", async () => {
+      // Given: 不正な JSON を持つ分析結果
+      insertSession("serr-detail", "エラーテスト", TEST_USER_ID);
+      rawDb
+        .prepare("INSERT INTO analysis_results (session_id, type, data) VALUES (?, ?, ?)")
+        .run("serr-detail", "facts", "invalid-json{{{");
+      // When: GET
+      const res = await authedRequest("/api/sessions/serr-detail");
+      // Then: JSON パースエラーで 500
+      expect(res.status).toBe(500);
+      const data = (await res.json()) as any;
+      expect(data.error).toBe("Internal Server Error");
+    });
+
+    it("PATCH /api/sessions/:id/visibility で不正な JSON の場合 500 を返すこと（SyntaxError は catch で 500）", async () => {
+      // Given: 自分のセッション
+      insertSession("serr-vis", "エラーテスト", TEST_USER_ID);
+      // When: 不正な JSON で PATCH
+      const res = await authedRequest("/api/sessions/serr-vis/visibility", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: "{ invalid json",
+      });
+      // Then: 500（visibility の catch は ZodError のみ特別処理、SyntaxError は汎用 500）
+      expect(res.status).toBe(500);
+      const data = (await res.json()) as any;
+      expect(data.error).toBe("Internal Server Error");
     });
   });
 });

@@ -163,6 +163,9 @@ export interface SessionDetail {
   analysis?: Analysis;
   respondent_feedback?: string;
   error?: string;
+  campaignId?: string;
+  campaignShareToken?: string;
+  campaignRespondentCount?: number;
 }
 
 export type SessionStatus =
@@ -302,6 +305,7 @@ export interface DeepFormWindow extends Window {
   runPRD: () => Promise<void>;
   runSpec: () => Promise<void>;
   runReadiness: () => Promise<void>;
+  runFullPipeline: () => Promise<void>;
   exportSpecJSON: () => void;
   exportPRDMarkdown: () => void;
   deployToExeDev: () => Promise<void>;

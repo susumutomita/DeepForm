@@ -7,6 +7,7 @@ import {
   addMessageToContainer, addStreamingBubble, appendToStreamingBubble,
   finalizeStreamingBubble,
 } from './ui';
+import { renderCampaignSidebarPanel } from './campaign-analytics';
 import { initInlineEdit, destroyInlineEdit } from './inline-edit';
 
 const PAYMENT_LINK = 'https://buy.stripe.com/test_dRmcMXbrh3Q8ggx8DA48000';
@@ -58,6 +59,7 @@ export function getCurrentSessionId(): string | null { return currentSessionId; 
 export function showHome(): void {
   document.getElementById('page-home')?.classList.add('active');
   document.getElementById('page-interview')?.classList.remove('active');
+  document.getElementById('page-shared')?.classList.remove('active');
   currentSessionId = null;
   destroyInlineEdit();
   history.pushState(null, '', '/');
@@ -91,6 +93,37 @@ export async function openSession(sessionId: string, isNew = false): Promise<voi
       if (session.analysis.readiness) {
         const rd = session.analysis.readiness;
         renderReadiness(rd.readiness?.categories ?? rd.categories ?? []);
+      }
+    }
+
+    // Render campaign results panel in sidebar if campaign exists
+    const campaignPanel = document.getElementById('campaign-results-panel');
+    const createCampaignBtn = document.getElementById('btn-create-campaign');
+    if (session.campaignId && session.campaignShareToken) {
+      renderCampaignSidebarPanel(
+        session.campaignId,
+        session.campaignShareToken,
+        session.campaignRespondentCount ?? 0,
+      );
+    } else {
+      // Reset sidebar to default state
+      if (campaignPanel) {
+        campaignPanel.style.display = 'none';
+        campaignPanel.textContent = '';
+      }
+      if (createCampaignBtn) {
+        createCampaignBtn.style.display = '';
+        // Restore original onclick and label
+        const span = createCampaignBtn.querySelector('span');
+        if (span) {
+          span.setAttribute('data-i18n', 'sidebar.campaign');
+          span.textContent = t('sidebar.campaign');
+        }
+        createCampaignBtn.removeAttribute('onclick');
+        createCampaignBtn.onclick = () => {
+          const w = window as any;
+          if (typeof w.createCampaign === 'function') w.createCampaign(currentSessionId);
+        };
       }
     }
 
@@ -178,7 +211,7 @@ export async function sendMessage(choiceText?: string): Promise<void> {
           bubble.textContent = bubble.textContent.replace(/\[CHOICES\][\s\S]*?\[\/CHOICES\]/, '').trim();
         }
         finalizeStreamingBubble(bubble);
-        if (data.readyForAnalysis || (data.turnCount && data.turnCount >= 8)) {
+        if (data.readyForAnalysis || (data.turnCount && data.turnCount >= 3)) {
           // Show the "start analysis" button — user decides when to proceed
           showAnalysisButton();
         }

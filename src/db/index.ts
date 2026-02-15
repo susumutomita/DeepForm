@@ -23,9 +23,11 @@ class StaticMigrationProvider {
   async getMigrations() {
     const m001 = await import("./migrations/001_initial_schema.ts");
     const m002 = await import("./migrations/002_add_analysis_unique.ts");
+    const m003 = await import("./migrations/003_backfill_columns.ts");
     return {
       "001_initial_schema": m001,
       "002_add_analysis_unique": m002,
+      "003_backfill_columns": m003,
     };
   }
 }

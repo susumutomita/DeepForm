@@ -36,24 +36,22 @@ export const ADMIN_EMAILS: string[] = (process.env.ADMIN_EMAILS || DEFAULT_ADMIN
 // Pro gate feature flag
 // ---------------------------------------------------------------------------
 // Controls which pipeline step first requires Pro.
-// Values: "prd" (default), "spec", "readiness", "none" (all free)
+// Values: "none" (default, all free), "prd", "spec", "readiness"
 // Steps order: analyze → hypotheses → prd → spec → readiness
 const PRO_GATE_STEPS = ["analyze", "hypotheses", "prd", "spec", "readiness", "none"] as const;
 export type ProGateStep = (typeof PRO_GATE_STEPS)[number];
 
-function parseProGate(): ProGateStep {
-  const raw = (process.env.PRO_GATE || "prd").toLowerCase();
+function getProGate(): ProGateStep {
+  const raw = (process.env.PRO_GATE || "none").toLowerCase();
   if (PRO_GATE_STEPS.includes(raw as ProGateStep)) return raw as ProGateStep;
-  console.warn(`Invalid PRO_GATE value "${raw}", falling back to "prd"`);
-  return "prd";
+  return "none";
 }
-
-export const PRO_GATE: ProGateStep = parseProGate();
 
 /** Returns true if the given step requires Pro under the current PRO_GATE setting. */
 export function requiresProForStep(step: string): boolean {
-  if (PRO_GATE === "none") return false;
-  const gateIndex = PRO_GATE_STEPS.indexOf(PRO_GATE);
+  const gate = getProGate();
+  if (gate === "none") return false;
+  const gateIndex = PRO_GATE_STEPS.indexOf(gate);
   const stepIndex = PRO_GATE_STEPS.indexOf(step as ProGateStep);
   if (stepIndex === -1) return false;
   return stepIndex >= gateIndex;

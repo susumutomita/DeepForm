@@ -30,7 +30,9 @@ export const pipelineRoutes = new Hono<AppEnv>();
 // ---------------------------------------------------------------------------
 
 // Facts + Hypotheses combined (1 LLM call instead of 2)
-const ANALYSIS_SYSTEM = `あなたは定性調査の分析エキスパートです。デプスインタビュー記録から「ファクト抽出」と「仮説生成」を同時に行ってください。
+const ANALYSIS_SYSTEM = `You are a qualitative research analysis expert. Extract facts and generate hypotheses simultaneously from the depth interview transcript below.
+
+IMPORTANT: Respond in the SAME LANGUAGE as the interview transcript. If the transcript is in Japanese, respond in Japanese. If in English, respond in English. If in Spanish, respond in Spanish.
 
 必ず以下のJSON形式で返してください。JSON以外のテキストは含めないでください。
 
@@ -66,7 +68,9 @@ const ANALYSIS_SYSTEM = `あなたは定性調査の分析エキスパートで�
 - 各仮説に根拠となるファクトID、反証パターン、未検証ポイントを必ず含める`;
 
 // PRD prompt — identical to analysis.ts
-const PRD_SYSTEM = `あなたはシニアプロダクトマネージャーです。ファクトと仮説からPRD（プロダクト要件定義書）を生成してください。
+const PRD_SYSTEM = `You are a senior product manager. Generate a PRD (Product Requirements Document) from the facts and hypotheses.
+
+IMPORTANT: Respond in the SAME LANGUAGE as the input facts/hypotheses. If they are in Japanese, write the PRD in Japanese. If in English, write in English. If in Spanish, write in Spanish.
 
 必ず以下のJSON形式で返してください。JSON以外のテキストは含めないでください。
 
@@ -159,7 +163,9 @@ const PRD_SYSTEM = `あなたはシニアプロダクトマネージャーです
 - 未実装部分は UI 上で明示的に「未実装」と表示し、モックで補完してはならない`;
 
 // Spec prompt — identical to analysis.ts
-const SPEC_SYSTEM = `あなたはテックリードです。PRDからコーディングエージェント向けの実装仕様を生成してください。
+const SPEC_SYSTEM = `You are a tech lead. Generate an implementation spec for a coding agent from the PRD.
+
+IMPORTANT: Respond in the SAME LANGUAGE as the input PRD. If it is in Japanese, write in Japanese. If in English, write in English. If in Spanish, write in Spanish.
 
 必ず以下のJSON形式で返してください。JSON以外のテキストは含めないでください。
 

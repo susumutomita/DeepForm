@@ -63,8 +63,8 @@ export function logout(): Promise<void> {
 }
 
 // Sessions
-export function createSession(theme: string): Promise<{ sessionId: string }> {
-  return post('/api/sessions', { theme });
+export function createSession(theme: string, lang?: string): Promise<{ sessionId: string }> {
+  return post('/api/sessions', { theme, lang });
 }
 
 export function getSessions(): Promise<Session[]> {
@@ -100,10 +100,11 @@ export interface StreamCallbacks {
   onError: (error: string) => void;
 }
 
-export async function startInterviewStream(sessionId: string, cb: StreamCallbacks): Promise<void> {
+export async function startInterviewStream(sessionId: string, cb: StreamCallbacks, lang?: string): Promise<void> {
   const res = await fetch(`/api/sessions/${sessionId}/start`, {
     method: 'POST',
     headers: { 'Accept': 'text/event-stream', 'Content-Type': 'application/json' },
+    body: JSON.stringify({ lang }),
   });
   if (!res.ok) {
     const data = await res.json().catch(() => ({}));
@@ -112,11 +113,11 @@ export async function startInterviewStream(sessionId: string, cb: StreamCallback
   await consumeSSE(res, cb);
 }
 
-export async function sendChatStream(sessionId: string, message: string, cb: StreamCallbacks): Promise<void> {
+export async function sendChatStream(sessionId: string, message: string, cb: StreamCallbacks, lang?: string): Promise<void> {
   const res = await fetch(`/api/sessions/${sessionId}/chat`, {
     method: 'POST',
     headers: { 'Accept': 'text/event-stream', 'Content-Type': 'application/json' },
-    body: JSON.stringify({ message }),
+    body: JSON.stringify({ message, lang }),
   });
   if (!res.ok) {
     const data = await res.json().catch(() => ({}));

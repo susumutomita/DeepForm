@@ -61,7 +61,9 @@ analysisRoutes.post("/sessions/:id/analyze", async (c) => {
       .map((m) => `${m.role === "user" ? "回答者" : "インタビュアー"}: ${m.content}`)
       .join("\n\n");
 
-    const systemPrompt = `あなたは定性調査の分析エキスパートです。以下のデプスインタビュー記録からファクトを抽出してください。
+    const systemPrompt = `You are a qualitative research analysis expert. Extract facts from the depth interview transcript below.
+
+IMPORTANT: Respond in the SAME LANGUAGE as the interview transcript.
 
 必ず以下のJSON形式で返してください。JSON以外のテキストは含めないでください。
 
@@ -132,7 +134,9 @@ analysisRoutes.post("/sessions/:id/hypotheses", async (c) => {
 
     const facts = JSON.parse(factsRow.data);
 
-    const systemPrompt = `あなたはプロダクト仮説生成のエキスパートです。抽出されたファクトから仮説を生成してください。
+    const systemPrompt = `You are a hypothesis generation expert. Generate hypotheses from the extracted facts.
+
+IMPORTANT: Respond in the SAME LANGUAGE as the input facts.
 
 必ず以下のJSON形式で返してください。JSON以外のテキストは含めないでください。
 
@@ -215,7 +219,9 @@ analysisRoutes.post("/sessions/:id/prd", async (c) => {
     const facts = JSON.parse(factsRow.data);
     const hypotheses = JSON.parse(hypothesesRow.data);
 
-    const systemPrompt = `あなたはシニアプロダクトマネージャーです。ファクトと仮説からPRD（プロダクト要件定義書）を生成してください。
+    const systemPrompt = `You are a senior product manager. Generate a PRD from the facts and hypotheses.
+
+IMPORTANT: Respond in the SAME LANGUAGE as the input data.
 
 必ず以下のJSON形式で返してください。JSON以外のテキストは含めないでください。
 
@@ -371,7 +377,9 @@ analysisRoutes.post("/sessions/:id/spec", async (c) => {
 
     const prd = JSON.parse(prdRow.data);
 
-    const systemPrompt = `あなたはテックリードです。PRDからコーディングエージェント向けの実装仕様を生成してください。
+    const systemPrompt = `You are a tech lead. Generate an implementation spec for a coding agent from the PRD.
+
+IMPORTANT: Respond in the SAME LANGUAGE as the input PRD.
 
 必ず以下のJSON形式で返してください。JSON以外のテキストは含めないでください。
 
@@ -492,7 +500,9 @@ analysisRoutes.post("/sessions/:id/readiness", async (c) => {
       .executeTakeFirst();
     const prd = prdRow ? JSON.parse(prdRow.data) : {};
 
-    const systemPrompt = `あなたはプロダクション品質のレビューエキスパートです。PRDと実装仕様に基づいて、ISO/IEC 25010 の8品質特性に沿った本番リリース前チェックリストを生成してください。
+    const systemPrompt = `You are a production quality review expert. Generate a pre-launch readiness checklist based on ISO/IEC 25010 quality characteristics from the PRD and implementation spec.
+
+IMPORTANT: Respond in the SAME LANGUAGE as the input data.
 
 必ず以下のJSON形式で返してください。JSON以外のテキストは含めないでください。
 

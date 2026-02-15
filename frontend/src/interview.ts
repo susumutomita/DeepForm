@@ -1,6 +1,6 @@
 // === DeepForm Interview & Analysis Steps ===
 import * as api from './api';
-import { t } from './i18n';
+import { t, currentLang } from './i18n';
 import type { Fact, Hypothesis, PRD, Spec, ReadinessCategory, Message, StepName } from './types';
 import {
   showLoading, hideLoading, showToast, escapeHtml, factTypeLabel,
@@ -179,7 +179,7 @@ async function startInterviewChat(): Promise<void> {
         finalizeStreamingBubble(bubble);
         showToast(err, true);
       },
-    });
+    }, currentLang);
   } catch (e: any) {
     finalizeStreamingBubble(bubble);
     showToast(e.message, true);
@@ -223,7 +223,7 @@ export async function sendMessage(choiceText?: string): Promise<void> {
         finalizeStreamingBubble(bubble);
         showToast(err, true);
       },
-    });
+    }, currentLang);
   } catch (e: any) {
     finalizeStreamingBubble(bubble);
     showToast(e.message, true);

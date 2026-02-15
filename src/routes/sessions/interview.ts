@@ -8,6 +8,94 @@ import { callClaude, callClaudeStream, extractText } from "../../llm.ts";
 import type { AppEnv } from "../../types.ts";
 import { chatMessageSchema } from "../../validation.ts";
 
+// ---------------------------------------------------------------------------
+// i18n prompt helpers
+// ---------------------------------------------------------------------------
+type Lang = "ja" | "en" | "es";
+
+function resolveLang(raw?: string): Lang {
+  if (raw === "en" || raw === "es") return raw;
+  return "ja";
+}
+
+const LANG_LABEL: Record<Lang, { langName: string; otherChoice: string; startMsg: string; alreadyStarted: string }> = {
+  ja: {
+    langName: "日本語",
+    otherChoice: "その他（自分で入力）",
+    startMsg: (theme: string) => `テーマ「${theme}」についてインタビューを始めてください。`,
+    alreadyStarted: "インタビューは既に開始されています。",
+  } as any,
+  en: {
+    langName: "English",
+    otherChoice: "Other (type your own)",
+    startMsg: (theme: string) => `Please start the interview about: "${theme}"`,
+    alreadyStarted: "Interview has already started.",
+  } as any,
+  es: {
+    langName: "español",
+    otherChoice: "Otro (escribir)",
+    startMsg: (theme: string) => `Por favor, comienza la entrevista sobre: "${theme}"`,
+    alreadyStarted: "La entrevista ya ha comenzado.",
+  } as any,
+};
+
+function getStartMsg(lang: Lang, theme: string): string {
+  return (LANG_LABEL[lang] as any).startMsg(theme);
+}
+
+function buildStartPrompt(lang: Lang, theme: string): string {
+  const l = LANG_LABEL[lang];
+  return `You are an expert depth interviewer. You are about to start a depth interview about the user's problem/idea.
+
+Topic: "${theme}"
+
+Ask exactly ONE opening question to understand the current situation.
+Be empathetic and approachable. Respond in ${l.langName}.
+
+IMPORTANT: After your question, provide 3-5 answer choices the user can select from.
+Format them as:
+[CHOICES]
+Choice 1 text
+Choice 2 text
+Choice 3 text
+${l.otherChoice}
+[/CHOICES]
+
+Choices should be specific and cover different situations or answer patterns.
+The last choice should always be "${l.otherChoice}".`;
+}
+
+function buildChatPrompt(lang: Lang, theme: string, turnCount: number): string {
+  const l = LANG_LABEL[lang];
+  const readyNote = turnCount >= 5
+    ? `\nWe have gathered enough information. Ask a final summary question and add "[READY_FOR_ANALYSIS]" at the end of your reply. However, if the user still wants to share more, continue the interview.`
+    : "";
+  return `You are an expert depth interviewer conducting a depth interview about the user's problem/idea.
+
+Topic: "${theme}"
+
+Rules:
+1. Ask only ONE question at a time
+2. Draw out specific episodes ("Can you tell me a concrete recent example?")
+3. Always ask about frequency, severity, and current workarounds
+4. If the answer is vague, dig deeper ("Could you be more specific?")
+5. Show empathy while probing
+6. Respond in ${l.langName}
+7. Keep responses concise, under 200 characters
+
+IMPORTANT: After your question, provide 3-5 answer choices the user can select from.
+Format them as:
+[CHOICES]
+Choice 1 text
+Choice 2 text
+Choice 3 text
+${l.otherChoice}
+[/CHOICES]
+
+Choices should be specific and cover different situations or answer patterns.
+The last choice should always be "${l.otherChoice}".${readyNote}`;
+}
+
 function extractChoices(text: string): { text: string; choices: string[] } {
   const match = text.match(/\[CHOICES\]([\s\S]*?)\[\/CHOICES\]/);
   if (!match) return { text: text.trim(), choices: [] };
@@ -36,29 +124,15 @@ interviewRoutes.post("/sessions/:id/start", async (c) => {
       .where("session_id", "=", id)
       .executeTakeFirstOrThrow();
     if (Number(existingMessages.count) > 0) {
-      return c.json({ reply: "インタビューは既に開始されています。", alreadyStarted: true });
+      const lang = resolveLang((await c.req.json().catch(() => ({}))).lang);
+      return c.json({ reply: LANG_LABEL[lang].alreadyStarted, alreadyStarted: true });
     }
 
-    const systemPrompt = `あなたは熟練のデプスインタビュアーです。これからユーザーの課題テーマについて深掘りインタビューを開始します。
-
-テーマ: 「${session.theme}」
-
-最初の質問を1つだけ聞いてください。テーマについて、まず現状の状況を理解するための質問をしてください。
-共感的で親しみやすいトーンで、日本語で話してください。
-
-重要: 質問の後に、ユーザーが選べる回答の選択肢を3〜5個提示してください。
-選択肢は以下の形式で質問文の最後に付けてください:
-[CHOICES]
-選択肢1のテキスト
-選択肢2のテキスト
-選択肢3のテキスト
-[/CHOICES]
-
-選択肢は具体的で、異なる状況や回答パターンをカバーするようにしてください。
-最後の選択肢は「その他（自分で入力）」にしてください。`;
-
+    const body = await c.req.json().catch(() => ({}));
+    const lang = resolveLang(body.lang);
+    const systemPrompt = buildStartPrompt(lang, session.theme);
     const startMessages = [
-      { role: "user" as const, content: `テーマ「${session.theme}」についてインタビューを始めてください。` },
+      { role: "user" as const, content: getStartMsg(lang, session.theme) },
     ];
 
     // Streaming response
@@ -124,6 +198,7 @@ interviewRoutes.post("/sessions/:id/chat", async (c) => {
     const id = session.id;
     const body = await c.req.json();
     const { message } = chatMessageSchema.parse(body);
+    const lang = resolveLang(body.lang);
 
     // Save user message
     await db.insertInto("messages").values({ session_id: id, role: "user", content: message }).execute();
@@ -140,31 +215,7 @@ interviewRoutes.post("/sessions/:id/chat", async (c) => {
 
     const turnCount = allMessages.filter((m) => m.role === "user").length;
 
-    const systemPrompt = `あなたは熟練のデプスインタビュアーです。ユーザーの課題テーマについて深掘りインタビューを行います。
-
-テーマ: 「${session.theme}」
-
-ルール：
-1. 一度に1つの質問だけ聞く
-2. 具体的なエピソードを引き出す（「最近あった具体例を教えてください」）
-3. 頻度・困り度・現在の回避策を必ず聞く
-4. 抽象的な回答には「具体的には？」で掘り下げる
-5. 共感を示しながら深掘りする
-6. 日本語で回答する
-7. 回答は簡潔に、200文字以内で
-
-重要: 質問の後に、ユーザーが選べる回答の選択肢を3〜5個提示してください。
-選択肢は以下の形式で質問文の最後に付けてください:
-[CHOICES]
-選択肢1のテキスト
-選択肢2のテキスト
-選択肢3のテキスト
-[/CHOICES]
-
-選択肢は具体的で、異なる状況や回答パターンをカバーするようにしてください。
-最後の選択肢は「その他（自分で入力）」にしてください。
-
-${turnCount >= 5 ? "十分な情報が集まりました。最後にまとめの質問をして、回答の最後に「[READY_FOR_ANALYSIS]」タグを付けてください。ただし、ユーザーがまだ話したそうなら続けてください。" : ""}`;
+    const systemPrompt = buildChatPrompt(lang, session.theme, turnCount);
 
     // Streaming response
     const wantsStream = c.req.header("accept")?.includes("text/event-stream");

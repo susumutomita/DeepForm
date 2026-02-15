@@ -81,7 +81,7 @@ w.startNewSession = async () => {
   if (!theme) { showToast(t('toast.enterTheme'), true); return; }
 
   try {
-    const data = await api.createSession(theme);
+    const data = await api.createSession(theme, currentLang);
     input.value = '';
     await openSession(data.sessionId, true);
   } catch (e: any) {

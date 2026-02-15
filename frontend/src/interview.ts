@@ -86,8 +86,8 @@ export async function openSession(sessionId: string, isNew = false): Promise<voi
     if (session.analysis) {
       if (session.analysis.facts) renderFacts(session.analysis.facts.facts ?? []);
       if (session.analysis.hypotheses) renderHypotheses(session.analysis.hypotheses.hypotheses ?? []);
-      if (session.analysis.prd) renderPRD(session.analysis.prd);
-      if (session.analysis.spec) renderSpec(session.analysis.spec);
+      if (session.analysis.prd) renderPRD(session.analysis.prd.prd ?? session.analysis.prd);
+      if (session.analysis.spec) renderSpec(session.analysis.spec.spec ?? session.analysis.spec);
       if (session.analysis.readiness) {
         const rd = session.analysis.readiness;
         renderReadiness(rd.readiness?.categories ?? rd.categories ?? []);
@@ -391,16 +391,20 @@ export async function doRunFullPipeline(): Promise<void> {
             renderHypotheses(data.hypotheses || []);
             updateStepNav('hypothesized');
             break;
-          case 'prd':
-            if (data.prd) renderPRD(data.prd);
+          case 'prd': {
+            const p = data.prd ?? data;
+            renderPRD(p.prd ?? p);
             updateStepNav('prd_generated');
             break;
-          case 'spec':
-            if (data.spec) renderSpec(data.spec);
+          }
+          case 'spec': {
+            const s = data.spec ?? data;
+            renderSpec(s.spec ?? s);
             updateStepNav('spec_generated');
             activateStep('spec');
             initInlineEdit();
             break;
+          }
         }
       },
       onDone: () => {

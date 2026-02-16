@@ -11,10 +11,10 @@ import { chatMessageSchema } from "../../validation.ts";
 // ---------------------------------------------------------------------------
 // i18n prompt helpers
 // ---------------------------------------------------------------------------
-type Lang = "ja" | "en" | "es";
+type Lang = "ja" | "en" | "es" | "zh";
 
 function resolveLang(raw?: string): Lang {
-  if (raw === "en" || raw === "es") return raw;
+  if (raw === "en" || raw === "es" || raw === "zh") return raw;
   return "ja";
 }
 
@@ -36,6 +36,12 @@ const LANG_LABEL: Record<Lang, { langName: string; otherChoice: string; startMsg
     otherChoice: "Otro (escribir)",
     startMsg: (theme: string) => `Por favor, comienza la entrevista sobre: "${theme}"`,
     alreadyStarted: "La entrevista ya ha comenzado.",
+  } as any,
+  zh: {
+    langName: "中文",
+    otherChoice: "其他（自己输入）",
+    startMsg: (theme: string) => `请开始关于“${theme}”的访谈。`,
+    alreadyStarted: "访谈已经开始。",
   } as any,
 };
 

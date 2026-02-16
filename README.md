@@ -13,6 +13,8 @@ then generate production-ready PRDs and implementation specs.
 
 [Live Demo](https://deepform.exe.xyz) · [Product Hunt](https://www.producthunt.com/products/deepform) · [GitHub](https://github.com/susumutomita/DeepForm) · [日本語](./README.ja.md)
 
+<a href="https://www.producthunt.com/products/deepform?embed=true&utm_source=badge-featured&utm_medium=badge&utm_campaign=badge-deepform" target="_blank"><img src="https://api.producthunt.com/widgets/embed-image/v1/featured.svg?post_id=1079622&theme=neutral&t=1771207729948" alt="DeepForm - AI depth interviews that turn vague ideas into specs | Product Hunt" width="250" height="54" /></a>
+
 </div>
 
 ---

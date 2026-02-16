@@ -137,8 +137,8 @@ export interface ReadinessData {
 export interface Analysis {
   facts?: FactsData;
   hypotheses?: HypothesesData;
-  prd?: PRD;
-  spec?: Spec;
+  prd?: PRDData;
+  spec?: SpecData;
   readiness?: ReadinessData;
 }
 

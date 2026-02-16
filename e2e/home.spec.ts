@@ -97,9 +97,9 @@ test.describe('言語切替', () => {
     await page.goto('/');
   });
 
-  test('言語切替ボタンが 3 つ表示されるべき', async ({ page }) => {
+  test('言語切替ボタンが 4 つ表示されるべき', async ({ page }) => {
     const langBtns = page.locator('.lang-btn');
-    await expect(langBtns).toHaveCount(3);
+    await expect(langBtns).toHaveCount(4);
   });
 
   test('EN ボタンで英語に切り替わるべき', async ({ page }) => {

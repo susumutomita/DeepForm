@@ -68,9 +68,11 @@ IMPORTANT: Respond in the SAME LANGUAGE as the interview transcript. If the tran
 - 各仮説に根拠となるファクトID、反証パターン、未検証ポイントを必ず含める`;
 
 // PRD prompt — identical to analysis.ts
-const PRD_SYSTEM = `You are a senior product manager. Generate a PRD (Product Requirements Document) from the facts and hypotheses.
+const PRD_SYSTEM = `You are a senior product manager. Generate a COMPACT PRD (Product Requirements Document) from the facts and hypotheses.
 
 IMPORTANT: Respond in the SAME LANGUAGE as the input facts/hypotheses. If they are in Japanese, write the PRD in Japanese. If in English, write in English. If in Spanish, write in Spanish.
+
+CRITICAL: Keep the output COMPACT. The total JSON must be under 6000 tokens. Be concise but specific.
 
 必ず以下のJSON形式で返してください。JSON以外のテキストは含めないでください。
 
@@ -135,7 +137,27 @@ IMPORTANT: Respond in the SAME LANGUAGE as the input facts/hypotheses. If they a
         "definition": "計測方法",
         "target": "目標値"
       }
-    ]
+    ],
+    "apiIntegration": {
+      "endpoints": [
+        {
+          "method": "GET|POST|PUT|DELETE",
+          "path": "/api/resource",
+          "description": "外部から呼び出せるAPIエンドポイントの説明",
+          "auth": "APIキー認証 or OAuth2",
+          "requestBody": "リクエスト形式（該当する場合）",
+          "response": "レスポンス形式"
+        }
+      ],
+      "webhooks": [
+        {
+          "event": "イベント名（例: resource.created）",
+          "payload": "通知ペイロードの概要",
+          "description": "外部サービスに通知するイベント"
+        }
+      ],
+      "externalServices": ["連携可能な外部サービス例"]
+    }
   }
 }
 
@@ -143,6 +165,7 @@ IMPORTANT: Respond in the SAME LANGUAGE as the input facts/hypotheses. If they a
 - 抽象語は禁止（「改善する」「最適化する」などNG）
 - テスト可能な条件のみ記述
 - MVP スコープに圧縮（コア機能は最大5つ）
+- API連携は必須：すべてのプロダクトは外部から呼び出せるREST APIエンドポイントを必ず含むこと。他のサービスからデータを取得・操作できるAPIと、外部にイベントを通知するwebhookを設計に含める。これにより単体で完結せず、他のプロダクトと連携してエコシステムを構成できる設計にする
 - 各機能に受け入れ基準を必ず付ける
 - 各機能にエッジケース（異常入力、境界値、同時操作、権限不足、ネットワーク断など）を必ず列挙する
 - qualityRequirements は ISO/IEC 25010 の8品質特性すべてを網羅し、テーマに合った具体的な基準を書く
@@ -163,67 +186,55 @@ IMPORTANT: Respond in the SAME LANGUAGE as the input facts/hypotheses. If they a
 - 未実装部分は UI 上で明示的に「未実装」と表示し、モックで補完してはならない`;
 
 // Spec prompt — identical to analysis.ts
-const SPEC_SYSTEM = `You are a tech lead. Generate an implementation spec for a coding agent from the PRD.
+const SPEC_SYSTEM = `You are a tech lead. Generate a COMPACT implementation spec as Markdown for a coding agent.
 
-IMPORTANT: Respond in the SAME LANGUAGE as the input PRD. If it is in Japanese, write in Japanese. If in English, write in English. If in Spanish, write in Spanish.
+IMPORTANT: Respond in the SAME LANGUAGE as the input PRD.
 
-必ず以下のJSON形式で返してください。JSON以外のテキストは含めないでください。
+OUTPUT FORMAT: Return ONLY a JSON object with one field:
+{"spec":{"raw":"<markdown text>"}}
 
-{
-  "spec": {
-    "projectName": "プロジェクト名",
-    "techStack": {
-      "frontend": "技術スタック",
-      "backend": "技術スタック",
-      "database": "データベース"
-    },
-    "apiEndpoints": [
-      {
-        "method": "GET",
-        "path": "/api/xxx",
-        "description": "説明",
-        "request": {},
-        "response": {}
-      }
-    ],
-    "dbSchema": "CREATE TABLE ...",
-    "screens": [
-      {
-        "name": "画面名",
-        "path": "/path",
-        "components": ["コンポーネント1"],
-        "description": "画面の説明"
-      }
-    ],
-    "testCases": [
-      {
-        "category": "カテゴリ",
-        "cases": [
-          {
-            "name": "テスト名",
-            "given": "前提条件",
-            "when": "操作",
-            "then": "期待結果"
-          }
-        ]
-      }
-    ]
-  }
-}
+The markdown inside "raw" MUST follow this exact template (fill in the blanks, keep it short):
 
-ルール：
-- 具体的なAPI仕様（メソッド、パス、リクエスト/レスポンス形式）
-- 具体的なDBスキーマ（CREATE TABLE文）
-- 画面一覧と主要コンポーネント
-- テストケース（Given-When-Then形式）
-- コーディングエージェントがそのまま実装に着手できるレベルの具体性
+# {Project Name} — Implementation Spec
 
-実装制約（CRITICAL — コーディングエージェントへの必須ルール）：
-- モックデータ、ハードコードされた配列、スタブ API での実装は禁止。すべてのデータは実際の DB/API から取得・保存すること
-- 「見た目が動く」を完成扱いにしない。データ経路が実物であることが完了条件
-- バックエンド API が未実装の場合、UI より先にバックエンドの最小実装を作ること
-- 未実装の機能は UI 上で「未実装」と明示表示し、モックで補完してはならない
-- テストケースの then（期待結果）には「DB にレコードが保存される」「API から実データが返る」等のデータ経路検証を含めること`;
+## Tech Stack
+- Frontend: {e.g. React + TypeScript + Vite}
+- Backend: {e.g. Node.js + Hono + TypeScript}
+- Database: {e.g. SQLite}
+
+## API Endpoints (top 5 only)
+| Method | Path | Description |
+|--------|------|-------------|
+| POST | /api/xxx | 1-line desc |
+
+## Database Schema
+\`\`\`sql
+CREATE TABLE xxx (...);
+\`\`\`
+Max 4 tables. Minimal columns.
+
+## Screens (max 4)
+| Screen | Path | Description |
+|--------|------|-------------|
+| Home | / | 1-line desc |
+
+## Key Test Cases (max 5)
+| Test | Given | When | Then |
+|------|-------|------|------|
+| Name | Setup | Action | Expected |
+
+## Implementation Constraints
+- Real DB/API connections only. No mock data, no hardcoded arrays.
+- Backend-first: implement API before UI.
+- Show "Not implemented" for unfinished features.
+- All API endpoints must be callable by external services (API-first design).
+
+SIZE RULES (HARD LIMITS):
+- Total output MUST be under 2000 tokens.
+- Max 5 API endpoints, 4 tables, 4 screens, 5 test cases.
+- 1-line descriptions only. No paragraphs.
+- No request/response type details in API table.
+- No indexes, triggers, or constraints in SQL beyond PRIMARY KEY and NOT NULL.`;
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -379,7 +390,7 @@ pipelineRoutes.post("/sessions/:id/pipeline", async (c) => {
             },
           ],
           SPEC_SYSTEM,
-          8192,
+          4096,
         );
         const specText = extractText(specResp);
         // biome-ignore lint/suspicious/noExplicitAny: dynamic LLM JSON output

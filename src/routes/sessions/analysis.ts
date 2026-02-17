@@ -398,9 +398,17 @@ analysisRoutes.post("/sessions/:id/spec", async (c) => {
 
     const prd = JSON.parse(prdRow.data);
 
-    const systemPrompt = `You are a tech lead. Generate an implementation spec for a coding agent from the PRD.
+    const systemPrompt = `You are a tech lead. Generate a COMPACT implementation spec for a coding agent from the PRD.
 
 IMPORTANT: Respond in the SAME LANGUAGE as the input PRD.
+
+CRITICAL SIZE CONSTRAINT:
+- Total JSON output MUST be under 3000 tokens (roughly 12KB). This is a HARD LIMIT.
+- API endpoints: list only the TOP 5 most important endpoints. Use 1-line descriptions.
+- DB schema: ONE compact CREATE TABLE block per table. Max 4 tables.
+- Test cases: Max 5 cases, each in 1 line per field.
+- Screens: Max 4 screens.
+- Be extremely concise. No verbose descriptions. No request/response type details.
 
 必ず以下のJSON形式で返してください。JSON以外のテキストは含めないでください。
 
@@ -416,49 +424,38 @@ IMPORTANT: Respond in the SAME LANGUAGE as the input PRD.
       {
         "method": "GET",
         "path": "/api/xxx",
-        "description": "説明",
-        "request": {},
-        "response": {}
+        "description": "説明（リクエスト/レスポンスの概要を含む）"
       }
     ],
-    "dbSchema": "CREATE TABLE ...",
+    "dbSchema": "CREATE TABLE ... (必要最小限のカラムのみ)",
     "screens": [
       {
         "name": "画面名",
         "path": "/path",
-        "components": ["コンポーネント1"],
-        "description": "画面の説明"
+        "description": "画面の説明と主要コンポーネント"
       }
     ],
     "testCases": [
       {
-        "category": "カテゴリ",
-        "cases": [
-          {
-            "name": "テスト名",
-            "given": "前提条件",
-            "when": "操作",
-            "then": "期待結果"
-          }
-        ]
+        "name": "テスト名",
+        "given": "前提",
+        "when": "操作",
+        "then": "期待結果"
       }
     ]
   }
 }
 
 ルール：
-- 具体的なAPI仕様（メソッド、パス、リクエスト/レスポンス形式）
-- 具体的なDBスキーマ（CREATE TABLE文）
-- 画面一覧と主要コンポーネント
-- テストケース（Given-When-Then形式）
-- コーディングエージェントがそのまま実装に着手できるレベルの具体性
+- APIエンドポイントは method, path, description のみ。request/response の詳細型は書かない（description に概要を含める）
+- DBスキーマは CREATE TABLE 文で簡潔に。インデックスやトリガーは省略
+- テストケースは主要なシナリオのみ（最大8件）
+- 画面は主要なもののみ（最大5画面）
+- コーディングエージェントがそのまま実装に着手できる具体性を保ちつつ、簡潔さを優先
 
-実装制約（CRITICAL — コーディングエージェントへの必須ルール）：
-- モックデータ、ハードコードされた配列、スタブ API での実装は禁止。すべてのデータは実際の DB/API から取得・保存すること
-- 「見た目が動く」を完成扱いにしない。データ経路が実物であることが完了条件
-- バックエンド API が未実装の場合、UI より先にバックエンドの最小実装を作ること
-- 未実装の機能は UI 上で「未実装」と明示表示し、モックで補完してはならない
-- テストケースの then（期待結果）には「DB にレコードが保存される」「API から実データが返る」等のデータ経路検証を含めること`;
+実装制約（CRITICAL）：
+- モックデータ禁止。実 DB/API 接続必須
+- バックエンドファーストで実装`;
 
     const response = await callClaude(
       [{ role: "user", content: `以下のPRDから実装仕様を生成してください：\n\n${JSON.stringify(prd, null, 2)}` }],

@@ -68,9 +68,11 @@ IMPORTANT: Respond in the SAME LANGUAGE as the interview transcript. If the tran
 - 各仮説に根拠となるファクトID、反証パターン、未検証ポイントを必ず含める`;
 
 // PRD prompt — identical to analysis.ts
-const PRD_SYSTEM = `You are a senior product manager. Generate a PRD (Product Requirements Document) from the facts and hypotheses.
+const PRD_SYSTEM = `You are a senior product manager. Generate a COMPACT PRD (Product Requirements Document) from the facts and hypotheses.
 
 IMPORTANT: Respond in the SAME LANGUAGE as the input facts/hypotheses. If they are in Japanese, write the PRD in Japanese. If in English, write in English. If in Spanish, write in Spanish.
+
+CRITICAL: Keep the output COMPACT. The total JSON must be under 6000 tokens. Be concise but specific.
 
 必ず以下のJSON形式で返してください。JSON以外のテキストは含めないでください。
 
@@ -184,9 +186,17 @@ IMPORTANT: Respond in the SAME LANGUAGE as the input facts/hypotheses. If they a
 - 未実装部分は UI 上で明示的に「未実装」と表示し、モックで補完してはならない`;
 
 // Spec prompt — identical to analysis.ts
-const SPEC_SYSTEM = `You are a tech lead. Generate an implementation spec for a coding agent from the PRD.
+const SPEC_SYSTEM = `You are a tech lead. Generate a COMPACT implementation spec for a coding agent from the PRD.
 
 IMPORTANT: Respond in the SAME LANGUAGE as the input PRD. If it is in Japanese, write in Japanese. If in English, write in English. If in Spanish, write in Spanish.
+
+CRITICAL SIZE CONSTRAINT:
+- Total JSON output MUST be under 3000 tokens (roughly 12KB). This is a HARD LIMIT.
+- API endpoints: list only the TOP 5 most important endpoints. Use 1-line descriptions.
+- DB schema: ONE compact CREATE TABLE block per table. Max 4 tables.
+- Test cases: Max 5 cases, each in 1 line per field.
+- Screens: Max 4 screens.
+- Be extremely concise. No verbose descriptions. No request/response type details.
 
 必ず以下のJSON形式で返してください。JSON以外のテキストは含めないでください。
 
@@ -202,42 +212,34 @@ IMPORTANT: Respond in the SAME LANGUAGE as the input PRD. If it is in Japanese, 
       {
         "method": "GET",
         "path": "/api/xxx",
-        "description": "説明",
-        "request": {},
-        "response": {}
+        "description": "説明（リクエスト/レスポンスの概要を含む）"
       }
     ],
-    "dbSchema": "CREATE TABLE ...",
+    "dbSchema": "CREATE TABLE ... (必要最小限のカラムのみ)",
     "screens": [
       {
         "name": "画面名",
         "path": "/path",
-        "components": ["コンポーネント1"],
-        "description": "画面の説明"
+        "description": "画面の説明と主要コンポーネント"
       }
     ],
     "testCases": [
       {
-        "category": "カテゴリ",
-        "cases": [
-          {
-            "name": "テスト名",
-            "given": "前提条件",
-            "when": "操作",
-            "then": "期待結果"
-          }
-        ]
+        "name": "テスト名",
+        "given": "前提",
+        "when": "操作",
+        "then": "期待結果"
       }
     ]
   }
 }
 
 ルール：
-- 具体的なAPI仕様（メソッド、パス、リクエスト/レスポンス形式）
-- 具体的なDBスキーマ（CREATE TABLE文）
-- 画面一覧と主要コンポーネント
-- テストケース（Given-When-Then形式）
-- コーディングエージェントがそのまま実装に着手できるレベルの具体性
+- APIエンドポイントは method, path, description のみ。request/response の詳細型は書かない（description に概要を含める）
+- DBスキーマは CREATE TABLE 文で簡潔に。インデックスやトリガーは省略
+- テストケースは主要なシナリオのみ（最大8件）
+- 画面は主要なもののみ（最大5画面）
+- コーディングエージェントがそのまま実装に着手できる具体性を保ちつつ、簡潔さを優先
 
 実装制約（CRITICAL — コーディングエージェントへの必須ルール）：
 - モックデータ、ハードコードされた配列、スタブ API での実装は禁止。すべてのデータは実際の DB/API から取得・保存すること
@@ -400,7 +402,7 @@ pipelineRoutes.post("/sessions/:id/pipeline", async (c) => {
             },
           ],
           SPEC_SYSTEM,
-          8192,
+          4096,
         );
         const specText = extractText(specResp);
         // biome-ignore lint/suspicious/noExplicitAny: dynamic LLM JSON output

@@ -398,69 +398,58 @@ analysisRoutes.post("/sessions/:id/spec", async (c) => {
 
     const prd = JSON.parse(prdRow.data);
 
-    const systemPrompt = `You are a tech lead. Generate a COMPACT implementation spec for a coding agent from the PRD.
+    const systemPrompt = `You are a tech lead. Generate a COMPACT implementation spec as Markdown for a coding agent.
 
 IMPORTANT: Respond in the SAME LANGUAGE as the input PRD.
 
-CRITICAL SIZE CONSTRAINT:
-- Total JSON output MUST be under 3000 tokens (roughly 12KB). This is a HARD LIMIT.
-- API endpoints: list only the TOP 5 most important endpoints. Use 1-line descriptions.
-- DB schema: ONE compact CREATE TABLE block per table. Max 4 tables.
-- Test cases: Max 5 cases, each in 1 line per field.
-- Screens: Max 4 screens.
-- Be extremely concise. No verbose descriptions. No request/response type details.
+OUTPUT FORMAT: Return ONLY a JSON object with one field:
+{"spec":{"raw":"<markdown text>"}}
 
-必ず以下のJSON形式で返してください。JSON以外のテキストは含めないでください。
+The markdown inside "raw" MUST follow this exact template (fill in the blanks, keep it short):
 
-{
-  "spec": {
-    "projectName": "プロジェクト名",
-    "techStack": {
-      "frontend": "技術スタック",
-      "backend": "技術スタック",
-      "database": "データベース"
-    },
-    "apiEndpoints": [
-      {
-        "method": "GET",
-        "path": "/api/xxx",
-        "description": "説明（リクエスト/レスポンスの概要を含む）"
-      }
-    ],
-    "dbSchema": "CREATE TABLE ... (必要最小限のカラムのみ)",
-    "screens": [
-      {
-        "name": "画面名",
-        "path": "/path",
-        "description": "画面の説明と主要コンポーネント"
-      }
-    ],
-    "testCases": [
-      {
-        "name": "テスト名",
-        "given": "前提",
-        "when": "操作",
-        "then": "期待結果"
-      }
-    ]
-  }
-}
+# {Project Name} — Implementation Spec
 
-ルール：
-- APIエンドポイントは method, path, description のみ。request/response の詳細型は書かない（description に概要を含める）
-- DBスキーマは CREATE TABLE 文で簡潔に。インデックスやトリガーは省略
-- テストケースは主要なシナリオのみ（最大8件）
-- 画面は主要なもののみ（最大5画面）
-- コーディングエージェントがそのまま実装に着手できる具体性を保ちつつ、簡潔さを優先
+## Tech Stack
+- Frontend: {e.g. React + TypeScript + Vite}
+- Backend: {e.g. Node.js + Hono + TypeScript}
+- Database: {e.g. SQLite}
 
-実装制約（CRITICAL）：
-- モックデータ禁止。実 DB/API 接続必須
-- バックエンドファーストで実装`;
+## API Endpoints (top 5 only)
+| Method | Path | Description |
+|--------|------|-------------|
+| POST | /api/xxx | 1-line desc |
+
+## Database Schema
+\`\`\`sql
+CREATE TABLE xxx (...);
+\`\`\`
+Max 4 tables. Minimal columns.
+
+## Screens (max 4)
+| Screen | Path | Description |
+|--------|------|-------------|
+| Home | / | 1-line desc |
+
+## Key Test Cases (max 5)
+| Test | Given | When | Then |
+|------|-------|------|------|
+| Name | Setup | Action | Expected |
+
+## Implementation Constraints
+- Real DB/API connections only. No mock data.
+- Backend-first: implement API before UI.
+- Show "Not implemented" for unfinished features.
+- All API endpoints must be callable by external services (API-first design).
+
+SIZE RULES (HARD LIMITS):
+- Total output MUST be under 2000 tokens.
+- Max 5 API endpoints, 4 tables, 4 screens, 5 test cases.
+- 1-line descriptions only. No paragraphs.`;
 
     const response = await callClaude(
       [{ role: "user", content: `以下のPRDから実装仕様を生成してください：\n\n${JSON.stringify(prd, null, 2)}` }],
       systemPrompt,
-      8192,
+      4096,
     );
     const text = extractText(response);
 

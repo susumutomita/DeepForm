@@ -619,6 +619,31 @@ function renderPRD(prd: PRD): void {
     html += prd.metrics.map(m => `<tr><td>${escapeHtml(m.name)}</td><td>${escapeHtml(m.definition)}</td><td>${escapeHtml(m.target)}</td></tr>`).join('');
     html += `</table></div>`;
   }
+  if ((prd as any).apiIntegration) {
+    const api = (prd as any).apiIntegration;
+    html += `<div class="prd-section"><h3>🔗 API連携</h3>`;
+    if (api.endpoints?.length) {
+      html += `<h4>外部公開エンドポイント</h4>`;
+      html += api.endpoints.map((ep: any) => `
+        <div class="feature-card">
+          <h4><code>${escapeHtml(ep.method)} ${escapeHtml(ep.path)}</code></h4>
+          <p>${escapeHtml(ep.description || '')}</p>
+          ${ep.auth ? `<div class="criteria-label">認証: ${escapeHtml(ep.auth)}</div>` : ''}
+        </div>
+      `).join('');
+    }
+    if (api.webhooks?.length) {
+      html += `<h4>Webhook通知</h4><ul>`;
+      html += api.webhooks.map((w: any) => `<li><strong>${escapeHtml(w.event)}</strong>: ${escapeHtml(w.description || w.payload || '')}</li>`).join('');
+      html += `</ul>`;
+    }
+    if (api.externalServices?.length) {
+      html += `<h4>連携可能な外部サービス</h4><ul>`;
+      html += api.externalServices.map((s: any) => `<li>${escapeHtml(typeof s === 'string' ? s : s.name || JSON.stringify(s))}</li>`).join('');
+      html += `</ul>`;
+    }
+    html += `</div>`;
+  }
   container.innerHTML = html;
 }
 

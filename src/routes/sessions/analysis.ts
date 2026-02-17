@@ -286,7 +286,27 @@ IMPORTANT: Respond in the SAME LANGUAGE as the input data.
         "definition": "計測方法",
         "target": "目標値"
       }
-    ]
+    ],
+    "apiIntegration": {
+      "endpoints": [
+        {
+          "method": "GET|POST|PUT|DELETE",
+          "path": "/api/resource",
+          "description": "外部から呼び出せるAPIエンドポイントの説明",
+          "auth": "APIキー認証 or OAuth2",
+          "requestBody": "リクエスト形式（該当する場合）",
+          "response": "レスポンス形式"
+        }
+      ],
+      "webhooks": [
+        {
+          "event": "イベント名（例: resource.created）",
+          "payload": "通知ペイロードの概要",
+          "description": "外部サービスに通知するイベント"
+        }
+      ],
+      "externalServices": ["連携可能な外部サービス例"]
+    }
   }
 }
 
@@ -294,6 +314,7 @@ IMPORTANT: Respond in the SAME LANGUAGE as the input data.
 - 抽象語は禁止（「改善する」「最適化する」などNG）
 - テスト可能な条件のみ記述
 - MVP スコープに圧縮（コア機能は最大5つ）
+- API連携は必須：すべてのプロダクトは外部から呼び出せるREST APIエンドポイントを必ず含むこと。他のサービスからデータを取得・操作できるAPIと、外部にイベントを通知するwebhookを設計に含める。これにより単体で完結せず、他のプロダクトと連携してエコシステムを構成できる設計にする
 - 各機能に受け入れ基準を必ず付ける
 - 各機能にエッジケース（異常入力、境界値、同時操作、権限不足、ネットワーク断など）を必ず列挙する
 - qualityRequirements は ISO/IEC 25010 の8品質特性すべてを網羅し、テーマに合った具体的な基準を書く

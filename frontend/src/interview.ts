@@ -487,6 +487,26 @@ export async function exportPRDMarkdown(): Promise<void> {
   }
 }
 
+// --- Save to GitHub ---
+export async function doSaveToGitHub(): Promise<void> {
+  if (!currentSessionId) return;
+  showLoading(t('loading.githubSave'));
+  try {
+    const result = await api.saveToGitHub(currentSessionId);
+    hideLoading();
+    showToast(t('toast.githubSaved'));
+    // 新タブでリポジトリを開く
+    window.open(result.repoUrl, '_blank', 'noopener');
+  } catch (e: any) {
+    hideLoading();
+    if (e.status === 401 && e.upgrade) {
+      showUpgradeModal(e.upgradeUrl || PAYMENT_LINK);
+      return;
+    }
+    showToast(e.message, true);
+  }
+}
+
 // --- Deploy to exe.dev ---
 export async function doDeployToExeDev(): Promise<void> {
   if (!currentSessionId) return;

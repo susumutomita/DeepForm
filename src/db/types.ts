@@ -19,6 +19,7 @@ export interface SessionTable {
   is_public: Generated<number>; // 0/1 for SQLite compat
   interview_style: Generated<string>; // DEFAULT 'depth'
   deploy_token: string | null;
+  github_repo_url: string | null;
 }
 
 export interface MessageTable {

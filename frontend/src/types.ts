@@ -309,6 +309,7 @@ export interface DeepFormWindow extends Window {
   exportSpecJSON: () => void;
   exportPRDMarkdown: () => void;
   deployToExeDev: () => Promise<void>;
+  saveToGitHub: () => Promise<void>;
   // Campaign
   startCampaignInterview: () => Promise<void>;
   sendCampaignMessage: () => Promise<void>;

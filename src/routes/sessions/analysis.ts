@@ -346,10 +346,10 @@ IMPORTANT: Respond in the SAME LANGUAGE as the input data.
     );
     const text = extractText(response);
 
-    let prd: any;
+    let prd: unknown;
     try {
       const jsonMatch = text.match(/\{[\s\S]*\}/);
-      prd = JSON.parse(jsonMatch?.[0] as string);
+      prd = JSON.parse(jsonMatch?.[0] ?? "");
     } catch {
       prd = {
         prd: {
@@ -453,10 +453,10 @@ SIZE RULES (HARD LIMITS):
     );
     const text = extractText(response);
 
-    let spec: any;
+    let spec: Record<string, unknown>;
     try {
       const jsonMatch = text.match(/\{[\s\S]*\}/);
-      spec = JSON.parse(jsonMatch?.[0] as string);
+      spec = JSON.parse(jsonMatch?.[0] ?? "");
     } catch {
       spec = { spec: { raw: text } };
     }

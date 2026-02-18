@@ -18,35 +18,42 @@ function resolveLang(raw?: string): Lang {
   return "ja";
 }
 
-const LANG_LABEL: Record<Lang, { langName: string; otherChoice: string; startMsg: string; alreadyStarted: string }> = {
+interface LangConfig {
+  langName: string;
+  otherChoice: string;
+  startMsg: (theme: string) => string;
+  alreadyStarted: string;
+}
+
+const LANG_LABEL: Record<Lang, LangConfig> = {
   ja: {
     langName: "日本語",
     otherChoice: "その他（自分で入力）",
     startMsg: (theme: string) => `テーマ「${theme}」についてインタビューを始めてください。`,
     alreadyStarted: "インタビューは既に開始されています。",
-  } as any,
+  },
   en: {
     langName: "English",
     otherChoice: "Other (type your own)",
     startMsg: (theme: string) => `Please start the interview about: "${theme}"`,
     alreadyStarted: "Interview has already started.",
-  } as any,
+  },
   es: {
     langName: "español",
     otherChoice: "Otro (escribir)",
     startMsg: (theme: string) => `Por favor, comienza la entrevista sobre: "${theme}"`,
     alreadyStarted: "La entrevista ya ha comenzado.",
-  } as any,
+  },
   zh: {
     langName: "中文",
     otherChoice: "其他（自己输入）",
-    startMsg: (theme: string) => `请开始关于“${theme}”的访谈。`,
+    startMsg: (theme: string) => `请开始关于"${theme}"的访谈。`,
     alreadyStarted: "访谈已经开始。",
-  } as any,
+  },
 };
 
 function getStartMsg(lang: Lang, theme: string): string {
-  return (LANG_LABEL[lang] as any).startMsg(theme);
+  return LANG_LABEL[lang].startMsg(theme);
 }
 
 function buildStartPrompt(lang: Lang, theme: string): string {

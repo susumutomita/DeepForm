@@ -10,8 +10,37 @@ export function formatZodError(error: ZodError): string {
 /**
  * PRD データからマークダウンを生成する。
  */
-// biome-ignore lint/suspicious/noExplicitAny: PRD は動的 JSON 構造
-export function generatePRDMarkdown(prd: any, theme: string): string {
+interface CoreFeature {
+  name: string;
+  description: string;
+  priority: string;
+  acceptanceCriteria?: string[];
+  edgeCases?: string[];
+}
+
+interface UserFlow {
+  name: string;
+  steps?: string[];
+}
+
+interface Metric {
+  name: string;
+  definition: string;
+  target: string;
+}
+
+interface PRDData {
+  problemDefinition?: string;
+  targetUser?: string;
+  jobsToBeDone?: string[];
+  coreFeatures?: CoreFeature[];
+  nonGoals?: string[];
+  userFlows?: UserFlow[];
+  qualityRequirements?: Record<string, { description?: string; criteria?: string[] }>;
+  metrics?: Metric[];
+}
+
+export function generatePRDMarkdown(prd: PRDData, theme: string): string {
   const qrLabels: Record<string, string> = {
     functionalSuitability: "機能適合性",
     performanceEfficiency: "性能効率性",
@@ -22,16 +51,18 @@ export function generatePRDMarkdown(prd: any, theme: string): string {
     maintainability: "保守性",
     portability: "移植性",
   };
-  const qrSection = prd.qualityRequirements
-    ? Object.entries(qrLabels)
-        .map(([key, label]) => {
-          const item = prd.qualityRequirements[key];
-          if (!item) return "";
-          return `### ${label}\n${item.description || ""}\n${(item.criteria || []).map((c: string) => `- ${c}`).join("\n")}`;
-        })
-        .filter(Boolean)
-        .join("\n\n")
-    : "";
+  const qr = prd.qualityRequirements ?? {};
+  const qrSection =
+    Object.keys(qr).length > 0
+      ? Object.entries(qrLabels)
+          .map(([key, label]) => {
+            const item = qr[key];
+            if (!item) return "";
+            return `### ${label}\n${item.description || ""}\n${(item.criteria || []).map((c: string) => `- ${c}`).join("\n")}`;
+          })
+          .filter(Boolean)
+          .join("\n\n")
+      : "";
 
   return `# PRD: ${theme}
 
@@ -45,13 +76,13 @@ ${prd.targetUser || ""}
 ${(prd.jobsToBeDone || []).map((j: string, i: number) => `${i + 1}. ${j}`).join("\n")}
 
 ## コア機能（MVP）
-${(prd.coreFeatures || []).map((f: any) => `### ${f.name}\n${f.description}\n\n**優先度**: ${f.priority}\n\n**受け入れ基準**:\n${(f.acceptanceCriteria || []).map((a: string) => `- ${a}`).join("\n")}\n\n**エッジケース**:\n${(f.edgeCases || []).map((e: string) => `- ${e}`).join("\n")}`).join("\n\n")}
+${(prd.coreFeatures || []).map((f: CoreFeature) => `### ${f.name}\n${f.description}\n\n**優先度**: ${f.priority}\n\n**受け入れ基準**:\n${(f.acceptanceCriteria || []).map((a: string) => `- ${a}`).join("\n")}\n\n**エッジケース**:\n${(f.edgeCases || []).map((e: string) => `- ${e}`).join("\n")}`).join("\n\n")}
 
 ## Non-Goals（やらないこと）
 ${(prd.nonGoals || []).map((n: string) => `- ${n}`).join("\n")}
 
 ## ユーザーフロー
-${(prd.userFlows || []).map((f: any) => `### ${f.name}\n${(f.steps || []).map((s: string, i: number) => `${i + 1}. ${s}`).join("\n")}`).join("\n\n")}
+${(prd.userFlows || []).map((f: UserFlow) => `### ${f.name}\n${(f.steps || []).map((s: string, i: number) => `${i + 1}. ${s}`).join("\n")}`).join("\n\n")}
 
 ## 非機能要件（ISO/IEC 25010）
 ${qrSection}
@@ -59,7 +90,7 @@ ${qrSection}
 ## 計測指標
 | 指標 | 定義 | 目標 |
 |------|------|------|
-${(prd.metrics || []).map((m: any) => `| ${m.name} | ${m.definition} | ${m.target} |`).join("\n")}
+${(prd.metrics || []).map((m: Metric) => `| ${m.name} | ${m.definition} | ${m.target} |`).join("\n")}
 
 ## 実装制約
 

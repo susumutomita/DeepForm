@@ -1172,7 +1172,7 @@ describe("セッション API", () => {
     it("生成された token で deploy-bundle にアクセスできること", async () => {
       // Given: deploy-token を生成
       const tokenRes = await authedRequest("/api/sessions/stoken/deploy-token", { method: "POST" });
-      const tokenData = (await tokenRes.json()) as any;
+      await tokenRes.json();
       // DB から直接 token を取得
       const session = rawDb.prepare("SELECT deploy_token FROM sessions WHERE id = ?").get("stoken") as any;
       const token = session.deploy_token;

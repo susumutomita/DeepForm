@@ -289,7 +289,7 @@ severityは "high", "medium", "low" のいずれか。
     let facts: unknown;
     try {
       const jsonMatch = text.match(/\{[\s\S]*\}/);
-      facts = JSON.parse(jsonMatch![0]);
+      facts = JSON.parse(jsonMatch?.[0] ?? "");
     } catch {
       facts = { facts: [{ id: "F1", type: "fact", content: text, evidence: "", severity: "medium" }] };
     }

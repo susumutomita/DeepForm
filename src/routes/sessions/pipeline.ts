@@ -359,7 +359,6 @@ pipelineRoutes.post("/sessions/:id/pipeline", async (c) => {
           8192,
         );
         const prdText = extractText(prdResp);
-        // biome-ignore lint/suspicious/noExplicitAny: dynamic LLM JSON output
         const prd = parseJSON(prdText, {
           prd: {
             problemDefinition: prdText,
@@ -370,6 +369,7 @@ pipelineRoutes.post("/sessions/:id/pipeline", async (c) => {
             userFlows: [],
             metrics: [],
           },
+          // biome-ignore lint/suspicious/noExplicitAny: dynamic LLM JSON output
         }) as any;
 
         await saveAnalysisResult(id, ANALYSIS_TYPE.PRD, prd);

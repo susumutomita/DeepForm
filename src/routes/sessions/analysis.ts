@@ -12,6 +12,83 @@ import type { AppEnv, Session } from "../../types.ts";
 
 const PAYMENT_LINK = "https://buy.stripe.com/test_dRmcMXbrh3Q8ggx8DA48000";
 
+/** 切り詰められた JSON を閉じ括弧を補完して修復する */
+export function repairTruncatedJson(text: string): unknown | null {
+  const stack: string[] = [];
+  let inString = false;
+  let escaped = false;
+
+  for (const ch of text) {
+    if (escaped) {
+      escaped = false;
+      continue;
+    }
+    if (ch === "\\" && inString) {
+      escaped = true;
+      continue;
+    }
+    if (ch === '"') {
+      inString = !inString;
+      continue;
+    }
+    if (inString) continue;
+    if (ch === "{") stack.push("}");
+    else if (ch === "[") stack.push("]");
+    else if ((ch === "}" || ch === "]") && stack.length > 0) stack.pop();
+  }
+
+  let repaired = text;
+  if (inString) repaired += '"';
+  while (stack.length > 0) repaired += stack.pop();
+
+  try {
+    return JSON.parse(repaired);
+  } catch {
+    return null;
+  }
+}
+
+/** LLM レスポンスから JSON を抽出する。コードフェンスやテキスト混在に対応 */
+export function extractJsonFromLLM(text: string): unknown | null {
+  const trimmed = text.trim();
+
+  // 1. そのまま JSON として解析
+  try {
+    return JSON.parse(trimmed);
+  } catch {}
+
+  // 2. Markdown コードフェンスの中身を抽出
+  const fenceMatch = trimmed.match(/```(?:json)?\s*\n?([\s\S]*?)\n?```/);
+  if (fenceMatch) {
+    try {
+      return JSON.parse(fenceMatch[1].trim());
+    } catch {}
+  }
+
+  // 3. 正規表現で JSON オブジェクトを抽出
+  const jsonMatch = trimmed.match(/\{[\s\S]*\}/);
+  if (jsonMatch) {
+    try {
+      return JSON.parse(jsonMatch[0]);
+    } catch {}
+  }
+
+  // 4. 切り詰められた JSON の修復を試行
+  const fenceContent = trimmed.match(/```(?:json)?\s*\n?([\s\S]*)/);
+  if (fenceContent) {
+    const inner = fenceContent[1].replace(/\n?```\s*$/, "").trim();
+    const result = repairTruncatedJson(inner);
+    if (result) return result;
+  }
+  const jsonStart = trimmed.match(/\{[\s\S]*/);
+  if (jsonStart) {
+    const result = repairTruncatedJson(jsonStart[0]);
+    if (result) return result;
+  }
+
+  return null;
+}
+
 /**
  * Pro ゲートチェック。requiresProForStep() が true の場合のみ課金壁を適用する。
  * PRO_GATE 環境変数で制御: "none"(default) | "prd" | "spec" | "readiness" | "analyze" | "hypotheses"
@@ -91,11 +168,8 @@ severityは "high", "medium", "low" のいずれか。
     );
     const text = extractText(response);
 
-    let facts: unknown;
-    try {
-      const jsonMatch = text.match(/\{[\s\S]*\}/);
-      facts = JSON.parse(jsonMatch?.[0] as string);
-    } catch {
+    let facts: unknown = extractJsonFromLLM(text);
+    if (!facts) {
       facts = { facts: [{ id: "F1", type: "fact", content: text, evidence: "", severity: "medium" }] };
     }
 
@@ -166,11 +240,8 @@ IMPORTANT: Respond in the SAME LANGUAGE as the input facts.
     );
     const text = extractText(response);
 
-    let hypotheses: unknown;
-    try {
-      const jsonMatch = text.match(/\{[\s\S]*\}/);
-      hypotheses = JSON.parse(jsonMatch?.[0] as string);
-    } catch {
+    let hypotheses: unknown = extractJsonFromLLM(text);
+    if (!hypotheses) {
       hypotheses = {
         hypotheses: [
           { id: "H1", title: text, description: "", supportingFacts: [], counterEvidence: "", unverifiedPoints: [] },
@@ -346,11 +417,8 @@ IMPORTANT: Respond in the SAME LANGUAGE as the input data.
     );
     const text = extractText(response);
 
-    let prd: unknown;
-    try {
-      const jsonMatch = text.match(/\{[\s\S]*\}/);
-      prd = JSON.parse(jsonMatch?.[0] ?? "");
-    } catch {
+    let prd: unknown = extractJsonFromLLM(text);
+    if (!prd) {
       prd = {
         prd: {
           problemDefinition: text,
@@ -453,11 +521,8 @@ SIZE RULES (HARD LIMITS):
     );
     const text = extractText(response);
 
-    let spec: Record<string, unknown>;
-    try {
-      const jsonMatch = text.match(/\{[\s\S]*\}/);
-      spec = JSON.parse(jsonMatch?.[0] ?? "");
-    } catch {
+    let spec: Record<string, unknown> = extractJsonFromLLM(text) as Record<string, unknown>;
+    if (!spec) {
       spec = { spec: { raw: text } };
     }
 
@@ -559,11 +624,8 @@ IMPORTANT: Respond in the SAME LANGUAGE as the input data.
     );
     const text = extractText(response);
 
-    let readiness: unknown;
-    try {
-      const jsonMatch = text.match(/\{[\s\S]*\}/);
-      readiness = JSON.parse(jsonMatch?.[0] as string);
-    } catch {
+    let readiness: unknown = extractJsonFromLLM(text);
+    if (!readiness) {
       readiness = {
         readiness: {
           categories: [

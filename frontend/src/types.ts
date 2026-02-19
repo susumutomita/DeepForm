@@ -5,6 +5,7 @@ export interface User {
   email: string;
   displayName: string | null;
   avatarUrl?: string | null;
+  githubConnected?: boolean;
 }
 
 export interface Message {
@@ -104,6 +105,7 @@ export interface TestCategory {
 }
 
 export interface Spec {
+  raw?: string;
   projectName?: string;
   techStack?: unknown;
   apiEndpoints?: ApiEndpoint[];
@@ -309,6 +311,7 @@ export interface DeepFormWindow extends Window {
   exportSpecJSON: () => void;
   exportPRDMarkdown: () => void;
   deployToExeDev: () => Promise<void>;
+  saveToGitHub: () => Promise<void>;
   // Campaign
   startCampaignInterview: () => Promise<void>;
   sendCampaignMessage: () => Promise<void>;

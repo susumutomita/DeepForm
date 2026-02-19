@@ -21,6 +21,7 @@ export interface Session {
   user_id?: string | null;
   is_public?: number;
   deploy_token?: string | null;
+  github_repo_url?: string | null;
 }
 
 export interface Message {

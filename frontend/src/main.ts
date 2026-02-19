@@ -6,7 +6,7 @@ import { loadSessions, doToggleVisibility, doCreateCampaign } from './sessions';
 import {
   showHome, openSession, sendMessage, handleChatKeydown,
   doRunAnalysis, doRunHypotheses, doRunPRD, doRunSpec, doRunReadiness, doRunFullPipeline,
-  exportSpecJSON, exportPRDMarkdown, doDeployToExeDev, activateStep,
+  exportSpecJSON, exportPRDMarkdown, doDeployToExeDev, doSaveToGitHub, activateStep,
   getCurrentSessionId,
 } from './interview';
 import { initInlineEdit, destroyInlineEdit } from './inline-edit';
@@ -47,6 +47,7 @@ w.runFullPipeline = doRunFullPipeline;
 w.exportSpecJSON = exportSpecJSON;
 w.exportPRDMarkdown = exportPRDMarkdown;
 w.deployToExeDev = doDeployToExeDev;
+w.saveToGitHub = doSaveToGitHub;
 w.activateStep = activateStep;
 w.logout = doLogout;
 w.setLang = (lang: string) => { setLang(lang); loadSessions(); };

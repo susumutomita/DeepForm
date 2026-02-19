@@ -9,6 +9,7 @@ import {
 } from './ui';
 import { renderCampaignSidebarPanel } from './campaign-analytics';
 import { initInlineEdit, destroyInlineEdit } from './inline-edit';
+import { getUser } from './auth';
 
 const PAYMENT_LINK = 'https://buy.stripe.com/test_dRmcMXbrh3Q8ggx8DA48000';
 
@@ -357,6 +358,7 @@ export async function doRunSpec(): Promise<void> {
     updateStepNav('spec_generated');
     activateStep('spec');
     showToast(t('toast.specDone'));
+    autoSaveToGitHub();
   } catch (e: any) {
     hideLoading();
     if (e.status === 402 || e.upgrade) {
@@ -436,6 +438,7 @@ export async function doRunFullPipeline(): Promise<void> {
             updateStepNav('spec_generated');
             activateStep('spec');
             initInlineEdit();
+            autoSaveToGitHub();
             break;
           }
         }
@@ -483,6 +486,52 @@ export async function exportPRDMarkdown(): Promise<void> {
     await navigator.clipboard.writeText(md);
     showToast(t('toast.copied'));
   } catch (e: any) {
+    showToast(e.message, true);
+  }
+}
+
+// --- GitHub 保存の共通 UI 更新 ---
+const GITHUB_SVG_SM = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 00-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0020 4.77 5.07 5.07 0 0019.91 1S18.73.65 16 2.48a13.38 13.38 0 00-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 005 4.77a5.44 5.44 0 00-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 009 18.13V22"/></svg>';
+
+function showGitHubSavedLink(result: { repoUrl: string }): void {
+  const statusEl = document.getElementById('github-auto-save-status');
+  if (!statusEl) return;
+  const repoName = result.repoUrl.split('/').slice(-1)[0] || '';
+  statusEl.innerHTML =
+    `<a href="${escapeHtml(result.repoUrl)}" target="_blank" rel="noopener" class="github-saved-link">` +
+    `${GITHUB_SVG_SM} ${escapeHtml(t('toast.githubSaved'))}: ${escapeHtml(repoName)}</a>`;
+}
+
+// --- Auto-save to GitHub (background, no user interaction) ---
+async function autoSaveToGitHub(): Promise<void> {
+  if (!currentSessionId) return;
+  if (!getUser()?.githubConnected) return;
+
+  const statusEl = document.getElementById('github-auto-save-status');
+  if (statusEl) {
+    statusEl.innerHTML = `<span class="github-saving">${escapeHtml(t('loading.githubSave'))}</span>`;
+  }
+
+  try {
+    const result = await api.saveToGitHub(currentSessionId);
+    showGitHubSavedLink(result);
+  } catch {
+    // 自動保存の失敗はサイレントに処理（ユーザー操作ではないため）
+    if (statusEl) statusEl.innerHTML = '';
+  }
+}
+
+// 手動ボタン用: エラー表示あり
+export async function doSaveToGitHub(): Promise<void> {
+  if (!currentSessionId) return;
+  showLoading(t('loading.githubSave'));
+  try {
+    const result = await api.saveToGitHub(currentSessionId);
+    hideLoading();
+    showGitHubSavedLink(result);
+    showToast(t('toast.githubSaved'));
+  } catch (e: any) {
+    hideLoading();
     showToast(e.message, true);
   }
 }
@@ -647,36 +696,144 @@ function renderPRD(prd: PRD): void {
   container.innerHTML = html;
 }
 
+/** 簡易マークダウンを HTML に変換する（spec.raw 用）。すべてのテキストは escapeHtml 済み */
+function simpleMarkdownToHtml(md: string): string {
+  const lines = md.split('\n');
+  const out: string[] = [];
+  let inCodeBlock = false;
+  let inTable = false;
+  let listTag: 'ul' | 'ol' | null = null;
+
+  function closeList() {
+    if (listTag) { out.push(`</${listTag}>`); listTag = null; }
+  }
+
+  for (const line of lines) {
+    // コードブロック
+    if (line.trimStart().startsWith('```')) {
+      if (inCodeBlock) {
+        out.push('</code></pre>');
+        inCodeBlock = false;
+      } else {
+        closeList();
+        if (inTable) { out.push('</tbody></table>'); inTable = false; }
+        out.push('<pre class="code-block"><code>');
+        inCodeBlock = true;
+      }
+      continue;
+    }
+    if (inCodeBlock) {
+      out.push(escapeHtml(line));
+      continue;
+    }
+
+    const trimmed = line.trim();
+    if (!trimmed) {
+      closeList();
+      if (inTable) { out.push('</tbody></table>'); inTable = false; }
+      continue;
+    }
+
+    // テーブル区切り行をスキップ
+    if (/^\|[-\s|:]+\|$/.test(trimmed)) continue;
+
+    // テーブル行
+    if (trimmed.startsWith('|') && trimmed.endsWith('|')) {
+      closeList();
+      const cells = trimmed.slice(1, -1).split('|').map(c => c.trim());
+      if (!inTable) {
+        out.push('<table><thead><tr>');
+        out.push(cells.map(c => `<th>${escapeHtml(c)}</th>`).join(''));
+        out.push('</tr></thead><tbody>');
+        inTable = true;
+      } else {
+        out.push('<tr>');
+        out.push(cells.map(c => `<td>${inlineFormat(c)}</td>`).join(''));
+        out.push('</tr>');
+      }
+      continue;
+    }
+
+    if (inTable) { out.push('</tbody></table>'); inTable = false; }
+
+    // 見出し
+    const headingMatch = trimmed.match(/^(#{1,4})\s+(.*)/);
+    if (headingMatch) {
+      closeList();
+      const level = headingMatch[1].length;
+      out.push(`<h${level + 2}>${inlineFormat(headingMatch[2])}</h${level + 2}>`);
+      continue;
+    }
+
+    // 非順序リスト
+    if (/^[-*]\s/.test(trimmed)) {
+      if (listTag !== 'ul') { closeList(); out.push('<ul>'); listTag = 'ul'; }
+      out.push(`<li>${inlineFormat(trimmed.replace(/^[-*]\s+/, ''))}</li>`);
+      continue;
+    }
+
+    // 番号付きリスト
+    if (/^\d+\.\s/.test(trimmed)) {
+      if (listTag !== 'ol') { closeList(); out.push('<ol>'); listTag = 'ol'; }
+      out.push(`<li>${inlineFormat(trimmed.replace(/^\d+\.\s+/, ''))}</li>`);
+      continue;
+    }
+
+    // 段落
+    closeList();
+    out.push(`<p>${inlineFormat(trimmed)}</p>`);
+  }
+
+  if (inCodeBlock) out.push('</code></pre>');
+  closeList();
+  if (inTable) out.push('</tbody></table>');
+
+  return out.join('\n');
+}
+
+/** インラインの **bold** と `code` を変換（escapeHtml 済みテキストに適用） */
+function inlineFormat(text: string): string {
+  return escapeHtml(text)
+    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+    .replace(/`(.+?)`/g, '<code>$1</code>');
+}
+
 function renderSpec(spec: Spec): void {
   const container = document.getElementById('spec-container');
   if (!container) return;
   let html = '';
-  if (spec.projectName) html += `<div class="spec-section"><h3>プロジェクト: ${escapeHtml(spec.projectName)}</h3></div>`;
-  if (spec.techStack) html += `<div class="spec-section"><h3>技術スタック</h3><div class="code-block">${escapeHtml(JSON.stringify(spec.techStack, null, 2))}</div></div>`;
-  if (spec.apiEndpoints?.length) {
-    html += `<div class="spec-section"><h3>API仕様</h3>`;
-    html += spec.apiEndpoints.map(ep => `
-      <div class="feature-card">
-        <h4><code>${ep.method} ${ep.path}</code></h4>
-        <p>${escapeHtml(ep.description || '')}</p>
-        ${ep.request ? `<div class="code-block">Request: ${escapeHtml(JSON.stringify(ep.request, null, 2))}</div>` : ''}
-        ${ep.response ? `<div class="code-block">Response: ${escapeHtml(JSON.stringify(ep.response, null, 2))}</div>` : ''}
-      </div>
-    `).join('');
-    html += `</div>`;
+
+  // raw マークダウンがある場合はそれをレンダリング
+  if (spec.raw) {
+    html += `<div class="spec-section spec-markdown">${simpleMarkdownToHtml(spec.raw)}</div>`;
+  } else {
+    // 構造化データのフォールバック
+    if (spec.projectName) html += `<div class="spec-section"><h3>プロジェクト: ${escapeHtml(spec.projectName)}</h3></div>`;
+    if (spec.techStack) html += `<div class="spec-section"><h3>技術スタック</h3><div class="code-block">${escapeHtml(JSON.stringify(spec.techStack, null, 2))}</div></div>`;
+    if (spec.apiEndpoints?.length) {
+      html += `<div class="spec-section"><h3>API仕様</h3>`;
+      html += spec.apiEndpoints.map(ep => `
+        <div class="feature-card">
+          <h4><code>${ep.method} ${ep.path}</code></h4>
+          <p>${escapeHtml(ep.description || '')}</p>
+          ${ep.request ? `<div class="code-block">Request: ${escapeHtml(JSON.stringify(ep.request, null, 2))}</div>` : ''}
+          ${ep.response ? `<div class="code-block">Response: ${escapeHtml(JSON.stringify(ep.response, null, 2))}</div>` : ''}
+        </div>
+      `).join('');
+      html += `</div>`;
+    }
+    if (spec.dbSchema) html += `<div class="spec-section"><h3>DBスキーマ</h3><div class="code-block">${escapeHtml(spec.dbSchema)}</div></div>`;
+    if (spec.screens?.length) {
+      html += `<div class="spec-section"><h3>画面一覧</h3>`;
+      html += spec.screens.map(s => `
+        <div class="feature-card">
+          <h4>${escapeHtml(s.name)} <code>${s.path || ''}</code></h4>
+          <p>${escapeHtml(s.description || '')}</p>
+        </div>
+      `).join('');
+      html += `</div>`;
+    }
   }
-  if (spec.dbSchema) html += `<div class="spec-section"><h3>DBスキーマ</h3><div class="code-block">${escapeHtml(spec.dbSchema)}</div></div>`;
-  if (spec.screens?.length) {
-    html += `<div class="spec-section"><h3>画面一覧</h3>`;
-    html += spec.screens.map(s => `
-      <div class="feature-card">
-        <h4>${escapeHtml(s.name)} <code>${s.path || ''}</code></h4>
-        <p>${escapeHtml(s.description || '')}</p>
-      </div>
-    `).join('');
-    html += `</div>`;
-  }
-  html += `<div class="spec-section"><h3>完全なspec.json</h3><div class="code-block" style="max-height:400px;overflow-y:auto">${escapeHtml(JSON.stringify(spec, null, 2))}</div></div>`;
   container.innerHTML = html;
 }
 

@@ -24,7 +24,16 @@ githubSaveRoutes.post("/sessions/:id/github-save", async (c) => {
       return c.json({ error: "GitHub 連携が必要です。GitHub でログインしてください。" }, 400);
     }
 
-    // 3. セッション所有権チェック
+    // 3. リクエストボディからオプション取得
+    let repoName: string | undefined;
+    try {
+      const body = await c.req.json();
+      repoName = body?.repoName;
+    } catch {
+      // ボディなしでも OK
+    }
+
+    // 4. セッション所有権チェック
     const result = await getOwnedSession(c);
     if (isResponse(result)) return result;
     const session = result;
@@ -81,6 +90,7 @@ Copy \`spec.json\` and paste it into your coding agent (Claude Code, Cursor, exe
         { path: "README.md", content: readme },
       ],
       existingRepoUrl: session.github_repo_url,
+      repoName,
     });
 
     // 6. github_repo_url を保存

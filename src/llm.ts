@@ -144,7 +144,8 @@ function doRequest(endpoint: { url: URL; apiKey: string | null }, body: string):
         try {
           const parsed = JSON.parse(data) as ClaudeResponse;
           if (parsed.error) {
-            reject(new Error(parsed.error.message || JSON.stringify(parsed.error)));
+            const msg = parsed.error.message || JSON.stringify(parsed.error);
+            reject(new Error(`[${res.statusCode}] ${msg}`));
           } else {
             resolve(parsed);
           }

@@ -40,7 +40,7 @@ interface TransportLike {
   request: ReturnType<typeof vi.fn>;
 }
 
-function setupTransportMock(transport: TransportLike, responseData: string) {
+function setupTransportMock(transport: TransportLike, responseData: string, statusCode = 200) {
   const reqHandlers: Record<string, Function> = {};
   const mockReq = {
     on: vi.fn((event: string, handler: Function) => {
@@ -56,6 +56,7 @@ function setupTransportMock(transport: TransportLike, responseData: string) {
   transport.request.mockImplementation((_options: any, callback: any) => {
     const handlers: Record<string, Function> = {};
     const mockRes = {
+      statusCode,
       on: (event: string, handler: Function) => {
         handlers[event] = handler;
         return mockRes;
@@ -159,7 +160,7 @@ describe("LLM モジュール", () => {
       it("APIエラーレスポンスのメッセージでリジェクトすべき", async () => {
         // Given:
         const { callClaude, http } = await freshImport();
-        setupTransportMock(http, JSON.stringify({ error: { message: "Rate limit exceeded" } }));
+        setupTransportMock(http, JSON.stringify({ error: { message: "Rate limit exceeded" } }), 429);
 
         // When / Then:
         await expect(callClaude([{ role: "user", content: "テスト" }], "プロンプト")).rejects.toThrow(
@@ -170,7 +171,7 @@ describe("LLM モジュール", () => {
       it("エラーメッセージが空の場合でもリジェクトすべき", async () => {
         // Given:
         const { callClaude, http } = await freshImport();
-        setupTransportMock(http, JSON.stringify({ error: {} }));
+        setupTransportMock(http, JSON.stringify({ error: {} }), 400);
 
         // When / Then:
         await expect(callClaude([{ role: "user", content: "テスト" }], "プロンプト")).rejects.toThrow();
@@ -525,6 +526,7 @@ describe("LLM モジュール", () => {
 
           const handlers: Record<string, Function> = {};
           const mockRes = {
+            statusCode: callCount === 1 ? 401 : 200,
             on: (event: string, handler: Function) => {
               handlers[event] = handler;
               return mockRes;
@@ -576,6 +578,7 @@ describe("LLM モジュール", () => {
           };
           const handlers: Record<string, Function> = {};
           const mockRes = {
+            statusCode: 401,
             on: (event: string, handler: Function) => {
               handlers[event] = handler;
               return mockRes;
@@ -597,7 +600,7 @@ describe("LLM モジュール", () => {
         // Given: regular (non-OAuth) API key
         process.env.ANTHROPIC_API_KEY = "sk-ant-api01-regular-key";
         const { callClaude, https } = await freshImport();
-        setupTransportMock(https, JSON.stringify({ error: { message: "401 Unauthorized" } }));
+        setupTransportMock(https, JSON.stringify({ error: { message: "401 Unauthorized" } }), 401);
 
         // When / Then:
         await expect(callClaude([{ role: "user", content: "テスト" }], "システム")).rejects.toThrow("401 Unauthorized");

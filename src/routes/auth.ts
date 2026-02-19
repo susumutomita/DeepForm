@@ -235,6 +235,7 @@ auth.get("/me", (c) => {
       email: user.email,
       displayName: user.display_name,
       avatarUrl: user.avatar_url ?? null,
+      githubConnected: !!user.github_token,
     },
   });
 });

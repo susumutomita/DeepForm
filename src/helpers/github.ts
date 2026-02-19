@@ -17,6 +17,8 @@ interface SaveToGitHubParams {
   files: GitHubFile[];
   /** 既存リポジトリ URL がある場合は更新コミットを行う */
   existingRepoUrl?: string | null;
+  /** カスタムリポジトリ名（指定なしの場合は deepform-{sessionId} を使用） */
+  repoName?: string;
 }
 
 interface SaveToGitHubResult {
@@ -66,7 +68,7 @@ async function createRepo(
     body: JSON.stringify({
       name,
       description,
-      private: false,
+      private: true,
       auto_init: true,
     }),
   });
@@ -164,7 +166,7 @@ async function commitFiles(
  */
 export async function saveToGitHub(params: SaveToGitHubParams): Promise<SaveToGitHubResult> {
   const { token, sessionId, theme, files, existingRepoUrl } = params;
-  const repoName = `deepform-${sessionId.slice(0, 8)}`;
+  const repoName = params.repoName || `deepform-${sessionId.slice(0, 8)}`;
   const description = `DeepForm: ${theme}`;
 
   const user = await getAuthenticatedUser(token);

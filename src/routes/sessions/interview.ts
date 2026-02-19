@@ -4,7 +4,7 @@ import { now } from "../../db/helpers.ts";
 import { db } from "../../db/index.ts";
 import { formatZodError } from "../../helpers/format.ts";
 import { getOwnedSession, isResponse } from "../../helpers/session-ownership.ts";
-import { callClaude, callClaudeStream, extractText } from "../../llm.ts";
+import { callClaude, callClaudeStream, extractText, MODEL_FAST } from "../../llm.ts";
 import type { AppEnv } from "../../types.ts";
 import { chatMessageSchema } from "../../validation.ts";
 
@@ -151,7 +151,7 @@ interviewRoutes.post("/sessions/:id/start", async (c) => {
     const wantsStream = c.req.header("accept")?.includes("text/event-stream");
 
     if (wantsStream) {
-      const { stream, getFullText } = callClaudeStream(startMessages, systemPrompt, 512);
+      const { stream, getFullText } = callClaudeStream(startMessages, systemPrompt, 512, MODEL_FAST);
 
       return new Response(
         new ReadableStream({
@@ -188,7 +188,7 @@ interviewRoutes.post("/sessions/:id/start", async (c) => {
     }
 
     // Non-streaming fallback
-    const response = await callClaude(startMessages, systemPrompt, 512);
+    const response = await callClaude(startMessages, systemPrompt, 512, MODEL_FAST);
     const rawReply = extractText(response);
     const { text: reply, choices } = extractChoices(rawReply);
 
@@ -233,7 +233,7 @@ interviewRoutes.post("/sessions/:id/chat", async (c) => {
     const wantsStream = c.req.header("accept")?.includes("text/event-stream");
 
     if (wantsStream) {
-      const { stream, getFullText } = callClaudeStream(chatMessages, systemPrompt, 1024);
+      const { stream, getFullText } = callClaudeStream(chatMessages, systemPrompt, 1024, MODEL_FAST);
 
       return new Response(
         new ReadableStream({
@@ -276,7 +276,7 @@ interviewRoutes.post("/sessions/:id/chat", async (c) => {
     }
 
     // Non-streaming fallback
-    const response = await callClaude(chatMessages, systemPrompt, 1024);
+    const response = await callClaude(chatMessages, systemPrompt, 1024, MODEL_FAST);
     const rawReply = extractText(response);
     const { text: cleanReply, choices } = extractChoices(rawReply);
 

@@ -18,7 +18,7 @@ import { db } from "../../db/index.ts";
 import { saveAnalysisResult } from "../../helpers/analysis-store.ts";
 import { generatePRDMarkdown } from "../../helpers/format.ts";
 import { getOwnedSession, isResponse } from "../../helpers/session-ownership.ts";
-import { callClaude, extractText } from "../../llm.ts";
+import { callClaude, extractText, MODEL_FAST } from "../../llm.ts";
 import type { AppEnv, Session } from "../../types.ts";
 
 const PAYMENT_LINK = "https://buy.stripe.com/test_dRmcMXbrh3Q8ggx8DA48000";
@@ -308,6 +308,7 @@ pipelineRoutes.post("/sessions/:id/pipeline", async (c) => {
           [{ role: "user", content: `以下のインタビュー記録を分析してください：\n\n${transcript}` }],
           ANALYSIS_SYSTEM,
           4096,
+          MODEL_FAST,
         );
         const analysisText = extractText(analysisResp);
         const analysis = parseJSON(analysisText, {
@@ -391,6 +392,7 @@ pipelineRoutes.post("/sessions/:id/pipeline", async (c) => {
           ],
           SPEC_SYSTEM,
           4096,
+          MODEL_FAST,
         );
         const specText = extractText(specResp);
         // biome-ignore lint/suspicious/noExplicitAny: dynamic LLM JSON output

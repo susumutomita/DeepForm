@@ -7,7 +7,7 @@ import { db } from "../../db/index.ts";
 import { saveAnalysisResult } from "../../helpers/analysis-store.ts";
 import { formatZodError } from "../../helpers/format.ts";
 import { getOwnedCampaignById, getOwnedSession, isResponse } from "../../helpers/session-ownership.ts";
-import { callClaude, extractText } from "../../llm.ts";
+import { callClaude, extractText, MODEL_FAST } from "../../llm.ts";
 import type { AppEnv, Campaign, CampaignAnalytics, Session } from "../../types.ts";
 import { chatMessageSchema, feedbackSchema, respondentNameSchema } from "../../validation.ts";
 
@@ -147,6 +147,7 @@ ${respondentName ? `回答者: ${respondentName}さん` : ""}
       [{ role: "user", content: `テーマ「${campaign.theme}」についてインタビューを始めてください。` }],
       systemPrompt,
       512,
+      MODEL_FAST,
     );
     const reply = extractText(response);
 
@@ -213,7 +214,7 @@ campaignRoutes.post("/campaigns/:token/sessions/:sessionId/chat", async (c) => {
 
 ${turnCount >= 5 ? "十分な情報が集まりました。最後にまとめの質問をして、回答の最後に「[INTERVIEW_COMPLETE]」タグを付けてください。" : ""}`;
 
-    const response = await callClaude(chatMessages, systemPrompt, 1024);
+    const response = await callClaude(chatMessages, systemPrompt, 1024, MODEL_FAST);
     const reply = extractText(response);
 
     await db.insertInto("messages").values({ session_id: session.id, role: "assistant", content: reply }).execute();
@@ -283,6 +284,7 @@ severityは "high", "medium", "low" のいずれか。
       [{ role: "user", content: `以下のインタビュー記録を分析してください：\n\n${transcript}` }],
       systemPrompt,
       4096,
+      MODEL_FAST,
     );
     const text = extractText(response);
 
@@ -531,6 +533,7 @@ campaignRoutes.post("/campaigns/:id/analytics/generate", async (c) => {
       [{ role: "user", content: `以下のキャンペーン横断データを分析してください：\n\n${factsInput}` }],
       systemPrompt,
       4096,
+      MODEL_FAST,
     );
     const text = extractText(response);
 

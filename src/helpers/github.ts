@@ -42,18 +42,26 @@ async function ghFetch(path: string, token: string, options: RequestInit = {}): 
   return res;
 }
 
-async function ghJson<T>(path: string, token: string, options: RequestInit = {}): Promise<T> {
+async function ghJson<T>(path: string, token: string, options: RequestInit = {}, step?: string): Promise<T> {
   const res = await ghFetch(path, token, options);
   if (!res.ok) {
     const body = await res.text();
-    throw new Error(`GitHub API error ${res.status}: ${body}`);
+    const prefix = step ? `[${step}] ` : "";
+    throw new Error(`${prefix}GitHub API error ${res.status}: ${body}`);
   }
   return (await res.json()) as T;
 }
 
-/** 認証ユーザー情報を取得する */
+/** 認証ユーザー情報を取得する（スコープも確認） */
 async function getAuthenticatedUser(token: string): Promise<{ login: string }> {
-  return ghJson("/user", token);
+  const res = await ghFetch("/user", token);
+  const scopes = res.headers.get("x-oauth-scopes");
+  console.info(`[github-save] token scopes: ${scopes}, token prefix: ${token.slice(0, 8)}...`);
+  if (!res.ok) {
+    const body = await res.text();
+    throw new Error(`[getAuthenticatedUser] GitHub API error ${res.status}: ${body}`);
+  }
+  return (await res.json()) as { login: string };
 }
 
 /** リポジトリを作成する。既に存在する場合は既存リポジトリ情報で解決する */
@@ -98,7 +106,7 @@ async function getRepo(
   owner: string,
   repo: string,
 ): Promise<{ full_name: string; html_url: string; default_branch: string }> {
-  return ghJson(`/repos/${owner}/${repo}`, token);
+  return ghJson(`/repos/${owner}/${repo}`, token, {}, `getRepo(${owner}/${repo})`);
 }
 
 /** GitHub リポジトリ URL から owner と repo を抽出する */
@@ -130,7 +138,12 @@ async function commitFiles(
   message: string,
 ): Promise<string> {
   // 1. 現在の HEAD ref を取得
-  const ref = await ghJson<{ object: { sha: string } }>(`/repos/${owner}/${repo}/git/ref/heads/${branch}`, token);
+  const ref = await ghJson<{ object: { sha: string } }>(
+    `/repos/${owner}/${repo}/git/ref/heads/${branch}`,
+    token,
+    {},
+    `commitFiles:getRef(${owner}/${repo}#${branch})`,
+  );
   const baseSha = ref.object.sha;
 
   // 2. 各ファイルの blob を作成
@@ -195,6 +208,7 @@ export async function saveToGitHub(params: SaveToGitHubParams): Promise<SaveToGi
 
   const user = await getAuthenticatedUser(token);
   const owner = user.login;
+  console.info(`[github-save] user=${owner}, existingRepoUrl=${existingRepoUrl ?? "none"}, repoName=${repoName}`);
 
   let repoUrl: string;
   let defaultBranch: string;
@@ -209,22 +223,26 @@ export async function saveToGitHub(params: SaveToGitHubParams): Promise<SaveToGi
       actualOwner = parsed.owner;
       actualRepo = parsed.repo;
     }
+    console.info(`[github-save] updating existing repo: ${actualOwner}/${actualRepo}`);
     const repoInfo = await getRepo(token, actualOwner, actualRepo);
     repoUrl = repoInfo.html_url;
     defaultBranch = repoInfo.default_branch;
     isNewRepo = false;
   } else {
     // 新規リポジトリ作成（422 時は既存リポジトリにフォールバック）
+    console.info(`[github-save] creating new repo: ${owner}/${repoName}`);
     const result = await createRepo(token, owner, repoName, description);
     repoUrl = result.html_url;
     defaultBranch = result.default_branch;
     isNewRepo = result.isNew;
     actualOwner = owner;
     actualRepo = repoName;
+    console.info(`[github-save] repo ready: isNew=${isNewRepo}, branch=${defaultBranch}`);
 
     if (isNewRepo) {
       // auto_init 完了を待つ（最大 5 秒）
       await waitForRepoReady(token, actualOwner, actualRepo, defaultBranch);
+      console.info("[github-save] waitForRepoReady done");
     }
   }
 

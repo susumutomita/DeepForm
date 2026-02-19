@@ -13,7 +13,7 @@ vi.mock("../../db/index.ts", async () => {
 
 // Mock LLM
 vi.mock("../../llm.ts", () => ({
-  MODEL_FAST: "claude-haiku-4-5-20250929",
+  MODEL_FAST: "claude-haiku-4-5-20251001",
   MODEL_SMART: "claude-sonnet-4-5-20250929",
   callClaude: vi.fn(),
   extractText: vi.fn(),

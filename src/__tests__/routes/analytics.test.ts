@@ -10,8 +10,8 @@ vi.mock("../../db/index.ts", async () => {
 });
 
 vi.mock("../../llm.ts", () => ({
-  MODEL_FAST: "claude-haiku-4-5-20251001",
-  MODEL_SMART: "claude-sonnet-4-5-20250929",
+  MODEL_FAST: "claude-sonnet-4-6",
+  MODEL_SMART: "claude-opus-4-6",
   callClaude: vi.fn().mockResolvedValue({
     content: [{ type: "text", text: "モック LLM レスポンス" }],
   }),

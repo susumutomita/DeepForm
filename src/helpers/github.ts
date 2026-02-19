@@ -224,10 +224,25 @@ export async function saveToGitHub(params: SaveToGitHubParams): Promise<SaveToGi
       actualRepo = parsed.repo;
     }
     console.info(`[github-save] updating existing repo: ${actualOwner}/${actualRepo}`);
-    const repoInfo = await getRepo(token, actualOwner, actualRepo);
-    repoUrl = repoInfo.html_url;
-    defaultBranch = repoInfo.default_branch;
-    isNewRepo = false;
+    const repoInfo = await getRepo(token, actualOwner, actualRepo).catch(() => null);
+    if (repoInfo) {
+      repoUrl = repoInfo.html_url;
+      defaultBranch = repoInfo.default_branch;
+      isNewRepo = false;
+    } else {
+      // リポジトリが削除済み等 → 新規作成にフォールバック
+      console.info(`[github-save] existing repo not found, creating new: ${owner}/${repoName}`);
+      const result = await createRepo(token, owner, repoName, description);
+      repoUrl = result.html_url;
+      defaultBranch = result.default_branch;
+      isNewRepo = result.isNew;
+      actualOwner = owner;
+      actualRepo = repoName;
+      if (isNewRepo) {
+        await waitForRepoReady(token, actualOwner, actualRepo, defaultBranch);
+        console.info("[github-save] waitForRepoReady done");
+      }
+    }
   } else {
     // 新規リポジトリ作成（422 時は既存リポジトリにフォールバック）
     console.info(`[github-save] creating new repo: ${owner}/${repoName}`);

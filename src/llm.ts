@@ -3,8 +3,8 @@ import http from "node:http";
 import https from "node:https";
 import { Readable } from "node:stream";
 
-export const MODEL_FAST = "claude-haiku-4-5-20251001";
-export const MODEL_SMART = process.env.ANTHROPIC_MODEL ?? "claude-sonnet-4-5-20250929";
+export const MODEL_FAST = process.env.ANTHROPIC_MODEL_FAST ?? "claude-sonnet-4-6";
+export const MODEL_SMART = process.env.ANTHROPIC_MODEL ?? "claude-opus-4-6";
 
 const LLM_GATEWAY = "http://169.254.169.254/gateway/llm/anthropic/v1/messages";
 const ANTHROPIC_API = "https://api.anthropic.com/v1/messages";

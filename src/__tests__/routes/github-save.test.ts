@@ -79,6 +79,18 @@ const PRD_DATA = {
 };
 const SPEC_DATA = { spec: { raw: "# Spec" } };
 
+const GITHUB_SAVE_SUCCESS = {
+  repoUrl: "https://github.com/testuser/deepform-gh-save-s",
+  commitSha: "abc123",
+  filesCommitted: ["README.md", "PRD.md", "spec.json", "AGENT.md", "Plan.md"],
+  isNewRepo: true,
+};
+
+function getCommittedFile(filePath: string): { path: string; content: string } | undefined {
+  const args = mockSaveToGitHub.mock.calls[0][0];
+  return args.files.find((f: { path: string }) => f.path === filePath);
+}
+
 // ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
@@ -117,12 +129,7 @@ describe("GitHub 保存 API", () => {
   });
 
   it("正常に GitHub に保存できるべき（5 ファイル）", async () => {
-    mockSaveToGitHub.mockResolvedValueOnce({
-      repoUrl: "https://github.com/testuser/deepform-gh-save-s",
-      commitSha: "abc123",
-      filesCommitted: ["README.md", "PRD.md", "spec.json", "AGENT.md", "Plan.md"],
-      isNewRepo: true,
-    });
+    mockSaveToGitHub.mockResolvedValueOnce(GITHUB_SAVE_SUCCESS);
 
     const res = await authedRequest(`/api/sessions/${SESSION_ID}/github-save`, {
       method: "POST",
@@ -152,12 +159,7 @@ describe("GitHub 保存 API", () => {
   });
 
   it("github_repo_url が DB に保存されるべき", async () => {
-    mockSaveToGitHub.mockResolvedValueOnce({
-      repoUrl: "https://github.com/testuser/deepform-gh-save-s",
-      commitSha: "abc123",
-      filesCommitted: ["README.md", "PRD.md", "spec.json", "AGENT.md", "Plan.md"],
-      isNewRepo: true,
-    });
+    mockSaveToGitHub.mockResolvedValueOnce(GITHUB_SAVE_SUCCESS);
 
     await authedRequest(`/api/sessions/${SESSION_ID}/github-save`, {
       method: "POST",
@@ -175,12 +177,7 @@ describe("GitHub 保存 API", () => {
       .prepare("UPDATE sessions SET github_repo_url = ? WHERE id = ?")
       .run("https://github.com/testuser/deepform-gh-save-s", SESSION_ID);
 
-    mockSaveToGitHub.mockResolvedValueOnce({
-      repoUrl: "https://github.com/testuser/deepform-gh-save-s",
-      commitSha: "def456",
-      filesCommitted: ["README.md", "PRD.md", "spec.json", "AGENT.md", "Plan.md"],
-      isNewRepo: false,
-    });
+    mockSaveToGitHub.mockResolvedValueOnce({ ...GITHUB_SAVE_SUCCESS, commitSha: "def456", isNewRepo: false });
 
     const res = await authedRequest(`/api/sessions/${SESSION_ID}/github-save`, {
       method: "POST",
@@ -275,21 +272,13 @@ describe("GitHub 保存 API", () => {
   });
 
   it("AGENT.md にプロジェクト概要とコア機能が含まれるべき", async () => {
-    mockSaveToGitHub.mockResolvedValueOnce({
-      repoUrl: "https://github.com/testuser/deepform-gh-save-s",
-      commitSha: "abc123",
-      filesCommitted: ["README.md", "PRD.md", "spec.json", "AGENT.md", "Plan.md"],
-      isNewRepo: true,
-    });
+    mockSaveToGitHub.mockResolvedValueOnce(GITHUB_SAVE_SUCCESS);
 
     await authedRequest(`/api/sessions/${SESSION_ID}/github-save`, {
       method: "POST",
     });
 
-    const args = mockSaveToGitHub.mock.calls[0][0];
-    const agentMd = args.files.find((f: { path: string }) => f.path === "AGENT.md") as
-      | { path: string; content: string }
-      | undefined;
+    const agentMd = getCommittedFile("AGENT.md");
     expect(agentMd).toBeDefined();
     expect(agentMd?.content).toContain("AGENT.md");
     expect(agentMd?.content).toContain("テストテーマ");
@@ -297,21 +286,13 @@ describe("GitHub 保存 API", () => {
   });
 
   it("Plan.md に実行計画が含まれるべき", async () => {
-    mockSaveToGitHub.mockResolvedValueOnce({
-      repoUrl: "https://github.com/testuser/deepform-gh-save-s",
-      commitSha: "abc123",
-      filesCommitted: ["README.md", "PRD.md", "spec.json", "AGENT.md", "Plan.md"],
-      isNewRepo: true,
-    });
+    mockSaveToGitHub.mockResolvedValueOnce(GITHUB_SAVE_SUCCESS);
 
     await authedRequest(`/api/sessions/${SESSION_ID}/github-save`, {
       method: "POST",
     });
 
-    const args = mockSaveToGitHub.mock.calls[0][0];
-    const planMd = args.files.find((f: { path: string }) => f.path === "Plan.md") as
-      | { path: string; content: string }
-      | undefined;
+    const planMd = getCommittedFile("Plan.md");
     expect(planMd).toBeDefined();
     expect(planMd?.content).toContain("Plan.md");
     expect(planMd?.content).toContain("テストテーマ");
@@ -321,13 +302,7 @@ describe("GitHub 保存 API", () => {
   it("LLM 失敗時にフォールバック README を使うべき", async () => {
     // LLM を一時的に失敗させる
     vi.mocked(callClaude).mockRejectedValueOnce(new Error("LLM error"));
-
-    mockSaveToGitHub.mockResolvedValueOnce({
-      repoUrl: "https://github.com/testuser/deepform-gh-save-s",
-      commitSha: "abc123",
-      filesCommitted: ["README.md", "PRD.md", "spec.json", "AGENT.md", "Plan.md"],
-      isNewRepo: true,
-    });
+    mockSaveToGitHub.mockResolvedValueOnce(GITHUB_SAVE_SUCCESS);
 
     const res = await authedRequest(`/api/sessions/${SESSION_ID}/github-save`, {
       method: "POST",
@@ -336,10 +311,7 @@ describe("GitHub 保存 API", () => {
     expect(res.status).toBe(200);
 
     // フォールバック README が使われていることを確認
-    const args = mockSaveToGitHub.mock.calls[0][0];
-    const readme = args.files.find((f: { path: string }) => f.path === "README.md") as
-      | { path: string; content: string }
-      | undefined;
+    const readme = getCommittedFile("README.md");
     expect(readme).toBeDefined();
     expect(readme?.content).toContain("Generated by [DeepForm]");
     expect(readme?.content).toContain("Quick Start");
@@ -352,13 +324,7 @@ describe("GitHub 保存 API", () => {
     });
     const { extractText } = await import("../../llm.ts");
     vi.mocked(extractText).mockReturnValueOnce("short");
-
-    mockSaveToGitHub.mockResolvedValueOnce({
-      repoUrl: "https://github.com/testuser/deepform-gh-save-s",
-      commitSha: "abc123",
-      filesCommitted: ["README.md", "PRD.md", "spec.json", "AGENT.md", "Plan.md"],
-      isNewRepo: true,
-    });
+    mockSaveToGitHub.mockResolvedValueOnce(GITHUB_SAVE_SUCCESS);
 
     const res = await authedRequest(`/api/sessions/${SESSION_ID}/github-save`, {
       method: "POST",
@@ -366,12 +332,9 @@ describe("GitHub 保存 API", () => {
 
     expect(res.status).toBe(200);
 
-    const args = mockSaveToGitHub.mock.calls[0][0];
-    const readme = args.files.find((f: { path: string }) => f.path === "README.md") as
-      | { path: string; content: string }
-      | undefined;
-    expect(readme).toBeDefined();
     // フォールバックが使われる（短い応答は # で始まらないか 100 文字未満）
+    const readme = getCommittedFile("README.md");
+    expect(readme).toBeDefined();
     expect(readme?.content).toContain("Quick Start");
   });
 });

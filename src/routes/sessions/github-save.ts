@@ -17,7 +17,7 @@ const LLM_INPUT_MAX_CHARS = 6000;
 /** spec オブジェクトから raw テキストを抽出する */
 export function extractSpecRaw(spec: Record<string, unknown>): string {
   const inner = typeof spec.spec === "object" && spec.spec !== null ? (spec.spec as Record<string, unknown>) : spec;
-  return typeof inner.raw === "string" ? (inner.raw as string) : "";
+  return typeof inner.raw === "string" ? inner.raw : "";
 }
 
 // --- ファイル生成ヘルパー ---
@@ -252,14 +252,9 @@ githubSaveRoutes.post("/sessions/:id/github-save", async (c) => {
       return c.json({ error: "GitHub 連携が必要です。GitHub でログインしてください。" }, 400);
     }
 
-    // 3. リクエストボディからオプション取得
-    let repoName: string | undefined;
-    try {
-      const body = await c.req.json();
-      repoName = body?.repoName;
-    } catch {
-      // ボディなしでも OK
-    }
+    // 3. リクエストボディからオプション取得（ボディなしでも OK）
+    const body = await c.req.json().catch(() => null);
+    const repoName: string | undefined = body?.repoName;
 
     // 4. セッション所有権チェック
     const result = await getOwnedSession(c);

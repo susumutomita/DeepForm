@@ -193,6 +193,46 @@ describe("GitHub ヘルパー", () => {
       expect(body.name).toBe("deepform-abcdef12");
     });
 
+    it("新規リポジトリの auto_init が完了しない場合はエラーをスローすべき", async () => {
+      vi.useFakeTimers();
+      try {
+        // 1. GET /user
+        mockFetch.mockResolvedValueOnce(mockGhResponse(200, { login: "testuser" }));
+        // 2. POST /user/repos (create repo)
+        mockFetch.mockResolvedValueOnce(
+          mockGhResponse(201, {
+            full_name: "testuser/deepform-abcdef12",
+            html_url: "https://github.com/testuser/deepform-abcdef12",
+            default_branch: "main",
+          }),
+        );
+        // 3-7. GET ref (waitForRepoReady) — 5 回すべて 404
+        for (let i = 0; i < 5; i++) {
+          mockFetch.mockResolvedValueOnce(mockGhResponse(404, { message: "Not Found" }));
+        }
+
+        const promise = saveToGitHub({
+          token: TOKEN,
+          sessionId: SESSION_ID,
+          theme: THEME,
+          files: [{ path: "test.txt", content: "hello" }],
+        });
+        // unhandled rejection を抑制しつつ後で検証する
+        let caughtError: Error | undefined;
+        promise.catch((e: Error) => {
+          caughtError = e;
+        });
+
+        // 5 回分のリトライ待機を進める
+        await vi.advanceTimersByTimeAsync(5000);
+
+        expect(caughtError).toBeDefined();
+        expect(caughtError?.message).toContain("not ready after 5 attempts");
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
     it("Authorization ヘッダーにトークンを含めるべき", async () => {
       mockFetch.mockResolvedValueOnce(mockGhResponse(200, { login: "testuser" }));
 

@@ -56,7 +56,7 @@ async function ghJson<T>(path: string, token: string, options: RequestInit = {},
 async function getAuthenticatedUser(token: string): Promise<{ login: string }> {
   const res = await ghFetch("/user", token);
   const scopes = res.headers.get("x-oauth-scopes");
-  console.info(`[github-save] token scopes: ${scopes}, token prefix: ${token.slice(0, 8)}...`);
+  console.debug(`[github-save] token scopes: ${scopes}, token prefix: ${token.slice(0, 4)}...`);
   if (!res.ok) {
     const body = await res.text();
     throw new Error(`[getAuthenticatedUser] GitHub API error ${res.status}: ${body}`);
@@ -111,7 +111,7 @@ async function getRepo(
 
 /** GitHub リポジトリ URL から owner と repo を抽出する */
 function parseRepoUrl(url: string): { owner: string; repo: string } | null {
-  const match = url.match(/github\.com\/([^/]+)\/([^/]+)/);
+  const match = url.match(/github\.com\/([^/]+)\/([^/?#]+)/);
   if (!match) return null;
   return { owner: match[1], repo: match[2].replace(/\.git$/, "") };
 }
@@ -123,6 +123,7 @@ async function waitForRepoReady(token: string, owner: string, repo: string, bran
     if (res.ok) return;
     await new Promise((resolve) => setTimeout(resolve, 1000));
   }
+  throw new Error(`Repository ${owner}/${repo} not ready after 5 attempts`);
 }
 
 /**

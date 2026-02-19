@@ -318,7 +318,7 @@ describe("GitHub 保存 API", () => {
   });
 
   it("LLM が短すぎる応答を返した場合にフォールバック README を使うべき", async () => {
-    // LLM が短い応答を返す
+    // callClaude と extractText の両方をオーバーライドして短い応答をシミュレート
     vi.mocked(callClaude).mockResolvedValueOnce({
       content: [{ type: "text", text: "short" }],
     });

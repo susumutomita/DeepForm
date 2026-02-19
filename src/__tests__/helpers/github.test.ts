@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { saveToGitHub } from "../../helpers/github.ts";
 
 // --- fetch モック ---
@@ -19,11 +19,6 @@ function mockGhResponse(status: number, body: unknown): Response {
 describe("GitHub ヘルパー", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.useFakeTimers();
-  });
-
-  afterEach(() => {
-    vi.useRealTimers();
   });
 
   describe("saveToGitHub", () => {
@@ -44,30 +39,27 @@ describe("GitHub ヘルパー", () => {
           default_branch: "main",
         }),
       );
-      // 3. GET /repos/.../git/ref/heads/main
+      // 3. GET /repos/.../git/ref/heads/main (waitForRepoReady)
       mockFetch.mockResolvedValueOnce(mockGhResponse(200, { object: { sha: "base-sha-001" } }));
-      // 4-6. POST /repos/.../git/blobs (3 files)
+      // 4. GET /repos/.../git/ref/heads/main (commitFiles)
+      mockFetch.mockResolvedValueOnce(mockGhResponse(200, { object: { sha: "base-sha-001" } }));
+      // 5-7. POST /repos/.../git/blobs (3 files)
       mockFetch.mockResolvedValueOnce(mockGhResponse(201, { sha: "blob-sha-1" }));
       mockFetch.mockResolvedValueOnce(mockGhResponse(201, { sha: "blob-sha-2" }));
       mockFetch.mockResolvedValueOnce(mockGhResponse(201, { sha: "blob-sha-3" }));
-      // 7. POST /repos/.../git/trees
+      // 8. POST /repos/.../git/trees
       mockFetch.mockResolvedValueOnce(mockGhResponse(201, { sha: "tree-sha-001" }));
-      // 8. POST /repos/.../git/commits
+      // 9. POST /repos/.../git/commits
       mockFetch.mockResolvedValueOnce(mockGhResponse(201, { sha: "commit-sha-001" }));
-      // 9. PATCH /repos/.../git/refs/heads/main
+      // 10. PATCH /repos/.../git/refs/heads/main
       mockFetch.mockResolvedValueOnce(mockGhResponse(200, { object: { sha: "commit-sha-001" } }));
 
-      const resultPromise = saveToGitHub({
+      const result = await saveToGitHub({
         token: TOKEN,
         sessionId: SESSION_ID,
         theme: THEME,
         files,
       });
-
-      // auto_init の待機時間を進める
-      await vi.advanceTimersByTimeAsync(1000);
-
-      const result = await resultPromise;
 
       expect(result.repoUrl).toBe("https://github.com/testuser/deepform-abcdef12");
       expect(result.commitSha).toBe("commit-sha-001");
@@ -180,6 +172,8 @@ describe("GitHub ヘルパー", () => {
           default_branch: "main",
         }),
       );
+      // 3. GET ref (waitForRepoReady)
+      mockFetch.mockResolvedValueOnce(mockGhResponse(200, { object: { sha: "sha" } }));
       // remaining calls for commit
       mockFetch.mockResolvedValueOnce(mockGhResponse(200, { object: { sha: "sha" } }));
       mockFetch.mockResolvedValueOnce(mockGhResponse(201, { sha: "b1" }));
@@ -187,19 +181,56 @@ describe("GitHub ヘルパー", () => {
       mockFetch.mockResolvedValueOnce(mockGhResponse(201, { sha: "c1" }));
       mockFetch.mockResolvedValueOnce(mockGhResponse(200, { object: { sha: "c1" } }));
 
-      const resultPromise = saveToGitHub({
+      await saveToGitHub({
         token: TOKEN,
         sessionId: SESSION_ID,
         theme: THEME,
         files: [{ path: "test.txt", content: "hello" }],
       });
 
-      await vi.advanceTimersByTimeAsync(1000);
-      await resultPromise;
-
       const createCall = mockFetch.mock.calls[1];
       const body = JSON.parse(createCall[1].body);
       expect(body.name).toBe("deepform-abcdef12");
+    });
+
+    it("新規リポジトリの auto_init が完了しない場合はエラーをスローすべき", async () => {
+      vi.useFakeTimers();
+      try {
+        // 1. GET /user
+        mockFetch.mockResolvedValueOnce(mockGhResponse(200, { login: "testuser" }));
+        // 2. POST /user/repos (create repo)
+        mockFetch.mockResolvedValueOnce(
+          mockGhResponse(201, {
+            full_name: "testuser/deepform-abcdef12",
+            html_url: "https://github.com/testuser/deepform-abcdef12",
+            default_branch: "main",
+          }),
+        );
+        // 3-7. GET ref (waitForRepoReady) — 5 回すべて 404
+        for (let i = 0; i < 5; i++) {
+          mockFetch.mockResolvedValueOnce(mockGhResponse(404, { message: "Not Found" }));
+        }
+
+        const promise = saveToGitHub({
+          token: TOKEN,
+          sessionId: SESSION_ID,
+          theme: THEME,
+          files: [{ path: "test.txt", content: "hello" }],
+        });
+        // unhandled rejection を抑制しつつ後で検証する
+        let caughtError: Error | undefined;
+        promise.catch((e: Error) => {
+          caughtError = e;
+        });
+
+        // 5 回分のリトライ待機を進める
+        await vi.advanceTimersByTimeAsync(5000);
+
+        expect(caughtError).toBeDefined();
+        expect(caughtError?.message).toContain("not ready after 5 attempts");
+      } finally {
+        vi.useRealTimers();
+      }
     });
 
     it("Authorization ヘッダーにトークンを含めるべき", async () => {

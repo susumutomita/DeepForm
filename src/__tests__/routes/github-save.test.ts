@@ -13,10 +13,19 @@ vi.mock("../../db/index.ts", async () => {
 
 // Mock LLM
 vi.mock("../../llm.ts", () => ({
+  MODEL_FAST: "claude-sonnet-4-6",
+  MODEL_SMART: "claude-opus-4-6",
   callClaude: vi.fn().mockResolvedValue({
-    content: [{ type: "text", text: "モック LLM レスポンス" }],
+    content: [
+      {
+        type: "text",
+        text: "# テストプロジェクト\n\nこれはテスト用の README です。プロダクト概要をここに記述します。",
+      },
+    ],
   }),
-  extractText: vi.fn().mockReturnValue("モック LLM レスポンス"),
+  extractText: vi
+    .fn()
+    .mockReturnValue("# テストプロジェクト\n\nこれはテスト用の README です。プロダクト概要をここに記述します。"),
 }));
 
 // Mock GitHub helper
@@ -26,6 +35,7 @@ vi.mock("../../helpers/github.ts", () => ({
 
 import { app } from "../../app.ts";
 import { saveToGitHub } from "../../helpers/github.ts";
+import { generateAgentMd, generatePlanMd } from "../../routes/sessions/github-save.ts";
 import { getRawDb } from "../helpers/test-db.ts";
 
 const rawDb = getRawDb();
@@ -105,11 +115,11 @@ describe("GitHub 保存 API", () => {
     vi.restoreAllMocks();
   });
 
-  it("正常に GitHub に保存できるべき", async () => {
+  it("正常に GitHub に保存できるべき（5 ファイル）", async () => {
     mockSaveToGitHub.mockResolvedValueOnce({
       repoUrl: "https://github.com/testuser/deepform-gh-save-s",
       commitSha: "abc123",
-      filesCommitted: ["PRD.md", "spec.json", "README.md"],
+      filesCommitted: ["README.md", "PRD.md", "spec.json", "AGENT.md", "Plan.md"],
       isNewRepo: true,
     });
 
@@ -121,7 +131,7 @@ describe("GitHub 保存 API", () => {
     const body = await res.json();
     expect(body.repoUrl).toBe("https://github.com/testuser/deepform-gh-save-s");
     expect(body.commitSha).toBe("abc123");
-    expect(body.filesCommitted).toEqual(["PRD.md", "spec.json", "README.md"]);
+    expect(body.filesCommitted).toEqual(["README.md", "PRD.md", "spec.json", "AGENT.md", "Plan.md"]);
     expect(body.isNewRepo).toBe(true);
 
     // saveToGitHub に正しい引数が渡されたか確認
@@ -130,17 +140,21 @@ describe("GitHub 保存 API", () => {
     expect(args.token).toBe("ghp_test_token");
     expect(args.sessionId).toBe(SESSION_ID);
     expect(args.theme).toBe("テストテーマ");
-    expect(args.files.length).toBe(3);
-    expect(args.files[0].path).toBe("PRD.md");
-    expect(args.files[1].path).toBe("spec.json");
-    expect(args.files[2].path).toBe("README.md");
+    expect(args.files.length).toBe(5);
+    expect(args.files.map((f: { path: string }) => f.path)).toEqual([
+      "README.md",
+      "PRD.md",
+      "spec.json",
+      "AGENT.md",
+      "Plan.md",
+    ]);
   });
 
   it("github_repo_url が DB に保存されるべき", async () => {
     mockSaveToGitHub.mockResolvedValueOnce({
       repoUrl: "https://github.com/testuser/deepform-gh-save-s",
       commitSha: "abc123",
-      filesCommitted: ["PRD.md", "spec.json", "README.md"],
+      filesCommitted: ["README.md", "PRD.md", "spec.json", "AGENT.md", "Plan.md"],
       isNewRepo: true,
     });
 
@@ -163,7 +177,7 @@ describe("GitHub 保存 API", () => {
     mockSaveToGitHub.mockResolvedValueOnce({
       repoUrl: "https://github.com/testuser/deepform-gh-save-s",
       commitSha: "def456",
-      filesCommitted: ["PRD.md", "spec.json", "README.md"],
+      filesCommitted: ["README.md", "PRD.md", "spec.json", "AGENT.md", "Plan.md"],
       isNewRepo: false,
     });
 
@@ -257,5 +271,125 @@ describe("GitHub 保存 API", () => {
     expect(res.status).toBe(401);
     const body = await res.json();
     expect(body.error).toContain("トークン");
+  });
+
+  it("AGENT.md にプロジェクト概要とコア機能が含まれるべき", async () => {
+    mockSaveToGitHub.mockResolvedValueOnce({
+      repoUrl: "https://github.com/testuser/deepform-gh-save-s",
+      commitSha: "abc123",
+      filesCommitted: ["README.md", "PRD.md", "spec.json", "AGENT.md", "Plan.md"],
+      isNewRepo: true,
+    });
+
+    await authedRequest(`/api/sessions/${SESSION_ID}/github-save`, {
+      method: "POST",
+    });
+
+    const args = mockSaveToGitHub.mock.calls[0][0];
+    const agentMd = args.files.find((f: { path: string }) => f.path === "AGENT.md") as
+      | { path: string; content: string }
+      | undefined;
+    expect(agentMd).toBeDefined();
+    expect(agentMd?.content).toContain("AGENT.md");
+    expect(agentMd?.content).toContain("テストテーマ");
+    expect(agentMd?.content).toContain("No mock data");
+  });
+
+  it("Plan.md に実行計画が含まれるべき", async () => {
+    mockSaveToGitHub.mockResolvedValueOnce({
+      repoUrl: "https://github.com/testuser/deepform-gh-save-s",
+      commitSha: "abc123",
+      filesCommitted: ["README.md", "PRD.md", "spec.json", "AGENT.md", "Plan.md"],
+      isNewRepo: true,
+    });
+
+    await authedRequest(`/api/sessions/${SESSION_ID}/github-save`, {
+      method: "POST",
+    });
+
+    const args = mockSaveToGitHub.mock.calls[0][0];
+    const planMd = args.files.find((f: { path: string }) => f.path === "Plan.md") as
+      | { path: string; content: string }
+      | undefined;
+    expect(planMd).toBeDefined();
+    expect(planMd?.content).toContain("Plan.md");
+    expect(planMd?.content).toContain("テストテーマ");
+    expect(planMd?.content).toContain("Progress Log");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// ヘルパー関数のユニットテスト
+// ---------------------------------------------------------------------------
+describe("generateAgentMd", () => {
+  it("PRD のコア機能と Non-Goals を含めるべき", () => {
+    const prd = {
+      problemDefinition: "ユーザーがタスクを管理できない",
+      targetUser: "フリーランスのエンジニア",
+      coreFeatures: [
+        { name: "タスク作成", description: "新しいタスクを作成する", priority: "P0" },
+        { name: "タスク一覧", description: "タスクを一覧表示する", priority: "P1" },
+      ],
+      nonGoals: ["チーム管理機能", "課金システム"],
+    };
+    const spec = { spec: { raw: "# Tech Stack\n- Frontend: React" } };
+
+    const result = generateAgentMd("タスク管理アプリ", prd, spec);
+
+    expect(result).toContain("タスク管理アプリ");
+    expect(result).toContain("ユーザーがタスクを管理できない");
+    expect(result).toContain("フリーランスのエンジニア");
+    expect(result).toContain("タスク作成");
+    expect(result).toContain("タスク一覧");
+    expect(result).toContain("チーム管理機能");
+    expect(result).toContain("課金システム");
+    expect(result).toContain("# Tech Stack");
+  });
+
+  it("PRD データが空でもエラーにならないべき", () => {
+    const result = generateAgentMd("テスト", {}, {});
+    expect(result).toContain("AGENT.md");
+    expect(result).toContain("テスト");
+  });
+});
+
+describe("generatePlanMd", () => {
+  it("コア機能からタスクリストを生成すべき", () => {
+    const prd = {
+      problemDefinition: "問題の説明",
+      targetUser: "ターゲットユーザー",
+      jobsToBeDone: ["タスクを素早く作成したい", "進捗を可視化したい"],
+      coreFeatures: [
+        {
+          name: "タスク CRUD",
+          priority: "P0",
+          acceptanceCriteria: ["タスクを作成できる", "タスクを削除できる"],
+        },
+      ],
+      userFlows: [
+        {
+          name: "タスク作成フロー",
+          steps: ["ホーム画面を開く", "新規作成ボタンをクリック", "タイトルを入力"],
+        },
+      ],
+    };
+    const spec = { spec: { raw: "# Spec content" } };
+
+    const result = generatePlanMd("タスク管理アプリ", prd, spec);
+
+    expect(result).toContain("タスク管理アプリ");
+    expect(result).toContain("問題の説明");
+    expect(result).toContain("タスクを素早く作成したい");
+    expect(result).toContain("タスク CRUD");
+    expect(result).toContain("タスクを作成できる");
+    expect(result).toContain("タスク作成フロー");
+    expect(result).toContain("ホーム画面を開く");
+    expect(result).toContain("Progress Log");
+  });
+
+  it("PRD データが空でもエラーにならないべき", () => {
+    const result = generatePlanMd("テスト", {}, {});
+    expect(result).toContain("Plan.md");
+    expect(result).toContain("テスト");
   });
 });

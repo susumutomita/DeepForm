@@ -56,12 +56,13 @@ async function getAuthenticatedUser(token: string): Promise<{ login: string }> {
   return ghJson("/user", token);
 }
 
-/** リポジトリを作成する。既に存在する場合は null を返す */
+/** リポジトリを作成する。既に存在する場合は既存リポジトリ情報で解決する */
 async function createRepo(
   token: string,
+  owner: string,
   name: string,
   description: string,
-): Promise<{ full_name: string; html_url: string; default_branch: string } | null> {
+): Promise<{ full_name: string; html_url: string; default_branch: string; isNew: boolean }> {
   const res = await ghFetch("/user/repos", token, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -74,14 +75,21 @@ async function createRepo(
   });
 
   if (res.status === 422) {
-    // リポジトリ名が既に存在する
-    return null;
+    // 422 = 名前衝突の可能性 → 既存リポジトリを取得
+    const existing = await getRepo(token, owner, name).catch(() => null);
+    if (existing) {
+      return { ...existing, isNew: false };
+    }
+    // 既存リポジトリも見つからない場合は 422 の詳細を報告
+    const body = await res.text();
+    throw new Error(`Failed to create repo (422): ${body}`);
   }
   if (!res.ok) {
     const body = await res.text();
     throw new Error(`Failed to create repo: ${res.status} ${body}`);
   }
-  return (await res.json()) as { full_name: string; html_url: string; default_branch: string };
+  const created = (await res.json()) as { full_name: string; html_url: string; default_branch: string };
+  return { ...created, isNew: true };
 }
 
 /** リポジトリ情報を取得する */
@@ -91,6 +99,22 @@ async function getRepo(
   repo: string,
 ): Promise<{ full_name: string; html_url: string; default_branch: string }> {
   return ghJson(`/repos/${owner}/${repo}`, token);
+}
+
+/** GitHub リポジトリ URL から owner と repo を抽出する */
+function parseRepoUrl(url: string): { owner: string; repo: string } | null {
+  const match = url.match(/github\.com\/([^/]+)\/([^/]+)/);
+  if (!match) return null;
+  return { owner: match[1], repo: match[2].replace(/\.git$/, "") };
+}
+
+/** auto_init 完了を待つ（git ref が存在するまでリトライ） */
+async function waitForRepoReady(token: string, owner: string, repo: string, branch: string): Promise<void> {
+  for (let i = 0; i < 5; i++) {
+    const res = await ghFetch(`/repos/${owner}/${repo}/git/ref/heads/${branch}`, token);
+    if (res.ok) return;
+    await new Promise((resolve) => setTimeout(resolve, 1000));
+  }
 }
 
 /**
@@ -175,34 +199,38 @@ export async function saveToGitHub(params: SaveToGitHubParams): Promise<SaveToGi
   let repoUrl: string;
   let defaultBranch: string;
   let isNewRepo: boolean;
+  let actualOwner = owner;
+  let actualRepo = repoName;
 
   if (existingRepoUrl) {
-    // 既存リポジトリに更新
-    const repoInfo = await getRepo(token, owner, repoName);
+    // 既存リポジトリに更新 — URL から owner/repo を解析
+    const parsed = parseRepoUrl(existingRepoUrl);
+    if (parsed) {
+      actualOwner = parsed.owner;
+      actualRepo = parsed.repo;
+    }
+    const repoInfo = await getRepo(token, actualOwner, actualRepo);
     repoUrl = repoInfo.html_url;
     defaultBranch = repoInfo.default_branch;
     isNewRepo = false;
   } else {
-    // 新規リポジトリ作成
-    const created = await createRepo(token, repoName, description);
-    if (created) {
-      repoUrl = created.html_url;
-      defaultBranch = created.default_branch;
-      isNewRepo = true;
-      // auto_init で作成されるまで少し待つ
-      await new Promise((resolve) => setTimeout(resolve, 1000));
-    } else {
-      // 既に存在する場合はそのリポジトリを使用
-      const repoInfo = await getRepo(token, owner, repoName);
-      repoUrl = repoInfo.html_url;
-      defaultBranch = repoInfo.default_branch;
-      isNewRepo = false;
+    // 新規リポジトリ作成（422 時は既存リポジトリにフォールバック）
+    const result = await createRepo(token, owner, repoName, description);
+    repoUrl = result.html_url;
+    defaultBranch = result.default_branch;
+    isNewRepo = result.isNew;
+    actualOwner = owner;
+    actualRepo = repoName;
+
+    if (isNewRepo) {
+      // auto_init 完了を待つ（最大 5 秒）
+      await waitForRepoReady(token, actualOwner, actualRepo, defaultBranch);
     }
   }
 
   const commitMessage = isNewRepo ? "feat: DeepForm PRD & spec を追加" : "feat: DeepForm PRD & spec を更新";
 
-  const commitSha = await commitFiles(token, owner, repoName, defaultBranch, files, commitMessage);
+  const commitSha = await commitFiles(token, actualOwner, actualRepo, defaultBranch, files, commitMessage);
 
   return {
     repoUrl,

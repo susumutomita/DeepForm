@@ -1,4 +1,7 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+
+vi.mock("../../db/index.ts", () => ({ db: {} }));
+
 import { extractJsonFromLLM, repairTruncatedJson } from "../../routes/sessions/analysis.ts";
 
 describe("extractJsonFromLLM", () => {

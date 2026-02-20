@@ -218,6 +218,7 @@ export interface ChatResponse {
   readyForAnalysis?: boolean;
   turnCount?: number;
   isComplete?: boolean;
+  choices?: string[];
   error?: string;
 }
 
@@ -278,6 +279,7 @@ export interface CampaignJoinResponse {
   sessionId: string;
   theme: string;
   reply: string;
+  choices?: string[];
   error?: string;
 }
 

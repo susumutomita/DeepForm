@@ -8,6 +8,7 @@ import { saveAnalysisResult } from "../../helpers/analysis-store.ts";
 import { formatZodError } from "../../helpers/format.ts";
 import { getOwnedCampaignById, getOwnedSession, isResponse } from "../../helpers/session-ownership.ts";
 import { callClaude, extractText, MODEL_FAST } from "../../llm.ts";
+import { extractChoices } from "./interview.ts";
 import type { AppEnv, Campaign, CampaignAnalytics, Session } from "../../types.ts";
 import { chatMessageSchema, feedbackSchema, respondentNameSchema } from "../../validation.ts";
 
@@ -141,7 +142,19 @@ campaignRoutes.post("/campaigns/:token/join", async (c) => {
 ${respondentName ? `回答者: ${respondentName}さん` : ""}
 
 最初の質問を1つだけ聞いてください。テーマについて、まず現状の状況を理解するための質問をしてください。
-共感的で親しみやすいトーンで、日本語で話してください。200文字以内で。`;
+共感的で親しみやすいトーンで、日本語で話してください。200文字以内で。
+
+重要: 質問の後に、ユーザーが選択できる3〜5個の回答選択肢を提示してください。
+以下のフォーマットで:
+[CHOICES]
+選択肢1
+選択肢2
+選択肢3
+その他（自分で入力）
+[/CHOICES]
+
+選択肢は具体的に、異なる状況やパターンをカバーしてください。
+最後の選択肢は必ず「その他（自分で入力）」にしてください。`;
 
     const response = await callClaude(
       [{ role: "user", content: `テーマ「${campaign.theme}」についてインタビューを始めてください。` }],
@@ -149,11 +162,12 @@ ${respondentName ? `回答者: ${respondentName}さん` : ""}
       512,
       MODEL_FAST,
     );
-    const reply = extractText(response);
+    const rawReply = extractText(response);
+    const { text: reply, choices } = extractChoices(rawReply);
 
     await db.insertInto("messages").values({ session_id: sessionId, role: "assistant", content: reply }).execute();
 
-    return c.json({ sessionId, reply, theme: campaign.theme }, 201);
+    return c.json({ sessionId, reply, theme: campaign.theme, choices }, 201);
   } catch (e) {
     if (e instanceof ZodError) return c.json({ error: formatZodError(e) }, 400);
     console.error("Join campaign error:", e);
@@ -212,17 +226,30 @@ campaignRoutes.post("/campaigns/:token/sessions/:sessionId/chat", async (c) => {
 6. 日本語で回答する
 7. 回答は簡潔に、200文字以内で
 
+重要: 質問の後に、ユーザーが選択できる3〜5個の回答選択肢を提示してください。
+以下のフォーマットで:
+[CHOICES]
+選択肢1
+選択肢2
+選択肢3
+その他（自分で入力）
+[/CHOICES]
+
+選択肢は具体的に、異なる状況やパターンをカバーしてください。
+最後の選択肢は必ず「その他（自分で入力）」にしてください。
+
 ${turnCount >= 5 ? "十分な情報が集まりました。最後にまとめの質問をして、回答の最後に「[INTERVIEW_COMPLETE]」タグを付けてください。" : ""}`;
 
     const response = await callClaude(chatMessages, systemPrompt, 1024, MODEL_FAST);
-    const reply = extractText(response);
+    const rawReply = extractText(response);
+    const { text: parsedReply, choices } = extractChoices(rawReply);
 
-    await db.insertInto("messages").values({ session_id: session.id, role: "assistant", content: reply }).execute();
+    const isComplete = parsedReply.includes("[INTERVIEW_COMPLETE]") || turnCount >= 8;
+    const cleanReply = parsedReply.replace("[INTERVIEW_COMPLETE]", "").trim();
 
-    const isComplete = reply.includes("[INTERVIEW_COMPLETE]") || turnCount >= 8;
-    const cleanReply = reply.replace("[INTERVIEW_COMPLETE]", "").trim();
+    await db.insertInto("messages").values({ session_id: session.id, role: "assistant", content: cleanReply }).execute();
 
-    return c.json({ reply: cleanReply, turnCount, isComplete });
+    return c.json({ reply: cleanReply, turnCount, isComplete, choices });
   } catch (e) {
     if (e instanceof ZodError) return c.json({ error: formatZodError(e) }, 400);
     console.error("Campaign chat error:", e);

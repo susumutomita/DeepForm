@@ -3108,6 +3108,7 @@ a:hover { color: var(--primary-hover); }
   letter-spacing: 0.03em;
 }
 
+
 /* Mobile: analytics dashboard */
 @media (max-width: 600px) {
   .analytics-dashboard {
@@ -3141,16 +3142,29 @@ a:hover { color: var(--primary-hover); }
   .analytics-section {
     padding: 0.75rem;
     margin-bottom: 0.75rem;
+    overflow-x: auto;
   }
   .analytics-section h3 {
     font-size: 0.85rem;
   }
   .analytics-table {
     font-size: 0.75rem;
+    min-width: 500px;
   }
   .analytics-table th,
   .analytics-table td {
     padding: 0.35rem 0.4rem;
+  }
+  .analytics-bar-chart {
+    gap: 0.25rem;
+  }
+  .analytics-bar-value {
+    font-size: 0.7rem;
+    min-width: 2rem;
+  }
+  .analytics-bar-label {
+    font-size: 0.7rem;
+    min-width: 3rem;
   }
   .funnel-bar {
     padding: 0.35rem 0.5rem;
@@ -3168,5 +3182,15 @@ a:hover { color: var(--primary-hover); }
   }
   .country-bar-track {
     height: 16px;
+  }
+}
+
+@media (max-width: 480px) {
+  .analytics-cards {
+    grid-template-columns: 1fr 1fr;
+    gap: 0.375rem;
+  }
+  .analytics-card-value {
+    font-size: 1.25rem;
   }
 }

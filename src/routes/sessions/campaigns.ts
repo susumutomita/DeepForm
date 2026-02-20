@@ -8,9 +8,9 @@ import { saveAnalysisResult } from "../../helpers/analysis-store.ts";
 import { formatZodError } from "../../helpers/format.ts";
 import { getOwnedCampaignById, getOwnedSession, isResponse } from "../../helpers/session-ownership.ts";
 import { callClaude, extractText, MODEL_FAST } from "../../llm.ts";
-import { extractChoices } from "./interview.ts";
 import type { AppEnv, Campaign, CampaignAnalytics, Session } from "../../types.ts";
 import { chatMessageSchema, feedbackSchema, respondentNameSchema } from "../../validation.ts";
+import { extractChoices } from "./interview.ts";
 
 export const campaignRoutes = new Hono<AppEnv>();
 
@@ -247,7 +247,10 @@ ${turnCount >= 5 ? "十分な情報が集まりました。最後にまとめの
     const isComplete = parsedReply.includes("[INTERVIEW_COMPLETE]") || turnCount >= 8;
     const cleanReply = parsedReply.replace("[INTERVIEW_COMPLETE]", "").trim();
 
-    await db.insertInto("messages").values({ session_id: session.id, role: "assistant", content: cleanReply }).execute();
+    await db
+      .insertInto("messages")
+      .values({ session_id: session.id, role: "assistant", content: cleanReply })
+      .execute();
 
     return c.json({ reply: cleanReply, turnCount, isComplete, choices });
   } catch (e) {

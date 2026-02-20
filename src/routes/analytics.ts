@@ -254,7 +254,9 @@ analyticsRoutes.get("/kpis", async (c) => {
     SELECT COUNT(*) as count FROM (
       SELECT session_id FROM messages GROUP BY session_id HAVING COUNT(*) >= 2
     )
-  `.execute(db).then((r) => r.rows[0] ?? { count: 0 });
+  `
+    .execute(db)
+    .then((r) => r.rows[0] ?? { count: 0 });
 
   const specReached = await db
     .selectFrom("sessions")
@@ -265,10 +267,7 @@ analyticsRoutes.get("/kpis", async (c) => {
   // Average messages per session
   const avgMessages = await db
     .selectFrom("messages")
-    .select([
-      sql<number>`count(*)`.as("total"),
-      sql<number>`count(distinct session_id)`.as("sessions"),
-    ])
+    .select([sql<number>`count(*)`.as("total"), sql<number>`count(distinct session_id)`.as("sessions")])
     .executeTakeFirstOrThrow();
 
   // Country breakdown (from page_views)
@@ -311,9 +310,8 @@ analyticsRoutes.get("/kpis", async (c) => {
       interviewStarted: interviewStarted.count,
       specReached: specReached.count,
     },
-    avgMessagesPerSession: avgMessages.sessions > 0
-      ? Math.round((avgMessages.total / avgMessages.sessions) * 10) / 10
-      : 0,
+    avgMessagesPerSession:
+      avgMessages.sessions > 0 ? Math.round((avgMessages.total / avgMessages.sessions) * 10) / 10 : 0,
     countries,
   });
 });

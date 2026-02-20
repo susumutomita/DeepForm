@@ -43,6 +43,8 @@ describe("GitHub ヘルパー", () => {
       mockFetch.mockResolvedValueOnce(mockGhResponse(200, { object: { sha: "base-sha-001" } }));
       // 4. GET /repos/.../git/ref/heads/main (commitFiles)
       mockFetch.mockResolvedValueOnce(mockGhResponse(200, { object: { sha: "base-sha-001" } }));
+      // 4.5. GET /repos/.../git/commits/base-sha-001 (get tree SHA)
+      mockFetch.mockResolvedValueOnce(mockGhResponse(200, { tree: { sha: "base-tree-sha-001" } }));
       // 5-7. POST /repos/.../git/blobs (3 files)
       mockFetch.mockResolvedValueOnce(mockGhResponse(201, { sha: "blob-sha-1" }));
       mockFetch.mockResolvedValueOnce(mockGhResponse(201, { sha: "blob-sha-2" }));
@@ -87,6 +89,8 @@ describe("GitHub ヘルパー", () => {
       );
       // 3. GET ref
       mockFetch.mockResolvedValueOnce(mockGhResponse(200, { object: { sha: "base-sha-002" } }));
+      // 3.5. GET commit (get tree SHA)
+      mockFetch.mockResolvedValueOnce(mockGhResponse(200, { tree: { sha: "base-tree-sha-002" } }));
       // 4-6. blobs
       mockFetch.mockResolvedValueOnce(mockGhResponse(201, { sha: "blob-sha-4" }));
       mockFetch.mockResolvedValueOnce(mockGhResponse(201, { sha: "blob-sha-5" }));
@@ -125,6 +129,8 @@ describe("GitHub ヘルパー", () => {
       );
       // 4. GET ref
       mockFetch.mockResolvedValueOnce(mockGhResponse(200, { object: { sha: "base-sha-003" } }));
+      // 4.5. GET commit (get tree SHA)
+      mockFetch.mockResolvedValueOnce(mockGhResponse(200, { tree: { sha: "base-tree-sha-003" } }));
       // 5-7. blobs
       mockFetch.mockResolvedValueOnce(mockGhResponse(201, { sha: "blob-sha-7" }));
       mockFetch.mockResolvedValueOnce(mockGhResponse(201, { sha: "blob-sha-8" }));
@@ -176,6 +182,8 @@ describe("GitHub ヘルパー", () => {
       mockFetch.mockResolvedValueOnce(mockGhResponse(200, { object: { sha: "sha" } }));
       // remaining calls for commit
       mockFetch.mockResolvedValueOnce(mockGhResponse(200, { object: { sha: "sha" } }));
+      // GET commit (get tree SHA)
+      mockFetch.mockResolvedValueOnce(mockGhResponse(200, { tree: { sha: "tree-sha" } }));
       mockFetch.mockResolvedValueOnce(mockGhResponse(201, { sha: "b1" }));
       mockFetch.mockResolvedValueOnce(mockGhResponse(201, { sha: "t1" }));
       mockFetch.mockResolvedValueOnce(mockGhResponse(201, { sha: "c1" }));

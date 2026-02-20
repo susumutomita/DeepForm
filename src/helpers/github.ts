@@ -144,7 +144,16 @@ async function commitFiles(
     {},
     `commitFiles:getRef(${owner}/${repo}#${branch})`,
   );
-  const baseSha = ref.object.sha;
+  const commitSha = ref.object.sha;
+
+  // 1.5. コミットオブジェクトからツリー SHA を取得（base_tree にはツリー SHA が必要）
+  const commitObj = await ghJson<{ tree: { sha: string } }>(
+    `/repos/${owner}/${repo}/git/commits/${commitSha}`,
+    token,
+    {},
+    `commitFiles:getCommit(${owner}/${repo}@${commitSha.slice(0, 7)})`,
+  );
+  const baseTreeSha = commitObj.tree.sha;
 
   // 2. 各ファイルの blob を作成
   const treeItems: Array<{ path: string; mode: string; type: string; sha: string }> = [];
@@ -170,7 +179,7 @@ async function commitFiles(
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
-      base_tree: baseSha,
+      base_tree: baseTreeSha,
       tree: treeItems,
     }),
   });
@@ -182,7 +191,7 @@ async function commitFiles(
     body: JSON.stringify({
       message,
       tree: tree.sha,
-      parents: [baseSha],
+      parents: [commitSha],
     }),
   });
 

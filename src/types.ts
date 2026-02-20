@@ -35,7 +35,7 @@ export interface Message {
 export interface AnalysisResult {
   id: number;
   session_id: string;
-  type: "facts" | "hypotheses" | "prd" | "spec" | "campaign_analytics" | "readiness";
+  type: "facts" | "hypotheses" | "prd" | "spec" | "campaign_analytics" | "readiness" | "campaign_triage";
   data: string;
   created_at: string;
 }

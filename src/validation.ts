@@ -20,6 +20,10 @@ export const feedbackSchema = z.object({
   feedback: z.string().max(5000).optional().nullable(),
 });
 
+export const triageSchema = z.object({
+  selectedFactIds: z.array(z.string().max(200)).max(500),
+});
+
 export const appFeedbackSchema = z.object({
   type: z.enum(["bug", "feature", "other"]),
   message: z.string().min(1, "メッセージを入力してください").max(5000, "メッセージは5000文字以内で入力してください"),

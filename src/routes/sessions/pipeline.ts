@@ -18,7 +18,7 @@ import { db } from "../../db/index.ts";
 import { saveAnalysisResult } from "../../helpers/analysis-store.ts";
 import { generatePRDMarkdown } from "../../helpers/format.ts";
 import { getOwnedSession, isResponse } from "../../helpers/session-ownership.ts";
-import { callClaude, extractText, MODEL_FAST, MODEL_SMART } from "../../llm.ts";
+import { callClaudeStream, MODEL_FAST, MODEL_SMART } from "../../llm.ts";
 import type { AppEnv, Session } from "../../types.ts";
 
 const PAYMENT_LINK = "https://buy.stripe.com/test_dRmcMXbrh3Q8ggx8DA48000";
@@ -262,6 +262,29 @@ function parseJSON(text: string, fallback: unknown): unknown {
   }
 }
 
+/**
+ * Stream an LLM call, forwarding text chunks as SSE events, and resolve with
+ * the full accumulated text when the stream ends.
+ */
+function streamLLM(
+  messages: Array<{ role: "user" | "assistant"; content: string }>,
+  system: string,
+  maxTokens: number,
+  model: string,
+  stage: string,
+  send: (event: string, data: unknown) => void,
+): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const { stream, getFullText } = callClaudeStream(messages, system, maxTokens, model);
+    stream.on("data", (chunk: Buffer | string) => {
+      const text = typeof chunk === "string" ? chunk : chunk.toString("utf8");
+      send("stream", { stage, text });
+    });
+    stream.on("end", () => resolve(getFullText()));
+    stream.on("error", (err: Error) => reject(err));
+  });
+}
+
 // ---------------------------------------------------------------------------
 // Pipeline endpoint
 // ---------------------------------------------------------------------------
@@ -304,13 +327,14 @@ pipelineRoutes.post("/sessions/:id/pipeline", async (c) => {
         // --- Stage 1: Analysis (facts + hypotheses in one call) ---
         send("stage", { stage: "facts", status: "running" });
         const transcript = await buildTranscript(id);
-        const analysisResp = await callClaude(
+        const analysisText = await streamLLM(
           [{ role: "user", content: `以下のインタビュー記録を分析してください：\n\n${transcript}` }],
           ANALYSIS_SYSTEM,
           4096,
           MODEL_FAST,
+          "analysis",
+          send,
         );
-        const analysisText = extractText(analysisResp);
         const analysis = parseJSON(analysisText, {
           facts: [{ id: "F1", type: "fact", content: analysisText, evidence: "", severity: "medium" }],
           hypotheses: [
@@ -347,9 +371,9 @@ pipelineRoutes.post("/sessions/:id/pipeline", async (c) => {
           .execute();
         send("stage", { stage: "hypotheses", status: "done", data: hypotheses });
 
-        // --- Stage 2: PRD ---
+        // --- Stage 2: PRD (uses MODEL_SMART / Opus for quality) ---
         send("stage", { stage: "prd", status: "running" });
-        const prdResp = await callClaude(
+        const prdText = await streamLLM(
           [
             {
               role: "user",
@@ -358,8 +382,10 @@ pipelineRoutes.post("/sessions/:id/pipeline", async (c) => {
           ],
           PRD_SYSTEM,
           8192,
+          MODEL_SMART,
+          "prd",
+          send,
         );
-        const prdText = extractText(prdResp);
         const prd = parseJSON(prdText, {
           prd: {
             problemDefinition: prdText,
@@ -383,7 +409,7 @@ pipelineRoutes.post("/sessions/:id/pipeline", async (c) => {
 
         // --- Stage 3: Spec ---
         send("stage", { stage: "spec", status: "running" });
-        const specResp = await callClaude(
+        const specText = await streamLLM(
           [
             {
               role: "user",
@@ -393,8 +419,9 @@ pipelineRoutes.post("/sessions/:id/pipeline", async (c) => {
           SPEC_SYSTEM,
           4096,
           MODEL_FAST,
+          "spec",
+          send,
         );
-        const specText = extractText(specResp);
         // biome-ignore lint/suspicious/noExplicitAny: dynamic LLM JSON output
         let spec = parseJSON(specText, { spec: { raw: specText } }) as any;
 

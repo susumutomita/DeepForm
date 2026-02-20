@@ -9,18 +9,30 @@ vi.mock("../../db/index.ts", async () => {
   return { db: createTestDb() };
 });
 
+import { Readable } from "node:stream";
+
+function createMockStream(text: string) {
+  const readable = new Readable({ read() {}, encoding: "utf8" });
+  // Emit text and close asynchronously
+  setTimeout(() => {
+    readable.push(text);
+    readable.push(null);
+  }, 1);
+  return { stream: readable, getFullText: () => text };
+}
+
 vi.mock("../../llm.ts", () => ({
   MODEL_FAST: "claude-sonnet-4-6",
   MODEL_SMART: "claude-opus-4-6",
   callClaude: vi.fn().mockResolvedValue({
     content: [{ type: "text", text: "test" }],
   }),
-  callClaudeStream: vi.fn(),
+  callClaudeStream: vi.fn().mockImplementation(() => createMockStream("test")),
   extractText: vi.fn().mockReturnValue("test"),
 }));
 
 import { app } from "../../app.ts";
-import { callClaude, extractText } from "../../llm.ts";
+import { callClaude, callClaudeStream, extractText } from "../../llm.ts";
 import { getRawDb } from "../helpers/test-db.ts";
 
 const rawDb = getRawDb();
@@ -134,8 +146,11 @@ describe("パイプライン API (POST /api/sessions/:id/pipeline)", () => {
     rawDb
       .prepare("INSERT INTO users (id, exe_user_id, email, display_name, plan) VALUES (?, ?, ?, ?, ?)")
       .run(TEST_USER_ID, TEST_EXE_USER_ID, TEST_EMAIL, "testuser", "pro");
-    // Default mock: 3 sequential LLM calls for full pipeline
-    vi.mocked(extractText).mockReturnValueOnce(mockAnalysis).mockReturnValueOnce(mockPrd).mockReturnValueOnce(mockSpec);
+    // Default mock: 3 sequential LLM calls for full pipeline (streaming)
+    vi.mocked(callClaudeStream)
+      .mockImplementationOnce(() => createMockStream(mockAnalysis))
+      .mockImplementationOnce(() => createMockStream(mockPrd))
+      .mockImplementationOnce(() => createMockStream(mockSpec));
   });
 
   // -------------------------------------------------------------------------
@@ -184,7 +199,7 @@ describe("パイプライン API (POST /api/sessions/:id/pipeline)", () => {
       expect(doneEvents[0].data).toEqual({});
     });
 
-    it("callClaude が3回呼ばれること（analysis, PRD, spec）", async () => {
+    it("callClaudeStream が3回呼ばれること（analysis, PRD, spec）", async () => {
       // Given
       insertSession("spipe-calls", "テーマ", TEST_USER_ID);
       insertMessage("spipe-calls", "assistant", "質問");
@@ -195,7 +210,7 @@ describe("パイプライン API (POST /api/sessions/:id/pipeline)", () => {
       await res.text(); // consume stream
 
       // Then
-      expect(callClaude).toHaveBeenCalledTimes(3);
+      expect(callClaudeStream).toHaveBeenCalledTimes(3);
     });
 
     it("DB に analysis_results が facts, hypotheses, prd, spec の4行保存されること", async () => {
@@ -398,11 +413,11 @@ describe("パイプライン API (POST /api/sessions/:id/pipeline)", () => {
       insertMessage("spipe-nojson", "user", "回答");
 
       // Override mocks: LLM returns non-JSON text for all 3 calls
-      vi.mocked(extractText).mockReset();
-      vi.mocked(extractText)
-        .mockReturnValueOnce("これはJSONではありません。分析結果のテキストです。")
-        .mockReturnValueOnce("PRDのプレーンテキスト結果です。")
-        .mockReturnValueOnce("Specのプレーンテキスト結果です。");
+      vi.mocked(callClaudeStream).mockReset();
+      vi.mocked(callClaudeStream)
+        .mockImplementationOnce(() => createMockStream("これはJSONではありません。分析結果のテキストです。"))
+        .mockImplementationOnce(() => createMockStream("PRDのプレーンテキスト結果です。"))
+        .mockImplementationOnce(() => createMockStream("Specのプレーンテキスト結果です。"));
 
       // When
       const res = await authedRequest("/api/sessions/spipe-nojson/pipeline", { method: "POST" });
@@ -465,8 +480,8 @@ describe("パイプライン API (POST /api/sessions/:id/pipeline)", () => {
       const doneEvents = events.filter((e) => e.event === "done");
       expect(doneEvents.length).toBe(1);
 
-      // callClaude が3回呼ばれる（空のトランスクリプトでも）
-      expect(callClaude).toHaveBeenCalledTimes(3);
+      // callClaudeStream が3回呼ばれる（空のトランスクリプトでも）
+      expect(callClaudeStream).toHaveBeenCalledTimes(3);
 
       // DB に結果が保存される
       const rows = rawDb.prepare("SELECT type FROM analysis_results WHERE session_id = ?").all("spipe-empty") as any[];

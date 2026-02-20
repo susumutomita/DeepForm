@@ -159,7 +159,7 @@ ${respondentName ? `回答者: ${respondentName}さん` : ""}
     const response = await callClaude(
       [{ role: "user", content: `テーマ「${campaign.theme}」についてインタビューを始めてください。` }],
       systemPrompt,
-      512,
+      1024,
       MODEL_FAST,
     );
     const rawReply = extractText(response);
@@ -210,8 +210,9 @@ campaignRoutes.post("/campaigns/:token/sessions/:sessionId/chat", async (c) => {
       .where("session_id", "=", session.id)
       .orderBy("created_at")
       .execute()) as unknown as { role: string; content: string }[];
-    const chatMessages = allMessages.map((m) => ({ role: m.role as "user" | "assistant", content: m.content }));
     const turnCount = allMessages.filter((m) => m.role === "user").length;
+    const recentMessages = allMessages.slice(-10);
+    const chatMessages = recentMessages.map((m) => ({ role: m.role as "user" | "assistant", content: m.content }));
 
     const systemPrompt = `あなたは熟練のデプスインタビュアーです。ユーザーの課題テーマについて深掘りインタビューを行います。
 

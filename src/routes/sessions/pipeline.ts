@@ -285,6 +285,44 @@ function streamLLM(
   });
 }
 
+/**
+ * Get campaign facts by their triage IDs (format: "sessionId:index").
+ */
+async function getCampaignFactsByIds(
+  campaignId: string,
+  selectedIds: string[],
+): Promise<Array<{ type: string; content: string; respondentName: string }>> {
+  const respondentSessions = (await db
+    .selectFrom("sessions as s")
+    .leftJoin("analysis_results as ar", (join) => join.onRef("ar.session_id", "=", "s.id").on("ar.type", "=", "facts"))
+    .select(["s.id", "s.respondent_name", "ar.data as facts_data"])
+    .where("s.campaign_id", "=", campaignId)
+    .where("s.status", "=", SESSION_STATUS.RESPONDENT_DONE)
+    .execute()) as unknown as {
+    id: string;
+    respondent_name: string | null;
+    facts_data: string | null;
+  }[];
+
+  const result: Array<{ type: string; content: string; respondentName: string }> = [];
+  for (const s of respondentSessions) {
+    if (!s.facts_data) continue;
+    const parsed = JSON.parse(s.facts_data);
+    const factList = (parsed.facts || parsed) as Array<Record<string, unknown>>;
+    for (let i = 0; i < factList.length; i++) {
+      const factId = `${s.id}:${i}`;
+      if (selectedIds.includes(factId)) {
+        result.push({
+          type: (factList[i].type as string) || "fact",
+          content: (factList[i].content as string) || "",
+          respondentName: s.respondent_name || "匿名",
+        });
+      }
+    }
+  }
+  return result;
+}
+
 // ---------------------------------------------------------------------------
 // Pipeline endpoint
 // ---------------------------------------------------------------------------
@@ -373,11 +411,39 @@ pipelineRoutes.post("/sessions/:id/pipeline", async (c) => {
 
         // --- Stage 2: PRD (uses MODEL_SMART / Opus for quality) ---
         send("stage", { stage: "prd", status: "running" });
+
+        // Inject campaign triage facts if available
+        let campaignFactsSection = "";
+        const triageRow = (await db
+          .selectFrom("analysis_results")
+          .select("data")
+          .where("session_id", "=", id)
+          .where("type", "=", ANALYSIS_TYPE.CAMPAIGN_TRIAGE)
+          .executeTakeFirst()) as unknown as { data: string } | undefined;
+        if (triageRow) {
+          // biome-ignore lint/suspicious/noExplicitAny: dynamic JSON
+          const triage = JSON.parse(triageRow.data) as any;
+          const selectedIds: string[] = triage.selectedFactIds || [];
+          if (selectedIds.length > 0) {
+            const campaign = (await db
+              .selectFrom("campaigns")
+              .select("id")
+              .where("owner_session_id", "=", id)
+              .executeTakeFirst()) as unknown as { id: string } | undefined;
+            if (campaign) {
+              const campaignFacts = await getCampaignFactsByIds(campaign.id, selectedIds);
+              if (campaignFacts.length > 0) {
+                campaignFactsSection = `\n\n## Campaign Feedback (from ${campaignFacts.length} selected facts)\n${campaignFacts.map((f) => `- [${f.type}] ${f.content} (${f.respondentName})`).join("\n")}`;
+              }
+            }
+          }
+        }
+
         const prdText = await streamLLM(
           [
             {
               role: "user",
-              content: `以下のファクトと仮説からPRDを生成してください：\n\nテーマ: ${session.theme}\n\nファクト:\n${JSON.stringify(facts, null, 2)}\n\n仮説:\n${JSON.stringify(hypotheses, null, 2)}`,
+              content: `以下のファクトと仮説からPRDを生成してください：\n\nテーマ: ${session.theme}\n\nファクト:\n${JSON.stringify(facts, null, 2)}\n\n仮説:\n${JSON.stringify(hypotheses, null, 2)}${campaignFactsSection}`,
             },
           ],
           PRD_SYSTEM,

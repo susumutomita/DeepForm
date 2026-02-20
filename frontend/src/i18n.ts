@@ -165,6 +165,16 @@ const ja: TranslationMap = {
   'feedback.success': 'フィードバックを送信しました。ありがとうございます！',
   'feedback.error': 'フィードバックの送信に失敗しました',
   'feedback.rateLimit': '送信は60秒に1回までです',
+  'triage.title': 'ファクト選択',
+  'triage.desc': 'PRD に反映するファクトを選択してください',
+  'triage.selectAll': 'すべて選択',
+  'triage.deselectAll': 'すべて解除',
+  'triage.save': '保存して PRD に反映',
+  'triage.saving': '保存中...',
+  'triage.saved': 'トリアージを保存しました',
+  'triage.noFacts': 'ファクトがありません',
+  'triage.selectedCount': '件選択中',
+  'triage.button': 'ファクト選択',
 };
 
 const en: TranslationMap = {
@@ -330,6 +340,16 @@ const en: TranslationMap = {
   'feedback.success': 'Feedback sent. Thank you!',
   'feedback.error': 'Failed to send feedback',
   'feedback.rateLimit': 'Please wait 60 seconds between submissions',
+  'triage.title': 'Select Facts',
+  'triage.desc': 'Select facts to include in PRD generation',
+  'triage.selectAll': 'Select all',
+  'triage.deselectAll': 'Deselect all',
+  'triage.save': 'Save & regenerate PRD',
+  'triage.saving': 'Saving...',
+  'triage.saved': 'Triage saved',
+  'triage.noFacts': 'No facts available',
+  'triage.selectedCount': 'selected',
+  'triage.button': 'Select Facts',
 };
 
 const es: TranslationMap = {
@@ -495,6 +515,16 @@ const es: TranslationMap = {
   'feedback.success': 'Comentario enviado. ¡Gracias!',
   'feedback.error': 'Error al enviar comentarios',
   'feedback.rateLimit': 'Espera 60 segundos entre envíos',
+  'triage.title': 'Seleccionar hechos',
+  'triage.desc': 'Selecciona los hechos a incluir en la generación del PRD',
+  'triage.selectAll': 'Seleccionar todos',
+  'triage.deselectAll': 'Deseleccionar todos',
+  'triage.save': 'Guardar y regenerar PRD',
+  'triage.saving': 'Guardando...',
+  'triage.saved': 'Triaje guardado',
+  'triage.noFacts': 'No hay hechos disponibles',
+  'triage.selectedCount': 'seleccionados',
+  'triage.button': 'Seleccionar hechos',
 };
 
 const zh: TranslationMap = {
@@ -660,6 +690,16 @@ const zh: TranslationMap = {
   'feedback.success': '反馈已发送，谢谢！',
   'feedback.error': '反馈发送失败',
   'feedback.rateLimit': '请等待 60 秒后再提交',
+  'triage.title': '选择事实',
+  'triage.desc': '选择要纳入 PRD 生成的事实',
+  'triage.selectAll': '全选',
+  'triage.deselectAll': '取消全选',
+  'triage.save': '保存并重新生成 PRD',
+  'triage.saving': '保存中...',
+  'triage.saved': '分类已保存',
+  'triage.noFacts': '暂无事实',
+  'triage.selectedCount': '已选择',
+  'triage.button': '选择事实',
 };
 
 const TRANSLATIONS: Record<string, TranslationMap> = { ja, en, es, zh };

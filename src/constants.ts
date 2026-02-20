@@ -21,6 +21,7 @@ export const ANALYSIS_TYPE = {
   SPEC: "spec",
   READINESS: "readiness",
   CAMPAIGN_ANALYTICS: "campaign_analytics",
+  CAMPAIGN_TRIAGE: "campaign_triage",
 } as const;
 
 // ---------------------------------------------------------------------------

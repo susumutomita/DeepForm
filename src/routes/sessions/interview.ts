@@ -110,7 +110,7 @@ Choices should be specific and cover different situations or answer patterns.
 The last choice should always be "${l.otherChoice}".${readyNote}`;
 }
 
-function extractChoices(text: string): { text: string; choices: string[] } {
+export function extractChoices(text: string): { text: string; choices: string[] } {
   const match = text.match(/\[CHOICES\]([\s\S]*?)\[\/CHOICES\]/);
   if (!match) return { text: text.trim(), choices: [] };
   const choicesText = match[1].trim();

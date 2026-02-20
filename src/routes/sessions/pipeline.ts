@@ -392,7 +392,7 @@ pipelineRoutes.post("/sessions/:id/pipeline", async (c) => {
           ],
           SPEC_SYSTEM,
           4096,
-          MODEL_SMART,
+          MODEL_FAST,
         );
         const specText = extractText(specResp);
         // biome-ignore lint/suspicious/noExplicitAny: dynamic LLM JSON output

@@ -37,6 +37,42 @@ export function handleCampaignKeydown(event: KeyboardEvent): void {
   }
 }
 
+function showSharedChoices(containerId: string, choices: string[]): void {
+  const container = document.getElementById(containerId);
+  if (!container) return;
+  const choicesDiv = document.createElement('div');
+  choicesDiv.className = 'chat-choices';
+  for (const choice of choices) {
+    if (choice.includes('その他') || choice.includes('自分で入力')) {
+      const btn = document.createElement('button');
+      btn.className = 'chat-choice-btn chat-choice-other';
+      btn.textContent = '✏️ ' + choice;
+      btn.addEventListener('click', () => {
+        removeSharedChoices(containerId);
+        const input = document.getElementById('shared-chat-input') as HTMLTextAreaElement | null;
+        if (input) input.focus();
+      });
+      choicesDiv.appendChild(btn);
+    } else {
+      const btn = document.createElement('button');
+      btn.className = 'chat-choice-btn';
+      btn.textContent = choice;
+      btn.addEventListener('click', () => {
+        sendCampaignMessageWithText(choice);
+      });
+      choicesDiv.appendChild(btn);
+    }
+  }
+  container.appendChild(choicesDiv);
+  container.scrollTop = container.scrollHeight;
+}
+
+function removeSharedChoices(containerId: string): void {
+  const container = document.getElementById(containerId);
+  if (!container) return;
+  container.querySelectorAll('.chat-choices').forEach(el => el.remove());
+}
+
 // --- Campaign ---
 export async function initCampaignInterview(token: string): Promise<void> {
   campaignToken = token;
@@ -46,7 +82,13 @@ export async function initCampaignInterview(token: string): Promise<void> {
     const data = await api.getCampaign(token);
     if (data.error) { showToast(t('toast.notFound'), true); return; }
     const titleEl = document.getElementById('shared-theme-title');
-    if (titleEl) titleEl.textContent = data.theme;
+    if (titleEl) {
+      // Truncate long themes to keep the welcome card readable
+      const maxLen = 120;
+      titleEl.textContent = data.theme.length > maxLen
+        ? data.theme.slice(0, maxLen) + '…'
+        : data.theme;
+    }
   } catch (e: any) { showToast(t('toast.notFound'), true); }
 }
 
@@ -65,22 +107,26 @@ export async function startCampaignInterview(): Promise<void> {
     const container = document.getElementById('shared-chat-container');
     if (container) container.textContent = '';
     addMessageToContainer('shared-chat-container', 'assistant', data.reply);
+    if (data.choices?.length) {
+      showSharedChoices('shared-chat-container', data.choices);
+    }
   } catch (e: any) { hideLoading(); showToast(e.message, true); }
 }
 
-export async function sendCampaignMessage(): Promise<void> {
+async function sendCampaignMessageWithText(text: string): Promise<void> {
   if (!campaignToken || !campaignSessionId) return;
   const input = document.getElementById('shared-chat-input') as HTMLTextAreaElement | null;
-  if (!input) return;
-  const message = input.value.trim();
-  if (!message) return;
-  input.value = '';
-  addMessageToContainer('shared-chat-container', 'user', message);
+  if (input) input.value = '';
+  removeSharedChoices('shared-chat-container');
+  addMessageToContainer('shared-chat-container', 'user', text);
   showTypingIndicator('shared-chat-container');
   try {
-    const data = await api.chatCampaign(campaignToken, campaignSessionId, message);
+    const data = await api.chatCampaign(campaignToken, campaignSessionId, text);
     removeTypingIndicator('shared-chat-container');
     addMessageToContainer('shared-chat-container', 'assistant', data.reply);
+    if (data.choices?.length) {
+      showSharedChoices('shared-chat-container', data.choices);
+    }
     if (data.isComplete) {
       const actions = document.getElementById('shared-complete-actions');
       if (actions) actions.style.display = 'block';
@@ -91,6 +137,15 @@ export async function sendCampaignMessage(): Promise<void> {
     removeTypingIndicator('shared-chat-container');
     showToast(e.message, true);
   }
+}
+
+export async function sendCampaignMessage(): Promise<void> {
+  if (!campaignToken || !campaignSessionId) return;
+  const input = document.getElementById('shared-chat-input') as HTMLTextAreaElement | null;
+  if (!input) return;
+  const message = input.value.trim();
+  if (!message) return;
+  await sendCampaignMessageWithText(message);
 }
 
 export async function completeCampaignInterview(): Promise<void> {

@@ -3076,39 +3076,6 @@ a:hover { color: var(--primary-hover); }
   flex-shrink: 0;
 }
 
-/* Analytics cards grid */
-.analytics-cards {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
-  gap: 0.75rem;
-  margin-bottom: 1.5rem;
-}
-
-.analytics-card {
-  background: var(--bg-card);
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius);
-  padding: 1rem 0.75rem;
-  text-align: center;
-  box-shadow: var(--shadow-sm);
-}
-
-.analytics-card-value {
-  font-size: 1.5rem;
-  font-weight: 700;
-  color: var(--primary);
-  line-height: 1.2;
-}
-
-.analytics-card-label {
-  font-size: 0.7rem;
-  color: var(--text-dim);
-  margin-top: 0.25rem;
-  text-transform: uppercase;
-  letter-spacing: 0.03em;
-}
-
-
 /* Mobile: analytics dashboard */
 @media (max-width: 600px) {
   .analytics-dashboard {

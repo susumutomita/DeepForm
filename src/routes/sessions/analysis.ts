@@ -519,7 +519,7 @@ SIZE RULES (HARD LIMITS):
       [{ role: "user", content: `以下のPRDから実装仕様を生成してください：\n\n${JSON.stringify(prd, null, 2)}` }],
       systemPrompt,
       4096,
-      MODEL_SMART,
+      MODEL_FAST,
     );
     const text = extractText(response);
 

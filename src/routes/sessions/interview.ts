@@ -65,8 +65,7 @@ Topic: "${theme}"
 Ask exactly ONE opening question to understand the current situation.
 Be empathetic and approachable. Respond in ${l.langName}.
 
-IMPORTANT: After your question, provide 3-5 answer choices the user can select from.
-Format them as:
+CRITICAL FORMAT RULE — you MUST end your response with a [CHOICES] block:
 [CHOICES]
 Choice 1 text
 Choice 2 text
@@ -74,7 +73,7 @@ Choice 3 text
 ${l.otherChoice}
 [/CHOICES]
 
-Choices should be specific and cover different situations or answer patterns.
+Never omit the [CHOICES] block. Choices should be specific to the question.
 The last choice should always be "${l.otherChoice}".`;
 }
 
@@ -97,8 +96,7 @@ Rules:
 6. Respond in ${l.langName}
 7. Keep responses concise, under 200 characters
 
-IMPORTANT: After your question, provide 3-5 answer choices the user can select from.
-Format them as:
+CRITICAL FORMAT RULE — you MUST ALWAYS end your response with a [CHOICES] block:
 [CHOICES]
 Choice 1 text
 Choice 2 text
@@ -106,20 +104,31 @@ Choice 3 text
 ${l.otherChoice}
 [/CHOICES]
 
-Choices should be specific and cover different situations or answer patterns.
+Never omit the [CHOICES] block. Every single response must end with it.
+Choices should be specific and relevant to the question you just asked.
 The last choice should always be "${l.otherChoice}".${readyNote}`;
 }
 
-export function extractChoices(text: string): { text: string; choices: string[] } {
+const FALLBACK_CHOICES: Record<Lang, string[]> = {
+  ja: ["はい、そうです", "いいえ、違います", "もう少し詳しく聞きたいです", "その他（自分で入力）"],
+  en: ["Yes, that's right", "No, that's different", "I'd like to explain more", "Other (type your own)"],
+  es: ["Sí, así es", "No, es diferente", "Me gustaría explicar más", "Otro (escribir)"],
+  zh: ["是的，没错", "不是，不一样", "我想详细说明", "其他（自己输入）"],
+};
+
+export function extractChoices(text: string, lang?: Lang): { text: string; choices: string[] } {
   const match = text.match(/\[CHOICES\]([\s\S]*?)\[\/CHOICES\]/);
-  if (!match) return { text: text.trim(), choices: [] };
+  if (!match) {
+    // Fallback: provide default choices so the UI is never stuck
+    return { text: text.trim(), choices: FALLBACK_CHOICES[lang ?? "en"] };
+  }
   const choicesText = match[1].trim();
   const choices = choicesText
     .split("\n")
     .map((c) => c.trim())
     .filter((c) => c.length > 0);
   const cleanText = text.replace(/\[CHOICES\][\s\S]*?\[\/CHOICES\]/, "").trim();
-  return { text: cleanText, choices };
+  return { text: cleanText, choices: choices.length > 0 ? choices : FALLBACK_CHOICES[lang ?? "en"] };
 }
 
 export const interviewRoutes = new Hono<AppEnv>();
@@ -163,7 +172,7 @@ interviewRoutes.post("/sessions/:id/start", async (c) => {
             });
             stream.on("end", () => {
               const fullText = getFullText();
-              const { text: cleanText, choices } = extractChoices(fullText);
+              const { text: cleanText, choices } = extractChoices(fullText, lang);
               db.insertInto("messages")
                 .values({ session_id: id, role: "assistant", content: cleanText })
                 .execute()
@@ -190,7 +199,7 @@ interviewRoutes.post("/sessions/:id/start", async (c) => {
     // Non-streaming fallback
     const response = await callClaude(startMessages, systemPrompt, 512, MODEL_FAST);
     const rawReply = extractText(response);
-    const { text: reply, choices } = extractChoices(rawReply);
+    const { text: reply, choices } = extractChoices(rawReply, lang);
 
     await db.insertInto("messages").values({ session_id: id, role: "assistant", content: reply }).execute();
 
@@ -248,7 +257,7 @@ interviewRoutes.post("/sessions/:id/chat", async (c) => {
             });
             stream.on("end", () => {
               const fullText = getFullText();
-              const { text: cleanText, choices } = extractChoices(fullText);
+              const { text: cleanText, choices } = extractChoices(fullText, lang);
               db.insertInto("messages")
                 .values({ session_id: id, role: "assistant", content: cleanText })
                 .execute()
@@ -278,7 +287,7 @@ interviewRoutes.post("/sessions/:id/chat", async (c) => {
     // Non-streaming fallback
     const response = await callClaude(chatMessages, systemPrompt, 1024, MODEL_FAST);
     const rawReply = extractText(response);
-    const { text: cleanReply, choices } = extractChoices(rawReply);
+    const { text: cleanReply, choices } = extractChoices(rawReply, lang);
 
     await db
       .insertInto("messages")

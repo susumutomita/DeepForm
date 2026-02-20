@@ -150,7 +150,7 @@ describe("インタビュー ストリーミング API", () => {
       expect(callClaudeStream).toHaveBeenCalledOnce();
     });
 
-    it("[CHOICES] がない場合は空の choices 配列を done に含むこと", async () => {
+    it("[CHOICES] がない場合はフォールバック選択肢を done に含むこと", async () => {
       // Given
       insertSession("sstream-nochoice", "選択肢なし", TEST_USER_ID);
       mockClaudeStream("選択肢のない質問です。");
@@ -165,7 +165,7 @@ describe("インタビュー ストリーミング API", () => {
       const events = parseSSEEvents(await res.text());
       const done = events.find((e) => e.type === "done");
       expect(done).toBeDefined();
-      expect(done.choices).toEqual([]);
+      expect(done.choices.length).toBeGreaterThan(0);
     });
   });
 

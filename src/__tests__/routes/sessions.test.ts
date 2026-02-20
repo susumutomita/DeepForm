@@ -998,16 +998,16 @@ describe("セッション API", () => {
       expect(data.reply).not.toContain("[CHOICES]");
     });
 
-    it("[CHOICES] ブロックがない場合は空の choices 配列を返すこと", async () => {
+    it("[CHOICES] ブロックがない場合はフォールバック選択肢を返すこと", async () => {
       // Given: LLM が [CHOICES] ブロックなしの返答を返す
       insertSession("schoice-none", "選択肢なしテスト", TEST_USER_ID);
       vi.mocked(extractText).mockReturnValueOnce("選択肢のない質問です。");
       // When: start
       const res = await authedRequest("/api/sessions/schoice-none/start", { method: "POST" });
-      // Then: 空の choices
+      // Then: フォールバック選択肢が返る
       expect(res.status).toBe(200);
       const data = (await res.json()) as any;
-      expect(data.choices).toEqual([]);
+      expect(data.choices.length).toBeGreaterThan(0);
       expect(data.reply).toBe("選択肢のない質問です。");
     });
   });

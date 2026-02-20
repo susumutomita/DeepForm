@@ -30,7 +30,7 @@ interface SaveToGitHubResult {
 
 async function ghFetch(path: string, token: string, options: RequestInit = {}): Promise<Response> {
   const url = path.startsWith("https://") ? path : `${GITHUB_API}${path}`;
-  const res = await fetch(url, {
+  return fetch(url, {
     ...options,
     headers: {
       Authorization: `Bearer ${token}`,
@@ -39,7 +39,6 @@ async function ghFetch(path: string, token: string, options: RequestInit = {}): 
       ...(options.headers as Record<string, string> | undefined),
     },
   });
-  return res;
 }
 
 async function ghJson<T>(path: string, token: string, options: RequestInit = {}, step?: string): Promise<T> {
@@ -239,10 +238,6 @@ export async function saveToGitHub(params: SaveToGitHubParams): Promise<SaveToGi
       isNewRepo = result.isNew;
       actualOwner = owner;
       actualRepo = repoName;
-      if (isNewRepo) {
-        await waitForRepoReady(token, actualOwner, actualRepo, defaultBranch);
-        console.info("[github-save] waitForRepoReady done");
-      }
     }
   } else {
     // 新規リポジトリ作成（422 時は既存リポジトリにフォールバック）
@@ -251,15 +246,13 @@ export async function saveToGitHub(params: SaveToGitHubParams): Promise<SaveToGi
     repoUrl = result.html_url;
     defaultBranch = result.default_branch;
     isNewRepo = result.isNew;
-    actualOwner = owner;
-    actualRepo = repoName;
     console.info(`[github-save] repo ready: isNew=${isNewRepo}, branch=${defaultBranch}`);
+  }
 
-    if (isNewRepo) {
-      // auto_init 完了を待つ（最大 5 秒）
-      await waitForRepoReady(token, actualOwner, actualRepo, defaultBranch);
-      console.info("[github-save] waitForRepoReady done");
-    }
+  // auto_init 完了を待つ（最大 5 秒）
+  if (isNewRepo) {
+    await waitForRepoReady(token, actualOwner, actualRepo, defaultBranch);
+    console.info("[github-save] waitForRepoReady done");
   }
 
   const commitMessage = isNewRepo ? "feat: DeepForm PRD & spec を追加" : "feat: DeepForm PRD & spec を更新";

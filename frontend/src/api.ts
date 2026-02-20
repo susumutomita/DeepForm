@@ -175,6 +175,7 @@ export function runReadiness(sessionId: string): Promise<ReadinessData> {
 // Pipeline (one-shot: facts → hypotheses → design)
 export interface PipelineCallbacks {
   onStageRunning: (stage: string) => void;
+  onStageStream?: (stage: string, text: string) => void;
   onStageData: (stage: string, data: any) => void;
   onDone: () => void;
   onError: (error: string) => void;
@@ -215,7 +216,9 @@ export async function runPipeline(sessionId: string, cb: PipelineCallbacks): Pro
       } else if (line.startsWith('data: ')) {
         try {
           const data = JSON.parse(line.slice(6));
-          if (currentEvent === 'stage' || (!currentEvent && data.stage)) {
+          if (currentEvent === 'stream' && data.stage && data.text) {
+            cb.onStageStream?.(data.stage, data.text);
+          } else if (currentEvent === 'stage' || (!currentEvent && data.stage)) {
             if (data.status === 'running') cb.onStageRunning(data.stage);
             else if (data.status === 'done') cb.onStageData(data.stage, data.data);
           } else if (currentEvent === 'error' || data.error) {

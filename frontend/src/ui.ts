@@ -93,7 +93,10 @@ export function appendToStreamingBubble(el: HTMLElement, text: string): void {
 /** Finalize streaming bubble — convert plain text to rendered markdown */
 export function finalizeStreamingBubble(el: HTMLElement): void {
   el.classList.remove('streaming');
-  const raw = (el.textContent || '').replace('[READY_FOR_ANALYSIS]', '').trim();
+  const raw = (el.textContent || '')
+    .replace('[READY_FOR_ANALYSIS]', '')
+    .replace(/\[CHOICES\][\s\S]*?\[\/CHOICES\]/, '')
+    .trim();
   el.innerHTML = renderMarkdown(raw);
 }
 

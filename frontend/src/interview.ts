@@ -167,10 +167,6 @@ async function startInterviewChat(): Promise<void> {
     await api.startInterviewStream(currentSessionId, {
       onDelta: (text) => appendToStreamingBubble(bubble, text),
       onDone: (data) => {
-        // Strip [CHOICES]...[/CHOICES] from displayed text
-        if (bubble.textContent) {
-          bubble.textContent = bubble.textContent.replace(/\[CHOICES\][\s\S]*?\[\/CHOICES\]/, '').trim();
-        }
         finalizeStreamingBubble(bubble);
         if (data.choices?.length) {
           showChoiceButtons('chat-container', data.choices);
@@ -207,10 +203,6 @@ export async function sendMessage(choiceText?: string): Promise<void> {
       onDelta: (text) => appendToStreamingBubble(bubble, text),
       onMeta: () => {},
       onDone: (data) => {
-        // Strip [CHOICES]...[/CHOICES] from displayed text
-        if (bubble.textContent) {
-          bubble.textContent = bubble.textContent.replace(/\[CHOICES\][\s\S]*?\[\/CHOICES\]/, '').trim();
-        }
         finalizeStreamingBubble(bubble);
         if (data.readyForAnalysis || (data.turnCount && data.turnCount >= 3)) {
           // Show the "start analysis" button — user decides when to proceed
@@ -412,9 +404,17 @@ export async function doRunFullPipeline(): Promise<void> {
   showLoading(stageLabels.facts);
 
   try {
+    let streamCharCount = 0;
     await api.runPipeline(currentSessionId, {
       onStageRunning: (stage) => {
+        streamCharCount = 0;
         showLoading(stageLabels[stage] || stage);
+      },
+      onStageStream: (_stage, _text) => {
+        streamCharCount += _text.length;
+        // Update loading with char count to show progress
+        const label = stageLabels[_stage] || _stage;
+        showLoading(`${label}（${streamCharCount} 文字生成中...）`);
       },
       onStageData: (stage, data) => {
         switch (stage) {

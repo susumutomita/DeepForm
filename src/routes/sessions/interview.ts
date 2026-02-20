@@ -94,19 +94,22 @@ Rules:
 4. If the answer is vague, dig deeper ("Could you be more specific?")
 5. Show empathy while probing
 6. Respond in ${l.langName}
-7. Keep responses concise, under 200 characters
+7. Your reply text MUST be under 150 characters (excluding the [CHOICES] block). Be brief.
 
-CRITICAL FORMAT RULE — you MUST ALWAYS end your response with a [CHOICES] block:
+OUTPUT FORMAT (MANDATORY — never omit):
+<your short question here>
+
 [CHOICES]
-Choice 1 text
-Choice 2 text
-Choice 3 text
+<choice 1>
+<choice 2>
+<choice 3>
+<choice 4>
 ${l.otherChoice}
 [/CHOICES]
 
-Never omit the [CHOICES] block. Every single response must end with it.
+The [CHOICES] block MUST appear at the very end of every response, no exceptions.
 Choices should be specific and relevant to the question you just asked.
-The last choice should always be "${l.otherChoice}".${readyNote}`;
+The last choice must always be "${l.otherChoice}".${readyNote}`;
 }
 
 const FALLBACK_CHOICES: Record<Lang, string[]> = {
@@ -160,7 +163,7 @@ interviewRoutes.post("/sessions/:id/start", async (c) => {
     const wantsStream = c.req.header("accept")?.includes("text/event-stream");
 
     if (wantsStream) {
-      const { stream, getFullText } = callClaudeStream(startMessages, systemPrompt, 512, MODEL_FAST);
+      const { stream, getFullText } = callClaudeStream(startMessages, systemPrompt, 1024, MODEL_FAST);
 
       return new Response(
         new ReadableStream({
@@ -197,7 +200,7 @@ interviewRoutes.post("/sessions/:id/start", async (c) => {
     }
 
     // Non-streaming fallback
-    const response = await callClaude(startMessages, systemPrompt, 512, MODEL_FAST);
+    const response = await callClaude(startMessages, systemPrompt, 1024, MODEL_FAST);
     const rawReply = extractText(response);
     const { text: reply, choices } = extractChoices(rawReply, lang);
 
@@ -232,7 +235,9 @@ interviewRoutes.post("/sessions/:id/chat", async (c) => {
       .where("session_id", "=", id)
       .orderBy("created_at")
       .execute();
-    const chatMessages = allMessages.map((m) => ({ role: m.role as "user" | "assistant", content: m.content }));
+    // Keep only recent messages to avoid context overflow (old context is in the system prompt's theme)
+    const recentMessages = allMessages.slice(-10);
+    const chatMessages = recentMessages.map((m) => ({ role: m.role as "user" | "assistant", content: m.content }));
 
     const turnCount = allMessages.filter((m) => m.role === "user").length;
 

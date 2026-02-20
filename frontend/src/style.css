@@ -3108,15 +3108,16 @@ a:hover { color: var(--primary-hover); }
   letter-spacing: 0.03em;
 }
 
+
 /* Mobile: analytics dashboard */
-@media (max-width: 768px) {
+@media (max-width: 600px) {
   .analytics-dashboard {
-    padding: 0.75rem;
+    padding: 0;
   }
   .analytics-header {
     flex-direction: column;
     align-items: flex-start;
-    gap: 0.75rem;
+    gap: 0.5rem;
   }
   .analytics-header h2 {
     font-size: 1.1rem;
@@ -3126,17 +3127,17 @@ a:hover { color: var(--primary-hover); }
     justify-content: space-between;
   }
   .analytics-cards {
-    grid-template-columns: repeat(2, 1fr);
-    gap: 0.5rem;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 0.4rem;
   }
   .analytics-card {
-    padding: 0.75rem;
+    padding: 0.6rem 0.4rem;
   }
   .analytics-card-value {
-    font-size: 1.5rem;
+    font-size: 1.1rem;
   }
   .analytics-card-label {
-    font-size: 0.65rem;
+    font-size: 0.6rem;
   }
   .analytics-section {
     padding: 0.75rem;
@@ -3152,7 +3153,7 @@ a:hover { color: var(--primary-hover); }
   }
   .analytics-table th,
   .analytics-table td {
-    padding: 0.35rem 0.5rem;
+    padding: 0.35rem 0.4rem;
   }
   .analytics-bar-chart {
     gap: 0.25rem;

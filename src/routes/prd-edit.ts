@@ -2,7 +2,7 @@ import { Hono } from "hono";
 import { z } from "zod";
 import { db } from "../db/index.ts";
 import { getOwnedSession, isResponse } from "../helpers/session-ownership.ts";
-import { callClaude, extractText } from "../llm.ts";
+import { callClaude, extractText, MODEL_FAST } from "../llm.ts";
 import type { AppEnv } from "../types.ts";
 
 const prdEditRoutes = new Hono<AppEnv>();
@@ -82,7 +82,7 @@ prdEditRoutes.post("/api/sessions/:id/prd/suggest", async (c) => {
   ].join("\n");
 
   try {
-    const response = await callClaude([{ role: "user", content: userMessage }], systemPrompt, 1024);
+    const response = await callClaude([{ role: "user", content: userMessage }], systemPrompt, 1024, MODEL_FAST);
     const text = extractText(response);
 
     // Parse the JSON array from Claude's response
@@ -162,6 +162,7 @@ prdEditRoutes.post("/api/sessions/:id/prd/apply", async (c) => {
         [{ role: "user", content: validationMessage }],
         validationSystemPrompt,
         512,
+        MODEL_FAST,
       );
       const validationText = extractText(validationResponse);
       const validationMatch = validationText.match(/\{[\s\S]*\}/);
@@ -203,7 +204,12 @@ prdEditRoutes.post("/api/sessions/:id/prd/apply", async (c) => {
         `上記の元の文で「${selectedText}」を「${newText}」の意味を反映させて自然に書き換えた文を出力してください。`,
       ].join("\n");
 
-      const rewriteResponse = await callClaude([{ role: "user", content: rewriteMessage }], rewriteSystemPrompt, 1024);
+      const rewriteResponse = await callClaude(
+        [{ role: "user", content: rewriteMessage }],
+        rewriteSystemPrompt,
+        1024,
+        MODEL_FAST,
+      );
       const updatedText = extractText(rewriteResponse)
         .trim()
         .replace(/^[「『]|[」』]$/g, "");

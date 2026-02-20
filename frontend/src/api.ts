@@ -230,6 +230,11 @@ export async function runPipeline(sessionId: string, cb: PipelineCallbacks): Pro
   }
 }
 
+// GitHub Save
+export function saveToGitHub(sessionId: string): Promise<{ repoUrl: string; commitSha: string; filesCommitted: string[]; isNewRepo: boolean }> {
+  return post(`/api/sessions/${sessionId}/github-save`);
+}
+
 // Spec Export
 export function getSpecExport(sessionId: string): Promise<{ theme: string; spec: unknown; prdMarkdown: string | null; exportedAt: string }> {
   return request(`/api/sessions/${sessionId}/spec-export`);

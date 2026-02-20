@@ -1,4 +1,5 @@
 import crypto from "node:crypto";
+import geoip from "geoip-lite";
 import { createMiddleware } from "hono/factory";
 import { now } from "../db/helpers.ts";
 import { db } from "../db/index.ts";
@@ -17,6 +18,17 @@ setInterval(() => {
     if (ts - hitTs > DEDUP_WINDOW_MS) recentHits.delete(key);
   }
 }, 60_000);
+
+// --- IP geolocation (local DB, no external API calls) ---
+function lookupCountry(ip: string): string | null {
+  if (!ip || ip === "unknown" || ip === "127.0.0.1" || ip === "::1") return null;
+  try {
+    const geo = geoip.lookup(ip);
+    return geo?.country ?? null;
+  } catch {
+    return null;
+  }
+}
 
 export const analyticsMiddleware = createMiddleware(async (c, next) => {
   await next();
@@ -47,6 +59,9 @@ export const analyticsMiddleware = createMiddleware(async (c, next) => {
     const utmMedium = url.searchParams.get("utm_medium") || null;
     const utmCampaign = url.searchParams.get("utm_campaign") || null;
 
+    // Resolve country from local GeoIP database (no external API call)
+    const country = lookupCountry(ip);
+
     await db
       .insertInto("page_views")
       .values({
@@ -56,6 +71,7 @@ export const analyticsMiddleware = createMiddleware(async (c, next) => {
         referer,
         user_agent: ua,
         ip_address: ip,
+        country,
         user_id: user?.id || null,
         session_fingerprint: fingerprint,
         utm_source: utmSource,

@@ -14,6 +14,8 @@ vi.mock("@hono/node-server/serve-static", () => ({
 
 // LLM モック
 vi.mock("../llm.ts", () => ({
+  MODEL_FAST: "claude-sonnet-4-6",
+  MODEL_SMART: "claude-opus-4-6",
   callClaude: vi.fn().mockResolvedValue({
     content: [{ type: "text", text: "モック応答" }],
   }),

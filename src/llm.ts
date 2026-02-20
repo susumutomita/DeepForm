@@ -3,6 +3,9 @@ import http from "node:http";
 import https from "node:https";
 import { Readable } from "node:stream";
 
+export const MODEL_FAST = process.env.ANTHROPIC_MODEL_FAST ?? "claude-sonnet-4-6";
+export const MODEL_SMART = process.env.ANTHROPIC_MODEL ?? "claude-opus-4-6";
+
 const LLM_GATEWAY = "http://169.254.169.254/gateway/llm/anthropic/v1/messages";
 const ANTHROPIC_API = "https://api.anthropic.com/v1/messages";
 const CLAUDE_CODE_PREFIX = "You are Claude Code, Anthropic's official CLI for Claude.";
@@ -144,7 +147,8 @@ function doRequest(endpoint: { url: URL; apiKey: string | null }, body: string):
         try {
           const parsed = JSON.parse(data) as ClaudeResponse;
           if (parsed.error) {
-            reject(new Error(parsed.error.message || JSON.stringify(parsed.error)));
+            const msg = parsed.error.message || JSON.stringify(parsed.error);
+            reject(new Error(`[${res.statusCode}] ${msg}`));
           } else {
             resolve(parsed);
           }
@@ -163,10 +167,15 @@ function doRequest(endpoint: { url: URL; apiKey: string | null }, body: string):
   });
 }
 
-export async function callClaude(messages: ClaudeMessage[], system: string, maxTokens = 4096): Promise<ClaudeResponse> {
+export async function callClaude(
+  messages: ClaudeMessage[],
+  system: string,
+  maxTokens = 4096,
+  model?: string,
+): Promise<ClaudeResponse> {
   const endpoint = resolveEndpoint();
   const body = JSON.stringify({
-    model: process.env.ANTHROPIC_MODEL ?? "claude-sonnet-4-5-20250929",
+    model: model ?? MODEL_SMART,
     max_tokens: maxTokens,
     system: buildSystemPrompt(endpoint.apiKey, system),
     messages,
@@ -181,7 +190,7 @@ export async function callClaude(messages: ClaudeMessage[], system: string, maxT
       if (newKey) {
         const retryEndpoint = resolveEndpoint();
         const retryBody = JSON.stringify({
-          model: process.env.ANTHROPIC_MODEL ?? "claude-sonnet-4-5-20250929",
+          model: model ?? MODEL_SMART,
           max_tokens: maxTokens,
           system: buildSystemPrompt(retryEndpoint.apiKey, system),
           messages,
@@ -200,10 +209,11 @@ export function callClaudeStream(
   messages: ClaudeMessage[],
   system: string,
   maxTokens = 4096,
+  model?: string,
 ): { stream: import("node:stream").Readable; getFullText: () => string } {
   const endpoint = resolveEndpoint();
   const body = JSON.stringify({
-    model: process.env.ANTHROPIC_MODEL ?? "claude-sonnet-4-5-20250929",
+    model: model ?? MODEL_SMART,
     max_tokens: maxTokens,
     stream: true,
     system: buildSystemPrompt(endpoint.apiKey, system),

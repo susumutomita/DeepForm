@@ -4,7 +4,7 @@ import { now } from "../../db/helpers.ts";
 import { db } from "../../db/index.ts";
 import { formatZodError } from "../../helpers/format.ts";
 import { getOwnedSession, isResponse } from "../../helpers/session-ownership.ts";
-import { callClaude, callClaudeStream, extractText } from "../../llm.ts";
+import { callClaude, callClaudeStream, extractText, MODEL_FAST } from "../../llm.ts";
 import type { AppEnv } from "../../types.ts";
 import { chatMessageSchema } from "../../validation.ts";
 
@@ -18,35 +18,42 @@ function resolveLang(raw?: string): Lang {
   return "ja";
 }
 
-const LANG_LABEL: Record<Lang, { langName: string; otherChoice: string; startMsg: string; alreadyStarted: string }> = {
+interface LangConfig {
+  langName: string;
+  otherChoice: string;
+  startMsg: (theme: string) => string;
+  alreadyStarted: string;
+}
+
+const LANG_LABEL: Record<Lang, LangConfig> = {
   ja: {
     langName: "日本語",
     otherChoice: "その他（自分で入力）",
     startMsg: (theme: string) => `テーマ「${theme}」についてインタビューを始めてください。`,
     alreadyStarted: "インタビューは既に開始されています。",
-  } as any,
+  },
   en: {
     langName: "English",
     otherChoice: "Other (type your own)",
     startMsg: (theme: string) => `Please start the interview about: "${theme}"`,
     alreadyStarted: "Interview has already started.",
-  } as any,
+  },
   es: {
     langName: "español",
     otherChoice: "Otro (escribir)",
     startMsg: (theme: string) => `Por favor, comienza la entrevista sobre: "${theme}"`,
     alreadyStarted: "La entrevista ya ha comenzado.",
-  } as any,
+  },
   zh: {
     langName: "中文",
     otherChoice: "其他（自己输入）",
-    startMsg: (theme: string) => `请开始关于“${theme}”的访谈。`,
+    startMsg: (theme: string) => `请开始关于"${theme}"的访谈。`,
     alreadyStarted: "访谈已经开始。",
-  } as any,
+  },
 };
 
 function getStartMsg(lang: Lang, theme: string): string {
-  return (LANG_LABEL[lang] as any).startMsg(theme);
+  return LANG_LABEL[lang].startMsg(theme);
 }
 
 function buildStartPrompt(lang: Lang, theme: string): string {
@@ -58,8 +65,7 @@ Topic: "${theme}"
 Ask exactly ONE opening question to understand the current situation.
 Be empathetic and approachable. Respond in ${l.langName}.
 
-IMPORTANT: After your question, provide 3-5 answer choices the user can select from.
-Format them as:
+CRITICAL FORMAT RULE — you MUST end your response with a [CHOICES] block:
 [CHOICES]
 Choice 1 text
 Choice 2 text
@@ -67,7 +73,7 @@ Choice 3 text
 ${l.otherChoice}
 [/CHOICES]
 
-Choices should be specific and cover different situations or answer patterns.
+Never omit the [CHOICES] block. Choices should be specific to the question.
 The last choice should always be "${l.otherChoice}".`;
 }
 
@@ -90,8 +96,7 @@ Rules:
 6. Respond in ${l.langName}
 7. Keep responses concise, under 200 characters
 
-IMPORTANT: After your question, provide 3-5 answer choices the user can select from.
-Format them as:
+CRITICAL FORMAT RULE — you MUST ALWAYS end your response with a [CHOICES] block:
 [CHOICES]
 Choice 1 text
 Choice 2 text
@@ -99,20 +104,31 @@ Choice 3 text
 ${l.otherChoice}
 [/CHOICES]
 
-Choices should be specific and cover different situations or answer patterns.
+Never omit the [CHOICES] block. Every single response must end with it.
+Choices should be specific and relevant to the question you just asked.
 The last choice should always be "${l.otherChoice}".${readyNote}`;
 }
 
-function extractChoices(text: string): { text: string; choices: string[] } {
+const FALLBACK_CHOICES: Record<Lang, string[]> = {
+  ja: ["はい、そうです", "いいえ、違います", "もう少し詳しく聞きたいです", "その他（自分で入力）"],
+  en: ["Yes, that's right", "No, that's different", "I'd like to explain more", "Other (type your own)"],
+  es: ["Sí, así es", "No, es diferente", "Me gustaría explicar más", "Otro (escribir)"],
+  zh: ["是的，没错", "不是，不一样", "我想详细说明", "其他（自己输入）"],
+};
+
+export function extractChoices(text: string, lang?: Lang): { text: string; choices: string[] } {
   const match = text.match(/\[CHOICES\]([\s\S]*?)\[\/CHOICES\]/);
-  if (!match) return { text: text.trim(), choices: [] };
+  if (!match) {
+    // Fallback: provide default choices so the UI is never stuck
+    return { text: text.trim(), choices: FALLBACK_CHOICES[lang ?? "en"] };
+  }
   const choicesText = match[1].trim();
   const choices = choicesText
     .split("\n")
     .map((c) => c.trim())
     .filter((c) => c.length > 0);
   const cleanText = text.replace(/\[CHOICES\][\s\S]*?\[\/CHOICES\]/, "").trim();
-  return { text: cleanText, choices };
+  return { text: cleanText, choices: choices.length > 0 ? choices : FALLBACK_CHOICES[lang ?? "en"] };
 }
 
 export const interviewRoutes = new Hono<AppEnv>();
@@ -144,7 +160,7 @@ interviewRoutes.post("/sessions/:id/start", async (c) => {
     const wantsStream = c.req.header("accept")?.includes("text/event-stream");
 
     if (wantsStream) {
-      const { stream, getFullText } = callClaudeStream(startMessages, systemPrompt, 512);
+      const { stream, getFullText } = callClaudeStream(startMessages, systemPrompt, 512, MODEL_FAST);
 
       return new Response(
         new ReadableStream({
@@ -156,7 +172,7 @@ interviewRoutes.post("/sessions/:id/start", async (c) => {
             });
             stream.on("end", () => {
               const fullText = getFullText();
-              const { text: cleanText, choices } = extractChoices(fullText);
+              const { text: cleanText, choices } = extractChoices(fullText, lang);
               db.insertInto("messages")
                 .values({ session_id: id, role: "assistant", content: cleanText })
                 .execute()
@@ -181,9 +197,9 @@ interviewRoutes.post("/sessions/:id/start", async (c) => {
     }
 
     // Non-streaming fallback
-    const response = await callClaude(startMessages, systemPrompt, 512);
+    const response = await callClaude(startMessages, systemPrompt, 512, MODEL_FAST);
     const rawReply = extractText(response);
-    const { text: reply, choices } = extractChoices(rawReply);
+    const { text: reply, choices } = extractChoices(rawReply, lang);
 
     await db.insertInto("messages").values({ session_id: id, role: "assistant", content: reply }).execute();
 
@@ -226,7 +242,7 @@ interviewRoutes.post("/sessions/:id/chat", async (c) => {
     const wantsStream = c.req.header("accept")?.includes("text/event-stream");
 
     if (wantsStream) {
-      const { stream, getFullText } = callClaudeStream(chatMessages, systemPrompt, 1024);
+      const { stream, getFullText } = callClaudeStream(chatMessages, systemPrompt, 1024, MODEL_FAST);
 
       return new Response(
         new ReadableStream({
@@ -241,7 +257,7 @@ interviewRoutes.post("/sessions/:id/chat", async (c) => {
             });
             stream.on("end", () => {
               const fullText = getFullText();
-              const { text: cleanText, choices } = extractChoices(fullText);
+              const { text: cleanText, choices } = extractChoices(fullText, lang);
               db.insertInto("messages")
                 .values({ session_id: id, role: "assistant", content: cleanText })
                 .execute()
@@ -269,9 +285,9 @@ interviewRoutes.post("/sessions/:id/chat", async (c) => {
     }
 
     // Non-streaming fallback
-    const response = await callClaude(chatMessages, systemPrompt, 1024);
+    const response = await callClaude(chatMessages, systemPrompt, 1024, MODEL_FAST);
     const rawReply = extractText(response);
-    const { text: cleanReply, choices } = extractChoices(rawReply);
+    const { text: cleanReply, choices } = extractChoices(rawReply, lang);
 
     await db
       .insertInto("messages")

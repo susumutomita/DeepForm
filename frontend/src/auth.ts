@@ -27,6 +27,12 @@ export function updateAuthUI(): void {
   const userName = document.getElementById('user-name');
   const userAvatar = document.getElementById('user-avatar') as HTMLImageElement | null;
 
+  // GitHub 連携済みユーザーにのみ GitHub 保存ボタンを表示
+  const githubSaveBtn = document.getElementById('btn-github-save');
+  if (githubSaveBtn) {
+    githubSaveBtn.style.display = currentUser?.githubConnected ? '' : 'none';
+  }
+
   if (currentUser) {
     if (loginBtn) loginBtn.style.display = 'none';
     if (userInfo) userInfo.style.display = 'flex';

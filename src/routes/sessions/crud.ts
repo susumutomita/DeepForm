@@ -8,6 +8,7 @@ import { formatZodError } from "../../helpers/format.ts";
 import { getOwnedSession, isResponse } from "../../helpers/session-ownership.ts";
 import type { AnalysisResult, AppEnv, Message, Session } from "../../types.ts";
 import { createSessionSchema, visibilitySchema } from "../../validation.ts";
+import { extractJsonFromLLM } from "./analysis.ts";
 
 export const crudRoutes = new Hono<AppEnv>();
 
@@ -119,7 +120,24 @@ crudRoutes.get("/sessions/:id", async (c) => {
 
     const analysisMap: Record<string, unknown> = {};
     for (const a of analyses) {
-      analysisMap[a.type] = JSON.parse(a.data);
+      let parsed = JSON.parse(a.data);
+
+      // 破損データの修復: problemDefinition に生 JSON が入っている場合は再パース
+      if (parsed?.prd?.problemDefinition && /^```|^\{/.test(parsed.prd.problemDefinition.trim())) {
+        const repaired = extractJsonFromLLM(parsed.prd.problemDefinition);
+        if (repaired && typeof repaired === "object" && "prd" in (repaired as Record<string, unknown>)) {
+          parsed = repaired;
+          // 修復結果を DB に永続化（次回以降の修復を省略）
+          db.updateTable("analysis_results")
+            .set({ data: JSON.stringify(parsed) })
+            .where("session_id", "=", a.session_id)
+            .where("type", "=", a.type)
+            .execute()
+            .catch((err) => console.error("Failed to persist repaired data:", err));
+        }
+      }
+
+      analysisMap[a.type] = parsed;
     }
 
     // Lookup campaign created from this session

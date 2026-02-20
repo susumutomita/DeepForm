@@ -7,10 +7,87 @@ import { db } from "../../db/index.ts";
 import { saveAnalysisResult } from "../../helpers/analysis-store.ts";
 import { generatePRDMarkdown } from "../../helpers/format.ts";
 import { getOwnedSession, isResponse } from "../../helpers/session-ownership.ts";
-import { callClaude, extractText } from "../../llm.ts";
+import { callClaude, extractText, MODEL_FAST, MODEL_SMART } from "../../llm.ts";
 import type { AppEnv, Session } from "../../types.ts";
 
 const PAYMENT_LINK = "https://buy.stripe.com/test_dRmcMXbrh3Q8ggx8DA48000";
+
+/** 切り詰められた JSON を閉じ括弧を補完して修復する */
+export function repairTruncatedJson(text: string): unknown | null {
+  const stack: string[] = [];
+  let inString = false;
+  let escaped = false;
+
+  for (const ch of text) {
+    if (escaped) {
+      escaped = false;
+      continue;
+    }
+    if (ch === "\\" && inString) {
+      escaped = true;
+      continue;
+    }
+    if (ch === '"') {
+      inString = !inString;
+      continue;
+    }
+    if (inString) continue;
+    if (ch === "{") stack.push("}");
+    else if (ch === "[") stack.push("]");
+    else if ((ch === "}" || ch === "]") && stack.length > 0) stack.pop();
+  }
+
+  let repaired = text;
+  if (inString) repaired += '"';
+  while (stack.length > 0) repaired += stack.pop();
+
+  try {
+    return JSON.parse(repaired);
+  } catch {
+    return null;
+  }
+}
+
+/** LLM レスポンスから JSON を抽出する。コードフェンスやテキスト混在に対応 */
+export function extractJsonFromLLM(text: string): unknown | null {
+  const trimmed = text.trim();
+
+  // 1. そのまま JSON として解析
+  try {
+    return JSON.parse(trimmed);
+  } catch {}
+
+  // 2. Markdown コードフェンスの中身を抽出
+  const fenceMatch = trimmed.match(/```(?:json)?\s*\n?([\s\S]*?)\n?```/);
+  if (fenceMatch) {
+    try {
+      return JSON.parse(fenceMatch[1].trim());
+    } catch {}
+  }
+
+  // 3. 正規表現で JSON オブジェクトを抽出
+  const jsonMatch = trimmed.match(/\{[\s\S]*\}/);
+  if (jsonMatch) {
+    try {
+      return JSON.parse(jsonMatch[0]);
+    } catch {}
+  }
+
+  // 4. 切り詰められた JSON の修復を試行
+  const fenceContent = trimmed.match(/```(?:json)?\s*\n?([\s\S]*)/);
+  if (fenceContent) {
+    const inner = fenceContent[1].replace(/\n?```\s*$/, "").trim();
+    const result = repairTruncatedJson(inner);
+    if (result) return result;
+  }
+  const jsonStart = trimmed.match(/\{[\s\S]*/);
+  if (jsonStart) {
+    const result = repairTruncatedJson(jsonStart[0]);
+    if (result) return result;
+  }
+
+  return null;
+}
 
 /**
  * Pro ゲートチェック。requiresProForStep() が true の場合のみ課金壁を適用する。
@@ -88,14 +165,12 @@ severityは "high", "medium", "low" のいずれか。
       [{ role: "user", content: `以下のインタビュー記録を分析してください：\n\n${transcript}` }],
       systemPrompt,
       4096,
+      MODEL_FAST,
     );
     const text = extractText(response);
 
-    let facts: unknown;
-    try {
-      const jsonMatch = text.match(/\{[\s\S]*\}/);
-      facts = JSON.parse(jsonMatch?.[0] as string);
-    } catch {
+    let facts: unknown = extractJsonFromLLM(text);
+    if (!facts) {
       facts = { facts: [{ id: "F1", type: "fact", content: text, evidence: "", severity: "medium" }] };
     }
 
@@ -166,11 +241,8 @@ IMPORTANT: Respond in the SAME LANGUAGE as the input facts.
     );
     const text = extractText(response);
 
-    let hypotheses: unknown;
-    try {
-      const jsonMatch = text.match(/\{[\s\S]*\}/);
-      hypotheses = JSON.parse(jsonMatch?.[0] as string);
-    } catch {
+    let hypotheses: unknown = extractJsonFromLLM(text);
+    if (!hypotheses) {
       hypotheses = {
         hypotheses: [
           { id: "H1", title: text, description: "", supportingFacts: [], counterEvidence: "", unverifiedPoints: [] },
@@ -286,7 +358,27 @@ IMPORTANT: Respond in the SAME LANGUAGE as the input data.
         "definition": "計測方法",
         "target": "目標値"
       }
-    ]
+    ],
+    "apiIntegration": {
+      "endpoints": [
+        {
+          "method": "GET|POST|PUT|DELETE",
+          "path": "/api/resource",
+          "description": "外部から呼び出せるAPIエンドポイントの説明",
+          "auth": "APIキー認証 or OAuth2",
+          "requestBody": "リクエスト形式（該当する場合）",
+          "response": "レスポンス形式"
+        }
+      ],
+      "webhooks": [
+        {
+          "event": "イベント名（例: resource.created）",
+          "payload": "通知ペイロードの概要",
+          "description": "外部サービスに通知するイベント"
+        }
+      ],
+      "externalServices": ["連携可能な外部サービス例"]
+    }
   }
 }
 
@@ -294,6 +386,7 @@ IMPORTANT: Respond in the SAME LANGUAGE as the input data.
 - 抽象語は禁止（「改善する」「最適化する」などNG）
 - テスト可能な条件のみ記述
 - MVP スコープに圧縮（コア機能は最大5つ）
+- API連携は必須：すべてのプロダクトは外部から呼び出せるREST APIエンドポイントを必ず含むこと。他のサービスからデータを取得・操作できるAPIと、外部にイベントを通知するwebhookを設計に含める。これにより単体で完結せず、他のプロダクトと連携してエコシステムを構成できる設計にする
 - 各機能に受け入れ基準を必ず付ける
 - 各機能にエッジケース（異常入力、境界値、同時操作、権限不足、ネットワーク断など）を必ず列挙する
 - qualityRequirements は ISO/IEC 25010 の8品質特性すべてを網羅し、テーマに合った具体的な基準を書く
@@ -325,11 +418,8 @@ IMPORTANT: Respond in the SAME LANGUAGE as the input data.
     );
     const text = extractText(response);
 
-    let prd: any;
-    try {
-      const jsonMatch = text.match(/\{[\s\S]*\}/);
-      prd = JSON.parse(jsonMatch?.[0] as string);
-    } catch {
+    let prd: unknown = extractJsonFromLLM(text);
+    if (!prd) {
       prd = {
         prd: {
           problemDefinition: text,
@@ -377,80 +467,64 @@ analysisRoutes.post("/sessions/:id/spec", async (c) => {
 
     const prd = JSON.parse(prdRow.data);
 
-    const systemPrompt = `You are a tech lead. Generate an implementation spec for a coding agent from the PRD.
+    const systemPrompt = `You are a tech lead. Generate a COMPACT implementation spec as Markdown for a coding agent.
 
 IMPORTANT: Respond in the SAME LANGUAGE as the input PRD.
 
-必ず以下のJSON形式で返してください。JSON以外のテキストは含めないでください。
+OUTPUT FORMAT: Return ONLY a JSON object with one field:
+{"spec":{"raw":"<markdown text>"}}
 
-{
-  "spec": {
-    "projectName": "プロジェクト名",
-    "techStack": {
-      "frontend": "技術スタック",
-      "backend": "技術スタック",
-      "database": "データベース"
-    },
-    "apiEndpoints": [
-      {
-        "method": "GET",
-        "path": "/api/xxx",
-        "description": "説明",
-        "request": {},
-        "response": {}
-      }
-    ],
-    "dbSchema": "CREATE TABLE ...",
-    "screens": [
-      {
-        "name": "画面名",
-        "path": "/path",
-        "components": ["コンポーネント1"],
-        "description": "画面の説明"
-      }
-    ],
-    "testCases": [
-      {
-        "category": "カテゴリ",
-        "cases": [
-          {
-            "name": "テスト名",
-            "given": "前提条件",
-            "when": "操作",
-            "then": "期待結果"
-          }
-        ]
-      }
-    ]
-  }
-}
+The markdown inside "raw" MUST follow this exact template (fill in the blanks, keep it short):
 
-ルール：
-- 具体的なAPI仕様（メソッド、パス、リクエスト/レスポンス形式）
-- 具体的なDBスキーマ（CREATE TABLE文）
-- 画面一覧と主要コンポーネント
-- テストケース（Given-When-Then形式）
-- コーディングエージェントがそのまま実装に着手できるレベルの具体性
+# {Project Name} — Implementation Spec
 
-実装制約（CRITICAL — コーディングエージェントへの必須ルール）：
-- モックデータ、ハードコードされた配列、スタブ API での実装は禁止。すべてのデータは実際の DB/API から取得・保存すること
-- 「見た目が動く」を完成扱いにしない。データ経路が実物であることが完了条件
-- バックエンド API が未実装の場合、UI より先にバックエンドの最小実装を作ること
-- 未実装の機能は UI 上で「未実装」と明示表示し、モックで補完してはならない
-- テストケースの then（期待結果）には「DB にレコードが保存される」「API から実データが返る」等のデータ経路検証を含めること`;
+## Tech Stack
+- Frontend: {e.g. React + TypeScript + Vite}
+- Backend: {e.g. Node.js + Hono + TypeScript}
+- Database: {e.g. SQLite}
+
+## API Endpoints (top 5 only)
+| Method | Path | Description |
+|--------|------|-------------|
+| POST | /api/xxx | 1-line desc |
+
+## Database Schema
+\`\`\`sql
+CREATE TABLE xxx (...);
+\`\`\`
+Max 4 tables. Minimal columns.
+
+## Screens (max 4)
+| Screen | Path | Description |
+|--------|------|-------------|
+| Home | / | 1-line desc |
+
+## Key Test Cases (max 5)
+| Test | Given | When | Then |
+|------|-------|------|------|
+| Name | Setup | Action | Expected |
+
+## Implementation Constraints
+- Real DB/API connections only. No mock data.
+- Backend-first: implement API before UI.
+- Show "Not implemented" for unfinished features.
+- All API endpoints must be callable by external services (API-first design).
+
+SIZE RULES (HARD LIMITS):
+- Total output MUST be under 2000 tokens.
+- Max 5 API endpoints, 4 tables, 4 screens, 5 test cases.
+- 1-line descriptions only. No paragraphs.`;
 
     const response = await callClaude(
       [{ role: "user", content: `以下のPRDから実装仕様を生成してください：\n\n${JSON.stringify(prd, null, 2)}` }],
       systemPrompt,
-      8192,
+      4096,
+      MODEL_FAST,
     );
     const text = extractText(response);
 
-    let spec: any;
-    try {
-      const jsonMatch = text.match(/\{[\s\S]*\}/);
-      spec = JSON.parse(jsonMatch?.[0] as string);
-    } catch {
+    let spec: Record<string, unknown> = extractJsonFromLLM(text) as Record<string, unknown>;
+    if (!spec) {
       spec = { spec: { raw: text } };
     }
 
@@ -549,14 +623,12 @@ IMPORTANT: Respond in the SAME LANGUAGE as the input data.
       ],
       systemPrompt,
       8192,
+      MODEL_SMART,
     );
     const text = extractText(response);
 
-    let readiness: unknown;
-    try {
-      const jsonMatch = text.match(/\{[\s\S]*\}/);
-      readiness = JSON.parse(jsonMatch?.[0] as string);
-    } catch {
+    let readiness: unknown = extractJsonFromLLM(text);
+    if (!readiness) {
       readiness = {
         readiness: {
           categories: [

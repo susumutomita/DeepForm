@@ -13,6 +13,8 @@ vi.mock("../../db/index.ts", async () => {
 
 // Mock LLM
 vi.mock("../../llm.ts", () => ({
+  MODEL_FAST: "claude-sonnet-4-6",
+  MODEL_SMART: "claude-opus-4-6",
   callClaude: vi.fn().mockResolvedValue({
     content: [{ type: "text", text: "モック LLM レスポンス" }],
   }),
@@ -996,16 +998,16 @@ describe("セッション API", () => {
       expect(data.reply).not.toContain("[CHOICES]");
     });
 
-    it("[CHOICES] ブロックがない場合は空の choices 配列を返すこと", async () => {
+    it("[CHOICES] ブロックがない場合はフォールバック選択肢を返すこと", async () => {
       // Given: LLM が [CHOICES] ブロックなしの返答を返す
       insertSession("schoice-none", "選択肢なしテスト", TEST_USER_ID);
       vi.mocked(extractText).mockReturnValueOnce("選択肢のない質問です。");
       // When: start
       const res = await authedRequest("/api/sessions/schoice-none/start", { method: "POST" });
-      // Then: 空の choices
+      // Then: フォールバック選択肢が返る
       expect(res.status).toBe(200);
       const data = (await res.json()) as any;
-      expect(data.choices).toEqual([]);
+      expect(data.choices.length).toBeGreaterThan(0);
       expect(data.reply).toBe("選択肢のない質問です。");
     });
   });
@@ -1172,7 +1174,7 @@ describe("セッション API", () => {
     it("生成された token で deploy-bundle にアクセスできること", async () => {
       // Given: deploy-token を生成
       const tokenRes = await authedRequest("/api/sessions/stoken/deploy-token", { method: "POST" });
-      const tokenData = (await tokenRes.json()) as any;
+      await tokenRes.json();
       // DB から直接 token を取得
       const session = rawDb.prepare("SELECT deploy_token FROM sessions WHERE id = ?").get("stoken") as any;
       const token = session.deploy_token;

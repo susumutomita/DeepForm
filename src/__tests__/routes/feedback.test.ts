@@ -13,6 +13,8 @@ vi.mock("../../db/index.ts", async () => {
 
 // Mock LLM (feedbackルートでは使わないが、app.ts の依存で必要)
 vi.mock("../../llm.ts", () => ({
+  MODEL_FAST: "claude-sonnet-4-6",
+  MODEL_SMART: "claude-opus-4-6",
   callClaude: vi.fn().mockResolvedValue({
     content: [{ type: "text", text: "モック LLM レスポンス" }],
   }),

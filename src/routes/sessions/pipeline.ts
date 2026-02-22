@@ -12,7 +12,7 @@
  */
 
 import { Hono } from "hono";
-import { ANALYSIS_TYPE, requiresProForStep, SESSION_STATUS } from "../../constants.ts";
+import { ANALYSIS_TYPE, READINESS_SYSTEM, requiresProForStep, SESSION_STATUS } from "../../constants.ts";
 import { now } from "../../db/helpers.ts";
 import { db } from "../../db/index.ts";
 import { saveAnalysisResult } from "../../helpers/analysis-store.ts";
@@ -520,6 +520,113 @@ pipelineRoutes.post("/sessions/:id/pipeline", async (c) => {
   });
 
   return new Response(stream, {
+    headers: {
+      "Content-Type": "text/event-stream",
+      "Cache-Control": "no-cache",
+      Connection: "keep-alive",
+    },
+  });
+});
+
+// ---------------------------------------------------------------------------
+// POST /sessions/:id/readiness-stream — SSE streaming readiness check
+// ---------------------------------------------------------------------------
+pipelineRoutes.post("/sessions/:id/readiness-stream", async (c) => {
+  // Pro gate
+  if (requiresProForStep("readiness")) {
+    const user = c.get("user");
+    if (!user) {
+      return c.json({ error: "Login required for this feature", upgrade: true }, 401);
+    }
+    const row = await db.selectFrom("users").select("plan").where("id", "=", user.id).executeTakeFirst();
+    if (row?.plan !== "pro") {
+      return c.json(
+        { error: "Pro plan required", upgrade: true, upgradeUrl: `${PAYMENT_LINK}?client_reference_id=${user.id}` },
+        402,
+      );
+    }
+  }
+
+  const result = await getOwnedSession(c);
+  if (isResponse(result)) return result;
+  const session = result as Session;
+  const id = session.id;
+
+  const specRow = await db
+    .selectFrom("analysis_results")
+    .select("data")
+    .where("session_id", "=", id)
+    .where("type", "=", ANALYSIS_TYPE.SPEC)
+    .executeTakeFirst();
+  if (!specRow) return c.json({ error: "先に実装仕様の生成を実行してください" }, 400);
+
+  const spec = JSON.parse(specRow.data);
+  const prdRow = await db
+    .selectFrom("analysis_results")
+    .select("data")
+    .where("session_id", "=", id)
+    .where("type", "=", ANALYSIS_TYPE.PRD)
+    .executeTakeFirst();
+  const prd = prdRow ? JSON.parse(prdRow.data) : {};
+
+  const sseStream = new ReadableStream({
+    async start(controller) {
+      const encoder = new TextEncoder();
+      function send(event: string, data: unknown) {
+        controller.enqueue(encoder.encode(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`));
+      }
+
+      try {
+        send("stage", { stage: "readiness", status: "running" });
+        const readinessText = await streamLLM(
+          [
+            {
+              role: "user",
+              content: `以下のPRDと実装仕様に基づいてプロダクションレディネスチェックリストを生成してください：\n\nPRD:\n${JSON.stringify(prd, null, 2)}\n\n実装仕様:\n${JSON.stringify(spec, null, 2)}`,
+            },
+          ],
+          READINESS_SYSTEM,
+          8192,
+          MODEL_SMART,
+          "readiness",
+          send,
+        );
+
+        let readiness: unknown = parseJSON(readinessText, null);
+        if (!readiness) {
+          readiness = {
+            readiness: {
+              categories: [
+                {
+                  id: "functionalSuitability",
+                  label: "機能適合性",
+                  items: [{ id: "FS-1", description: readinessText, priority: "must", rationale: "" }],
+                },
+              ],
+            },
+          };
+        }
+
+        await saveAnalysisResult(id, ANALYSIS_TYPE.READINESS, readiness);
+        await db
+          .updateTable("sessions")
+          .set({ status: SESSION_STATUS.READINESS_CHECKED, updated_at: now() })
+          .where("id", "=", id)
+          .execute();
+
+        send("stage", { stage: "readiness", status: "done", data: readiness });
+        send("done", {});
+        // biome-ignore lint/suspicious/noExplicitAny: error handling
+      } catch (e: any) {
+        console.error("Readiness stream error:", e);
+        send("error", { error: e.message || "Internal Server Error" });
+      } finally {
+        controller.close();
+      }
+    },
+  });
+
+  return new Response(sseStream, {
     headers: {
       "Content-Type": "text/event-stream",
       "Cache-Control": "no-cache",

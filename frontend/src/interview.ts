@@ -367,21 +367,41 @@ export async function doRunSpec(): Promise<void> {
 export async function doRunReadiness(): Promise<void> {
   if (!currentSessionId) return;
   showLoading(t('loading.readiness'));
+  showStreamingPreview();
   try {
-    const data = await api.runReadiness(currentSessionId);
-    const categories = data.readiness?.categories ?? data.categories ?? [];
-    renderReadiness(categories);
-    showToast(t('toast.readinessDone'));
-    if (currentSessionId) showCompletionFeedback(currentSessionId);
+    await api.runReadinessStream(currentSessionId, {
+      onStageRunning: () => {
+        showLoading(t('loading.readiness'));
+      },
+      onStageStream: (_stage, text) => {
+        appendStreamingText(text);
+      },
+      onStageData: (_stage, data) => {
+        const categories = data.readiness?.categories ?? data.categories ?? [];
+        renderReadiness(categories);
+      },
+      onDone: () => {
+        hideLoading();
+        hideStreamingPreview();
+        updateStepNav('readiness_checked');
+        activateStep('spec');
+        showToast(t('toast.readinessDone'));
+        if (currentSessionId) showCompletionFeedback(currentSessionId);
+      },
+      onError: (error) => {
+        hideLoading();
+        hideStreamingPreview();
+        showToast(error, true);
+      },
+    });
   } catch (e: any) {
     hideLoading();
+    hideStreamingPreview();
     if (e.status === 402 || e.upgrade) {
       showUpgradeModal(e.upgradeUrl || PAYMENT_LINK);
       return;
     }
     showToast(e.message, true);
-  } finally {
-    hideLoading();
   }
 }
 

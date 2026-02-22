@@ -1,7 +1,7 @@
 import crypto from "node:crypto";
 import type { Context } from "hono";
 import { Hono } from "hono";
-import { ANALYSIS_TYPE, requiresProForStep, SESSION_STATUS } from "../../constants.ts";
+import { ANALYSIS_TYPE, READINESS_SYSTEM, requiresProForStep, SESSION_STATUS } from "../../constants.ts";
 import { now } from "../../db/helpers.ts";
 import { db } from "../../db/index.ts";
 import { saveAnalysisResult } from "../../helpers/analysis-store.ts";
@@ -576,45 +576,7 @@ analysisRoutes.post("/sessions/:id/readiness", async (c) => {
       .executeTakeFirst();
     const prd = prdRow ? JSON.parse(prdRow.data) : {};
 
-    const systemPrompt = `You are a production quality review expert. Generate a pre-launch readiness checklist based on ISO/IEC 25010 quality characteristics from the PRD and implementation spec.
-
-IMPORTANT: Respond in the SAME LANGUAGE as the input data.
-
-必ず以下のJSON形式で返してください。JSON以外のテキストは含めないでください。
-
-{
-  "readiness": {
-    "categories": [
-      {
-        "id": "functionalSuitability",
-        "label": "機能適合性",
-        "items": [
-          {
-            "id": "FS-1",
-            "description": "チェック項目の説明",
-            "priority": "must",
-            "rationale": "なぜこのチェックが必要か"
-          }
-        ]
-      }
-    ]
-  }
-}
-
-ルール：
-- ISO/IEC 25010 の8品質特性すべてを網羅すること:
-  1. functionalSuitability（機能適合性）
-  2. performanceEfficiency（性能効率性）
-  3. compatibility（互換性）
-  4. usability（使用性）
-  5. reliability（信頼性）
-  6. security（セキュリティ）
-  7. maintainability（保守性）
-  8. portability（移植性）
-- 各カテゴリに2〜4個の具体的なチェック項目を生成
-- priority は "must"（必須）, "should"（推奨）, "could"（任意）のいずれか
-- PRDの非機能要件と実装仕様に基づいた具体的な項目にすること
-- 抽象的な表現は避け、テスト可能な条件を記述すること`;
+    const systemPrompt = READINESS_SYSTEM;
 
     const response = await callClaude(
       [

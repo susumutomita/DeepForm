@@ -32,7 +32,7 @@ vi.mock("../../llm.ts", () => ({
 }));
 
 import { app } from "../../app.ts";
-import { callClaude, callClaudeStream, extractText } from "../../llm.ts";
+import { callClaudeStream } from "../../llm.ts";
 import { getRawDb } from "../helpers/test-db.ts";
 
 const rawDb = getRawDb();

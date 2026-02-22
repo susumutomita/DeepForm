@@ -74,7 +74,10 @@ feedbackRoutes.post("/deepdive", async (c) => {
     }
 
     const body = await c.req.json();
-    const { message, history } = body as { message: string; history?: Array<{ role: string; content: string }> };
+    const { message, history } = body as {
+      message: string;
+      history?: Array<{ role: "user" | "assistant"; content: string }>;
+    };
 
     if (!message || typeof message !== "string" || message.trim().length === 0) {
       return c.json({ error: "メッセージが必要です" }, 400);

@@ -144,4 +144,5 @@ data/*.db-shm
 *.db-wal
 *.db-shm
 public_dist/
+public/
 frontend/node_modules/

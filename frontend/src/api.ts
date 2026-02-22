@@ -52,6 +52,24 @@ export async function getPlan(): Promise<{ plan: string; loggedIn: boolean }> {
   return request('/api/billing/plan');
 }
 
+export interface ConsultResponse {
+  reply: string;
+  recommendation: 'free' | 'pro' | null;
+  checkoutUrl: string | null;
+  done: boolean;
+}
+
+export function consultPricing(
+  message: string,
+  history?: Array<{ role: string; content: string }>,
+): Promise<ConsultResponse> {
+  return post('/api/billing/consult', { message, history });
+}
+
+export function createCheckout(): Promise<{ checkoutUrl: string }> {
+  return post('/api/billing/checkout');
+}
+
 // Auth
 export async function checkAuthStatus(): Promise<User | null> {
   const data = await request<{ user: User | null }>('/api/auth/me');

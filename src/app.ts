@@ -8,6 +8,7 @@ import { secureHeaders } from "hono/secure-headers";
 import { analyticsMiddleware } from "./middleware/analytics.ts";
 import { authMiddleware } from "./middleware/auth.ts";
 import { analyticsRoutes } from "./routes/analytics.ts";
+import { apiKeyRoutes } from "./routes/api-keys.ts";
 import { authRoutes } from "./routes/auth.ts";
 import { billingRoutes } from "./routes/billing.ts";
 import { feedbackRoutes } from "./routes/feedback.ts";
@@ -44,6 +45,9 @@ app.use("*", analyticsMiddleware);
 
 // Auth routes
 app.route("/api/auth", authRoutes);
+
+// API Key management routes
+app.route("/api/auth/api-keys", apiKeyRoutes);
 
 // Session routes
 app.route("/api", sessionRoutes);

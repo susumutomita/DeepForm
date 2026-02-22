@@ -6,10 +6,11 @@ import { db } from "../db/index.ts";
 import type { User } from "../types.ts";
 
 /**
- * Authentication middleware with 3-tier fallback:
+ * Authentication middleware with 4-tier fallback:
  * 1. Cookie session (deepform_session) → auth_sessions table → user
- * 2. exe.dev proxy headers (X-ExeDev-UserID / X-ExeDev-Email)
- * 3. Dev env var fallback (EXEDEV_DEV_USER)
+ * 2. API Key (Authorization: Bearer deepform_... or X-API-Key: deepform_...)
+ * 3. exe.dev proxy headers (X-ExeDev-UserID / X-ExeDev-Email)
+ * 4. Dev env var fallback (EXEDEV_DEV_USER)
  */
 
 async function upsertUser(exeUserId: string, email: string): Promise<User> {
@@ -53,6 +54,33 @@ async function getUserFromSession(sessionId: string): Promise<User | null> {
   return row ?? null;
 }
 
+/** Hash a raw API key with SHA-256 */
+export function hashApiKey(rawKey: string): string {
+  return crypto.createHash("sha256").update(rawKey).digest("hex");
+}
+
+async function getUserFromApiKey(rawKey: string): Promise<User | null> {
+  const keyHash = hashApiKey(rawKey);
+  const row = (await db
+    .selectFrom("users as u")
+    .innerJoin("api_keys as ak", "ak.user_id", "u.id")
+    .selectAll("u")
+    .where("ak.key_hash", "=", keyHash)
+    .where("ak.is_active", "=", 1)
+    .executeTakeFirst()) as unknown as User | undefined;
+
+  if (row) {
+    // Update last_used_at asynchronously (fire-and-forget)
+    db.updateTable("api_keys")
+      .set({ last_used_at: new Date().toISOString() })
+      .where("key_hash", "=", keyHash)
+      .execute()
+      .catch(() => {});
+  }
+
+  return row ?? null;
+}
+
 // Middleware: attach user info to Context (not required)
 export const authMiddleware = createMiddleware<{
   Variables: { user: User | null };
@@ -71,11 +99,32 @@ export const authMiddleware = createMiddleware<{
     }
   }
 
-  // 2. exe.dev proxy headers
+  // 2. API Key (Bearer deepform_... or X-API-Key: deepform_...)
+  const authHeader = c.req.header("authorization");
+  const xApiKey = c.req.header("x-api-key");
+  const rawKey = authHeader?.startsWith("Bearer deepform_")
+    ? authHeader.slice(7)
+    : xApiKey?.startsWith("deepform_")
+      ? xApiKey
+      : null;
+
+  if (rawKey) {
+    try {
+      const user = await getUserFromApiKey(rawKey);
+      if (user) {
+        c.set("user", user);
+        return next();
+      }
+    } catch (e) {
+      console.error("API key lookup error:", e);
+    }
+  }
+
+  // 3. exe.dev proxy headers
   let exeUserId = c.req.header("x-exedev-userid");
   let email = c.req.header("x-exedev-email");
 
-  // 3. Local dev fallback (any non-production environment)
+  // 4. Local dev fallback (any non-production environment)
   if (!exeUserId && process.env.NODE_ENV !== "production") {
     exeUserId = process.env.EXEDEV_DEV_USER ?? undefined;
     email = process.env.EXEDEV_DEV_EMAIL ?? undefined;

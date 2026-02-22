@@ -2,7 +2,7 @@
   "openapi": "3.0.3",
   "info": {
     "title": "DeepForm API",
-    "description": "AI-powered depth interview API. Turns ideas into structured requirements through AI conversation.\n\n## Authentication\nMost endpoints require GitHub OAuth. Use GET /api/auth/github to initiate. Session cookies are used.\n\nSome endpoints (campaigns) support anonymous access via tokens.",
+    "description": "AI-powered depth interview API. Turns ideas into structured requirements through AI conversation.\n\n## Authentication\nMost endpoints require GitHub OAuth. Use GET /api/auth/github to initiate.\n\nSupported authentication methods (checked in order):\n1. **Cookie session** — `deepform_session` cookie (browser login)\n2. **API Key** — `Authorization: Bearer deepform_...` or `X-API-Key: deepform_...`\n3. **exe.dev proxy headers** — `X-ExeDev-UserID` / `X-ExeDev-Email`\n\nSome endpoints (campaigns) support anonymous access via tokens.",
     "version": "1.0.0",
     "contact": {
       "url": "https://github.com/susumutomita/DeepForm"
@@ -495,6 +495,119 @@
           }
         }
       }
+    },
+    "/api/auth/api-keys": {
+      "post": {
+        "summary": "Create API key",
+        "tags": [
+          "Auth"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "name"
+                ],
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "description": "Human-readable label for the key"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "API key created. The raw key is returned only once."
+          },
+          "400": {
+            "description": "Validation error or key limit reached"
+          },
+          "401": {
+            "description": "Not authenticated"
+          }
+        }
+      },
+      "get": {
+        "summary": "List API keys",
+        "tags": [
+          "Auth"
+        ],
+        "responses": {
+          "200": {
+            "description": "List of active API keys (hash is never returned)"
+          },
+          "401": {
+            "description": "Not authenticated"
+          }
+        }
+      }
+    },
+    "/api/auth/api-keys/{id}": {
+      "delete": {
+        "summary": "Revoke API key",
+        "tags": [
+          "Auth"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Key revoked"
+          },
+          "401": {
+            "description": "Not authenticated"
+          },
+          "404": {
+            "description": "Key not found"
+          }
+        }
+      }
     }
-  }
+  },
+  "components": {
+    "securitySchemes": {
+      "cookieSession": {
+        "type": "apiKey",
+        "in": "cookie",
+        "name": "deepform_session",
+        "description": "Session cookie set after GitHub OAuth login"
+      },
+      "bearerApiKey": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "API key with deepform_ prefix (Authorization: Bearer deepform_...)"
+      },
+      "xApiKey": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "X-API-Key",
+        "description": "API key with deepform_ prefix"
+      }
+    }
+  },
+  "security": [
+    {
+      "cookieSession": []
+    },
+    {
+      "bearerApiKey": []
+    },
+    {
+      "xApiKey": []
+    }
+  ]
 }

@@ -73,6 +73,18 @@ export interface User {
   updated_at: string;
 }
 
+export interface ApiKey {
+  id: string;
+  user_id: string;
+  name: string;
+  key_hash: string;
+  key_prefix: string;
+  is_active: number;
+  last_used_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface Fact {
   id: string;
   type: "fact" | "pain" | "frequency" | "workaround";

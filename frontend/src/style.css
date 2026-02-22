@@ -578,6 +578,114 @@ a:hover { color: var(--primary-hover); }
   line-height: 1.6;
 }
 
+/* === Pricing === */
+.pricing-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 24px;
+  max-width: 900px;
+  margin: 0 auto;
+}
+.pricing-card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 32px 24px;
+  text-align: center;
+  position: relative;
+  transition: transform 0.2s, box-shadow 0.2s;
+}
+.pricing-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px rgba(0,0,0,0.08);
+}
+.pricing-card.accent {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent);
+}
+.pricing-badge {
+  display: inline-block;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+  padding: 4px 12px;
+  border-radius: 20px;
+  margin-bottom: 8px;
+}
+.pricing-card.accent .pricing-badge {
+  background: var(--accent);
+  color: #fff;
+}
+.pricing-plan {
+  font-size: 20px;
+  font-weight: 700;
+  margin-bottom: 8px;
+}
+.pricing-price {
+  margin-bottom: 24px;
+}
+.pricing-amount {
+  font-size: 36px;
+  font-weight: 800;
+  color: var(--text);
+}
+.pricing-features {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 24px;
+  text-align: left;
+}
+.pricing-features li {
+  font-size: 14px;
+  color: var(--text-dim);
+  padding: 8px 0;
+  border-bottom: 1px solid var(--border);
+  position: relative;
+  padding-left: 24px;
+}
+.pricing-features li::before {
+  content: '\2713';
+  position: absolute;
+  left: 0;
+  color: var(--accent);
+  font-weight: 700;
+}
+.pricing-features li:last-child {
+  border-bottom: none;
+}
+.pricing-cta {
+  margin-top: auto;
+}
+.btn-pricing {
+  display: inline-block;
+  width: 100%;
+  padding: 12px 24px;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  text-decoration: none;
+  text-align: center;
+  background: var(--card);
+  color: var(--text);
+  border: 1px solid var(--border);
+  cursor: pointer;
+  transition: background 0.2s;
+}
+.btn-pricing:hover {
+  background: var(--bg);
+}
+.btn-pricing.pro {
+  background: var(--accent);
+  color: #fff;
+  border-color: var(--accent);
+}
+.btn-pricing.pro:hover {
+  opacity: 0.9;
+}
+
 /* === Sessions List === */
 .sessions-list {
   max-width: 720px;
@@ -1768,6 +1876,7 @@ a:hover { color: var(--primary-hover); }
 
   /* Features */
   .features-grid { grid-template-columns: 1fr; }
+  .pricing-grid { grid-template-columns: 1fr; max-width: 400px; }
 
   /* Sessions */
   .session-card { flex-wrap: wrap; }

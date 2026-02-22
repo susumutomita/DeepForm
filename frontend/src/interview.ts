@@ -371,10 +371,7 @@ export async function doRunReadiness(): Promise<void> {
     const data = await api.runReadiness(currentSessionId);
     const categories = data.readiness?.categories ?? data.categories ?? [];
     renderReadiness(categories);
-    updateStepNav('readiness_checked');
-    activateStep('readiness');
     showToast(t('toast.readinessDone'));
-    showCompletionFeedback(currentSessionId);
   } catch (e: any) {
     hideLoading();
     if (e.status === 402 || e.upgrade) {

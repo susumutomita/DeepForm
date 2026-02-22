@@ -1213,6 +1213,50 @@ a:hover { color: var(--primary-hover); }
   margin-bottom: 4px;
 }
 
+/* === Quality Check (inline in Spec step) === */
+.quality-check {
+  margin-top: 24px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  overflow: hidden;
+}
+.quality-check > summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 14px 18px;
+  font-weight: 600;
+  font-size: 14px;
+  cursor: pointer;
+  background: var(--bg-input);
+  color: var(--text);
+  list-style: none;
+}
+.quality-check > summary::-webkit-details-marker { display: none; }
+.quality-check > summary::after {
+  content: '';
+  margin-left: auto;
+  width: 8px;
+  height: 8px;
+  border-right: 2px solid var(--text-dim);
+  border-bottom: 2px solid var(--text-dim);
+  transform: rotate(45deg);
+  transition: transform 0.2s;
+}
+.quality-check[open] > summary::after {
+  transform: rotate(-135deg);
+}
+.quality-check-body {
+  padding: 16px 18px;
+  border-top: 1px solid var(--border);
+}
+.quality-check-desc {
+  font-size: 13px;
+  color: var(--text-dim);
+  margin: 0 0 14px;
+  line-height: 1.6;
+}
+
 /* === Readiness Checklist === */
 .readiness-category {
   background: var(--bg-card);

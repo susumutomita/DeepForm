@@ -109,14 +109,14 @@ test.describe('言語切替', () => {
     await expect(page.locator('html')).toHaveAttribute('lang', 'en');
 
     // Hero CTA should be in English
-    await expect(page.locator('#btn-start')).toContainText('Start interview');
+    await expect(page.locator('#btn-start')).toContainText('Talk to AI');
   });
 
   test('ES ボタンでスペイン語に切り替わるべき', async ({ page }) => {
     await page.locator('.lang-btn[data-lang="es"]').click();
 
     await expect(page.locator('html')).toHaveAttribute('lang', 'es');
-    await expect(page.locator('#btn-start')).toContainText('Iniciar entrevista');
+    await expect(page.locator('#btn-start')).toContainText('Hablar con IA');
   });
 
   test('JA ボタンで日本語に戻るべき', async ({ page }) => {

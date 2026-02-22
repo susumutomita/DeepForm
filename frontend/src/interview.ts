@@ -6,6 +6,7 @@ import {
   showLoading, hideLoading, showToast, escapeHtml, factTypeLabel,
   addMessageToContainer, addStreamingBubble, appendToStreamingBubble,
   finalizeStreamingBubble,
+  showStreamingPreview, appendStreamingText, hideStreamingPreview,
 } from './ui';
 import { renderCampaignSidebarPanel } from './campaign-analytics';
 import { initInlineEdit, destroyInlineEdit } from './inline-edit';
@@ -404,17 +405,13 @@ export async function doRunFullPipeline(): Promise<void> {
   showLoading(stageLabels.facts);
 
   try {
-    let streamCharCount = 0;
     await api.runPipeline(currentSessionId, {
       onStageRunning: (stage) => {
-        streamCharCount = 0;
         showLoading(stageLabels[stage] || stage);
+        showStreamingPreview();
       },
       onStageStream: (_stage, _text) => {
-        streamCharCount += _text.length;
-        // Update loading with char count to show progress
-        const label = stageLabels[_stage] || _stage;
-        showLoading(`${label}（${streamCharCount} 文字生成中...）`);
+        appendStreamingText(_text);
       },
       onStageData: (stage, data) => {
         switch (stage) {
@@ -445,15 +442,18 @@ export async function doRunFullPipeline(): Promise<void> {
       },
       onDone: () => {
         hideLoading();
+        hideStreamingPreview();
         showToast(t('toast.specDone'));
       },
       onError: (error) => {
         hideLoading();
+        hideStreamingPreview();
         showToast(error, true);
       },
     });
   } catch (e: any) {
     hideLoading();
+    hideStreamingPreview();
     if (e.status === 402 || e.upgrade) {
       showUpgradeModal(e.upgradeUrl || PAYMENT_LINK);
       return;

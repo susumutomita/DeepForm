@@ -199,6 +199,55 @@
           </div>
         </div>
 
+        <!-- Pricing -->
+        <div class="section" id="pricing">
+          <h2 class="section-title" data-i18n="pricing.title">料金プラン</h2>
+          <p class="section-sub" data-i18n="pricing.sub">最初の1ヶ月は全機能使い放題。まずは試してみてください。</p>
+          <div class="pricing-grid">
+            <div class="pricing-card">
+              <div class="pricing-badge" data-i18n="pricing.trial.badge">最初の1ヶ月</div>
+              <div class="pricing-plan" data-i18n="pricing.trial.name">お試し期間</div>
+              <div class="pricing-price"><span class="pricing-amount">$0</span></div>
+              <ul class="pricing-features">
+                <li data-i18n="pricing.trial.feat1">AIインタビュー作り放題</li>
+                <li data-i18n="pricing.trial.feat2">ファクト抽出・仮説・PRD・実装仕様</li>
+                <li data-i18n="pricing.trial.feat3">セッション履歴保存</li>
+                <li data-i18n="pricing.trial.feat4">全機能制限なし</li>
+              </ul>
+              <div class="pricing-cta">
+                <a href="#" class="btn-pricing" onclick="document.getElementById('theme-input').focus(); return false;" data-i18n="pricing.trial.cta">今すぐ始める（無料）</a>
+              </div>
+            </div>
+            <div class="pricing-card">
+              <div class="pricing-badge" data-i18n="pricing.free.badge">お試し後</div>
+              <div class="pricing-plan" data-i18n="pricing.free.name">Free</div>
+              <div class="pricing-price"><span class="pricing-amount">$0</span></div>
+              <ul class="pricing-features">
+                <li data-i18n="pricing.free.feat1">月に1回までインタビュー可能</li>
+                <li data-i18n="pricing.free.feat2">全分析機能利用可</li>
+                <li data-i18n="pricing.free.feat3">過去のセッションはずっと閲覧可</li>
+              </ul>
+              <div class="pricing-cta">
+                <a href="#" class="btn-pricing" data-i18n="pricing.free.cta">自動で切り替わります</a>
+              </div>
+            </div>
+            <div class="pricing-card accent">
+              <div class="pricing-badge" data-i18n="pricing.pro.badge">おすすめ</div>
+              <div class="pricing-plan" data-i18n="pricing.pro.name">Pro</div>
+              <div class="pricing-price"><span class="pricing-amount" data-i18n="pricing.pro.price">準備中</span></div>
+              <ul class="pricing-features">
+                <li data-i18n="pricing.pro.feat1">インタビュー無制限</li>
+                <li data-i18n="pricing.pro.feat2">セッション履歴がずっと残る</li>
+                <li data-i18n="pricing.pro.feat3">キャンペーン機能（複数人の声を収集）</li>
+                <li data-i18n="pricing.pro.feat4">優先サポート</li>
+              </ul>
+              <div class="pricing-cta">
+                <a href="#" class="btn-pricing pro" data-i18n="pricing.pro.cta">Coming soon</a>
+              </div>
+            </div>
+          </div>
+        </div>
+
         <!-- Past Sessions -->
         <div class="section">
           <h2 class="section-title" data-i18n="sessions.title">セッション一覧</h2>
@@ -531,6 +580,7 @@
     <div class="loading-content">
       <div class="loading-spinner" aria-hidden="true"></div>
       <p id="loading-text">AIが分析中…</p>
+      <div id="streaming-preview" class="streaming-preview hidden"></div>
     </div>
   </div>
 

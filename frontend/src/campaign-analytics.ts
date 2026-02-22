@@ -5,6 +5,7 @@
 import * as api from './api';
 import type { CampaignAnalytics, CampaignAIAnalysis } from './types';
 import { showToast } from './ui';
+import { t } from './i18n';
 
 let currentCampaignId = '';
 let currentAnalytics: CampaignAnalytics | null = null;
@@ -227,12 +228,21 @@ export async function renderCampaignSidebarPanel(
       );
     }
     parts.push(
+      '<button class="btn btn-sm btn-accent campaign-panel-triage" id="btn-triage-facts">',
+      escapeHtml(t('triage.button')),
+      '</button>',
       '<button class="btn btn-sm btn-secondary campaign-panel-more" id="btn-show-full-analytics">',
       '全回答を見る →',
       '</button>',
     );
 
     panel.innerHTML = parts.join(''); // Safe: all dynamic content escaped via escapeHtml
+
+    document.getElementById('btn-triage-facts')?.addEventListener('click', () => {
+      const w = window as any;
+      const sessionId = typeof w.getCurrentSessionId === 'function' ? w.getCurrentSessionId() : null;
+      if (sessionId) openTriageModal(sessionId);
+    });
 
     document.getElementById('btn-show-full-analytics')?.addEventListener('click', () => {
       showCampaignAnalyticsInStep(campaignId);
@@ -412,5 +422,136 @@ async function handleExportJSON(): Promise<void> {
     showToast('エクスポートが完了しました');
   } catch (e: any) {
     showToast(e.message, true);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Campaign Triage UI
+// ---------------------------------------------------------------------------
+
+/**
+ * Open triage modal for selecting campaign facts to include in PRD.
+ * Security: All dynamic content goes through escapeHtml() which uses
+ * textContent-based sanitization, preventing XSS. This is consistent with the
+ * existing codebase pattern (see renderDashboard, renderCampaignSidebarPanel).
+ */
+export async function openTriageModal(sessionId: string): Promise<void> {
+  // Remove existing modal if any
+  document.querySelector('.triage-overlay')?.remove();
+
+  const overlay = document.createElement('div');
+  overlay.className = 'triage-overlay';
+  overlay.addEventListener('click', (e) => {
+    if (e.target === overlay) overlay.remove();
+  });
+
+  const modal = document.createElement('div');
+  modal.className = 'triage-modal';
+  modal.addEventListener('click', (e) => e.stopPropagation());
+
+  // Safe: escapeHtml uses textContent-based sanitization
+  const headerHtml = `<div class="triage-header"><h3>${escapeHtml(t('triage.title'))}</h3><p class="triage-desc">${escapeHtml(t('triage.desc'))}</p></div>`;
+  const loadingHtml = `<div class="triage-loading">${escapeHtml(t('loading.default'))}</div>`;
+  modal.innerHTML = headerHtml + loadingHtml; // Safe: all dynamic content escaped via escapeHtml
+  overlay.appendChild(modal);
+  document.body.appendChild(overlay);
+
+  try {
+    const data = await api.getTriagedFacts(sessionId);
+
+    if (data.facts.length === 0) {
+      modal.querySelector('.triage-loading')!.textContent = t('triage.noFacts');
+      return;
+    }
+
+    // Build the fact list with checkboxes
+    const selectedSet = new Set(data.selectedFactIds);
+
+    // Safe: all user-facing content goes through escapeHtml (textContent-based)
+    const factsHtml = data.facts.map((f) => {
+      const checked = selectedSet.has(f.factId) ? 'checked' : '';
+      return [
+        `<label class="triage-fact-item">`,
+        `<input type="checkbox" class="triage-checkbox" data-fact-id="${escapeHtml(f.factId)}" ${checked}>`,
+        `<div class="triage-fact-body">`,
+        `<div class="triage-fact-meta">`,
+        `<span class="fact-type type-${escapeHtml(f.type)}">${escapeHtml(f.type)}</span>`,
+        `<span class="severity-badge severity-${escapeHtml(f.severity)}">${escapeHtml(f.severity)}</span>`,
+        `<span class="triage-respondent">${escapeHtml(f.respondentName)}</span>`,
+        `</div>`,
+        `<div class="triage-fact-content">${escapeHtml(f.content)}</div>`,
+        f.evidence ? `<div class="triage-fact-evidence">${escapeHtml(f.evidence)}</div>` : '',
+        `</div></label>`,
+      ].join('');
+    }).join('');
+
+    const selectedCount = selectedSet.size;
+    // Safe: all interpolated values go through escapeHtml or are numeric
+    modal.innerHTML = [
+      `<div class="triage-header">`,
+      `<h3>${escapeHtml(t('triage.title'))}</h3>`,
+      `<p class="triage-desc">${escapeHtml(t('triage.desc'))}</p>`,
+      `</div>`,
+      `<div class="triage-toolbar">`,
+      `<button class="btn btn-sm btn-secondary" id="triage-select-all">${escapeHtml(t('triage.selectAll'))}</button>`,
+      `<button class="btn btn-sm btn-secondary" id="triage-deselect-all">${escapeHtml(t('triage.deselectAll'))}</button>`,
+      `<span class="triage-count" id="triage-count">${selectedCount} ${escapeHtml(t('triage.selectedCount'))}</span>`,
+      `</div>`,
+      `<div class="triage-fact-list">${factsHtml}</div>`,
+      `<div class="triage-actions">`,
+      `<button class="btn btn-accent" id="triage-save">${escapeHtml(t('triage.save'))}</button>`,
+      `</div>`,
+    ].join(''); // Safe: all dynamic content escaped via escapeHtml
+
+    // Update count on checkbox change
+    const updateCount = () => {
+      const checked = modal.querySelectorAll<HTMLInputElement>('.triage-checkbox:checked').length;
+      const countEl = modal.querySelector('#triage-count');
+      if (countEl) countEl.textContent = `${checked} ${t('triage.selectedCount')}`;
+    };
+
+    modal.querySelectorAll('.triage-checkbox').forEach((cb) => {
+      cb.addEventListener('change', updateCount);
+    });
+
+    // Select all / deselect all
+    modal.querySelector('#triage-select-all')?.addEventListener('click', () => {
+      modal.querySelectorAll<HTMLInputElement>('.triage-checkbox').forEach((cb) => { cb.checked = true; });
+      updateCount();
+    });
+    modal.querySelector('#triage-deselect-all')?.addEventListener('click', () => {
+      modal.querySelectorAll<HTMLInputElement>('.triage-checkbox').forEach((cb) => { cb.checked = false; });
+      updateCount();
+    });
+
+    // Save button — persist triage and trigger pipeline re-run
+    modal.querySelector('#triage-save')?.addEventListener('click', async () => {
+      const saveBtn = modal.querySelector('#triage-save') as HTMLButtonElement;
+      saveBtn.disabled = true;
+      saveBtn.textContent = t('triage.saving');
+
+      const ids = Array.from(modal.querySelectorAll<HTMLInputElement>('.triage-checkbox:checked'))
+        .map((cb) => cb.dataset.factId!)
+        .filter(Boolean);
+
+      try {
+        await api.saveTriagedFacts(sessionId, ids);
+        showToast(t('triage.saved'));
+        overlay.remove();
+
+        // Trigger pipeline re-run to regenerate PRD with selected facts
+        const w = window as any;
+        if (typeof w.runFullPipeline === 'function') {
+          w.runFullPipeline();
+        }
+      } catch (e: any) {
+        showToast(e.message, true);
+        saveBtn.disabled = false;
+        saveBtn.textContent = t('triage.save');
+      }
+    });
+  } catch (e: any) {
+    const loadingEl = modal.querySelector('.triage-loading');
+    if (loadingEl) loadingEl.textContent = `Error: ${e.message}`;
   }
 }

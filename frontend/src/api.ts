@@ -269,9 +269,38 @@ export function feedbackCampaign(token: string, sessionId: string, feedback: str
   return post(`/api/campaigns/${token}/sessions/${sessionId}/feedback`, { feedback });
 }
 
+// Campaign Triage
+export interface TriageFact {
+  factId: string;
+  type: string;
+  content: string;
+  severity: string;
+  evidence: string;
+  respondentName: string;
+  respondentSessionId: string;
+  selected: boolean;
+}
+
+export interface TriageState {
+  facts: TriageFact[];
+  selectedFactIds: string[];
+}
+
+export function getTriagedFacts(sessionId: string): Promise<TriageState> {
+  return request(`/api/sessions/${sessionId}/campaign-triage`);
+}
+
+export function saveTriagedFacts(sessionId: string, selectedFactIds: string[]): Promise<{ ok: boolean }> {
+  return post(`/api/sessions/${sessionId}/campaign-triage`, { selectedFactIds });
+}
+
 // App feedback
 export function submitAppFeedback(type: string, message: string, page?: string): Promise<{ ok: boolean }> {
   return post('/api/feedback', { type, message, page });
+}
+
+export function feedbackDeepdive(message: string, history?: Array<{ role: string; content: string }>): Promise<{ reply: string; done: boolean }> {
+  return post('/api/feedback/deepdive', { message, history });
 }
 
 // Campaign Analytics

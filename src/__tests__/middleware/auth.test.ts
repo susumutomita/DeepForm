@@ -1,3 +1,4 @@
+import crypto from "node:crypto";
 import { Hono } from "hono";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -8,7 +9,7 @@ vi.mock("../../db/index.ts", async () => {
 });
 
 import { db } from "../../db/index.ts";
-import { authMiddleware, requireAuth } from "../../middleware/auth.ts";
+import { authMiddleware, hashApiKey, requireAuth } from "../../middleware/auth.ts";
 import { getRawDb } from "../helpers/test-db.ts";
 
 const rawDb = getRawDb();
@@ -25,6 +26,7 @@ function authHeaders(exeUserId: string = TEST_EXE_USER_ID, email: string = TEST_
 
 describe("認証ミドルウェア", () => {
   beforeEach(() => {
+    rawDb.exec("DELETE FROM api_keys");
     rawDb.exec("DELETE FROM auth_sessions");
     rawDb.exec("DELETE FROM users");
   });
@@ -194,6 +196,119 @@ describe("認証ミドルウェア", () => {
 
         vi.mocked(db.selectFrom).mockImplementation(originalSelectFrom);
       });
+    });
+  });
+
+  describe("API Key 認証", () => {
+    let app: InstanceType<typeof Hono>;
+
+    beforeEach(() => {
+      app = new Hono();
+      app.use("*", authMiddleware);
+      app.get("/test", (c) => c.json({ user: (c as any).get("user") }));
+
+      // テスト用ユーザーを作成
+      rawDb.exec(`
+        INSERT OR IGNORE INTO users (id, exe_user_id, email, display_name)
+        VALUES ('apikey-user', 'exe-apikey', 'apikey@example.com', 'apikey-user')
+      `);
+    });
+
+    it("Authorization: Bearer deepform_... で認証成功すべき", async () => {
+      const rawKey = `deepform_${crypto.randomBytes(20).toString("hex")}`;
+      rawDb
+        .prepare("INSERT INTO api_keys (id, user_id, name, key_hash, key_prefix) VALUES (?, ?, ?, ?, ?)")
+        .run("ak-1", "apikey-user", "test key", hashApiKey(rawKey), rawKey.slice(0, 12));
+
+      const res = await app.request("/test", {
+        headers: { authorization: `Bearer ${rawKey}` },
+      });
+
+      expect(res.status).toBe(200);
+      const data = (await res.json()) as any;
+      expect(data.user).not.toBeNull();
+      expect(data.user.id).toBe("apikey-user");
+    });
+
+    it("X-API-Key: deepform_... で認証成功すべき", async () => {
+      const rawKey = `deepform_${crypto.randomBytes(20).toString("hex")}`;
+      rawDb
+        .prepare("INSERT INTO api_keys (id, user_id, name, key_hash, key_prefix) VALUES (?, ?, ?, ?, ?)")
+        .run("ak-2", "apikey-user", "test key 2", hashApiKey(rawKey), rawKey.slice(0, 12));
+
+      const res = await app.request("/test", {
+        headers: { "x-api-key": rawKey },
+      });
+
+      expect(res.status).toBe(200);
+      const data = (await res.json()) as any;
+      expect(data.user).not.toBeNull();
+      expect(data.user.id).toBe("apikey-user");
+    });
+
+    it("無効な API キーで null user になるべき (次ティアにフォールバック)", async () => {
+      const res = await app.request("/test", {
+        headers: { authorization: "Bearer deepform_invalidkey1234567890abcdef12345678" },
+      });
+
+      expect(res.status).toBe(200);
+      const data = (await res.json()) as any;
+      expect(data.user).toBeNull();
+    });
+
+    it("revoke 済みキーで null user になるべき", async () => {
+      const rawKey = `deepform_${crypto.randomBytes(20).toString("hex")}`;
+      rawDb
+        .prepare("INSERT INTO api_keys (id, user_id, name, key_hash, key_prefix, is_active) VALUES (?, ?, ?, ?, ?, ?)")
+        .run("ak-revoked", "apikey-user", "revoked", hashApiKey(rawKey), rawKey.slice(0, 12), 0);
+
+      const res = await app.request("/test", {
+        headers: { authorization: `Bearer ${rawKey}` },
+      });
+
+      expect(res.status).toBe(200);
+      const data = (await res.json()) as any;
+      expect(data.user).toBeNull();
+    });
+
+    it("cookie session が API Key より優先されるべき", async () => {
+      // cookie session 用ユーザー
+      rawDb.exec(`
+        INSERT OR IGNORE INTO users (id, exe_user_id, email, display_name)
+        VALUES ('cookie-user', 'exe-cookie', 'cookie@example.com', 'cookie-user')
+      `);
+      const sessionId = crypto.randomUUID();
+      const expiresAt = new Date(Date.now() + 86400000).toISOString();
+      rawDb
+        .prepare("INSERT INTO auth_sessions (id, user_id, expires_at) VALUES (?, ?, ?)")
+        .run(sessionId, "cookie-user", expiresAt);
+
+      // API Key もセット
+      const rawKey = `deepform_${crypto.randomBytes(20).toString("hex")}`;
+      rawDb
+        .prepare("INSERT INTO api_keys (id, user_id, name, key_hash, key_prefix) VALUES (?, ?, ?, ?, ?)")
+        .run("ak-priority", "apikey-user", "priority", hashApiKey(rawKey), rawKey.slice(0, 12));
+
+      const res = await app.request("/test", {
+        headers: {
+          cookie: `deepform_session=${encodeURIComponent(sessionId)}`,
+          authorization: `Bearer ${rawKey}`,
+        },
+      });
+
+      expect(res.status).toBe(200);
+      const data = (await res.json()) as any;
+      expect(data.user.id).toBe("cookie-user");
+    });
+
+    it("deepform_ プレフィックスのない Bearer トークンを無視すべき", async () => {
+      const res = await app.request("/test", {
+        headers: { authorization: "Bearer ghp_someGitHubToken1234567890abcdef" },
+      });
+
+      expect(res.status).toBe(200);
+      const data = (await res.json()) as any;
+      expect(data.user).toBeNull();
     });
   });
 

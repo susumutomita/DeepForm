@@ -9,7 +9,7 @@ import { formatZodError } from "../../helpers/format.ts";
 import { getOwnedCampaignById, getOwnedSession, isResponse } from "../../helpers/session-ownership.ts";
 import { callClaude, extractText, MODEL_FAST } from "../../llm.ts";
 import type { AppEnv, Campaign, CampaignAnalytics, Session } from "../../types.ts";
-import { chatMessageSchema, feedbackSchema, respondentNameSchema } from "../../validation.ts";
+import { chatMessageSchema, feedbackSchema, respondentNameSchema, triageSchema } from "../../validation.ts";
 import { extractChoices } from "./interview.ts";
 
 export const campaignRoutes = new Hono<AppEnv>();
@@ -660,6 +660,120 @@ campaignRoutes.get("/campaigns/:id/export", async (c) => {
     return c.json(exportData);
   } catch (e) {
     console.error("Campaign export error:", e);
+    return c.json({ error: "Internal Server Error" }, 500);
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Campaign Triage — select facts for PRD injection
+// ---------------------------------------------------------------------------
+
+// GET /sessions/:id/campaign-triage — Get triage state
+campaignRoutes.get("/sessions/:id/campaign-triage", async (c) => {
+  try {
+    const result = await getOwnedSession(c);
+    if (isResponse(result)) return result;
+    const session = result;
+
+    // Find the campaign for this session
+    const campaign = (await db
+      .selectFrom("campaigns")
+      .selectAll()
+      .where("owner_session_id", "=", session.id)
+      .executeTakeFirst()) as unknown as Campaign | undefined;
+    if (!campaign) return c.json({ error: "キャンペーンが見つかりません" }, 404);
+
+    // Get current triage state
+    const triageRow = (await db
+      .selectFrom("analysis_results")
+      .select("data")
+      .where("session_id", "=", session.id)
+      .where("type", "=", ANALYSIS_TYPE.CAMPAIGN_TRIAGE)
+      .executeTakeFirst()) as unknown as { data: string } | undefined;
+
+    const selectedFactIds: string[] = triageRow ? JSON.parse(triageRow.data).selectedFactIds || [] : [];
+
+    // Get all respondent facts
+    const respondentSessions = (await db
+      .selectFrom("sessions as s")
+      .leftJoin("analysis_results as ar", (join) =>
+        join.onRef("ar.session_id", "=", "s.id").on("ar.type", "=", "facts"),
+      )
+      .select(["s.id", "s.respondent_name", "ar.data as facts_data"])
+      .where("s.campaign_id", "=", campaign.id)
+      .where("s.status", "=", SESSION_STATUS.RESPONDENT_DONE)
+      .orderBy("s.created_at")
+      .execute()) as unknown as {
+      id: string;
+      respondent_name: string | null;
+      facts_data: string | null;
+    }[];
+
+    const allFacts: Array<{
+      factId: string;
+      type: string;
+      content: string;
+      severity: string;
+      evidence: string;
+      respondentName: string;
+      respondentSessionId: string;
+      selected: boolean;
+    }> = [];
+
+    for (const s of respondentSessions) {
+      if (!s.facts_data) continue;
+      const parsed = JSON.parse(s.facts_data);
+      const factList = (parsed.facts || parsed) as Array<Record<string, unknown>>;
+      for (let i = 0; i < factList.length; i++) {
+        const f = factList[i];
+        const factId = `${s.id}:${i}`;
+        allFacts.push({
+          factId,
+          type: (f.type as string) || "fact",
+          content: (f.content as string) || "",
+          severity: (f.severity as string) || "medium",
+          evidence: (f.evidence as string) || "",
+          respondentName: s.respondent_name || "匿名",
+          respondentSessionId: s.id,
+          selected: selectedFactIds.includes(factId),
+        });
+      }
+    }
+
+    return c.json({ facts: allFacts, selectedFactIds });
+  } catch (e) {
+    console.error("Get campaign triage error:", e);
+    return c.json({ error: "Internal Server Error" }, 500);
+  }
+});
+
+// POST /sessions/:id/campaign-triage — Save triage state
+campaignRoutes.post("/sessions/:id/campaign-triage", async (c) => {
+  try {
+    const result = await getOwnedSession(c);
+    if (isResponse(result)) return result;
+    const session = result;
+
+    const body = await c.req.json();
+    const { selectedFactIds } = triageSchema.parse(body);
+
+    // Verify campaign exists for this session
+    const campaign = (await db
+      .selectFrom("campaigns")
+      .selectAll()
+      .where("owner_session_id", "=", session.id)
+      .executeTakeFirst()) as unknown as Campaign | undefined;
+    if (!campaign) return c.json({ error: "キャンペーンが見つかりません" }, 404);
+
+    await saveAnalysisResult(session.id, ANALYSIS_TYPE.CAMPAIGN_TRIAGE, {
+      selectedFactIds,
+      updatedAt: new Date().toISOString(),
+    });
+
+    return c.json({ ok: true });
+  } catch (e) {
+    if (e instanceof ZodError) return c.json({ error: formatZodError(e) }, 400);
+    console.error("Save campaign triage error:", e);
     return c.json({ error: "Internal Server Error" }, 500);
   }
 });

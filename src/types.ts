@@ -35,7 +35,7 @@ export interface Message {
 export interface AnalysisResult {
   id: number;
   session_id: string;
-  type: "facts" | "hypotheses" | "prd" | "spec" | "campaign_analytics" | "readiness";
+  type: "facts" | "hypotheses" | "prd" | "spec" | "campaign_analytics" | "readiness" | "campaign_triage";
   data: string;
   created_at: string;
 }
@@ -69,6 +69,18 @@ export interface User {
   plan?: "free" | "pro";
   stripe_customer_id?: string | null;
   plan_updated_at?: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ApiKey {
+  id: string;
+  user_id: string;
+  name: string;
+  key_hash: string;
+  key_prefix: string;
+  is_active: number;
+  last_used_at: string | null;
   created_at: string;
   updated_at: string;
 }

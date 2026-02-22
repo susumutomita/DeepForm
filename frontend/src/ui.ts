@@ -11,6 +11,24 @@ export function hideLoading(): void {
   document.getElementById('loading-overlay')?.classList.add('hidden');
 }
 
+export function showStreamingPreview(): void {
+  const el = document.getElementById('streaming-preview');
+  if (el) { el.textContent = ''; el.classList.remove('hidden'); }
+}
+
+export function appendStreamingText(text: string): void {
+  const el = document.getElementById('streaming-preview');
+  if (el) {
+    el.textContent = (el.textContent || '') + text;
+    el.scrollTop = el.scrollHeight;
+  }
+}
+
+export function hideStreamingPreview(): void {
+  const el = document.getElementById('streaming-preview');
+  if (el) { el.textContent = ''; el.classList.add('hidden'); }
+}
+
 let toastTimer: ReturnType<typeof setTimeout> | null = null;
 
 export function showToast(msg: string, isError = false): void {

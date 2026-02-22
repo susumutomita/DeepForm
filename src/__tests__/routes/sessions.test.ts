@@ -998,6 +998,20 @@ describe("セッション API", () => {
       expect(data.reply).not.toContain("[CHOICES]");
     });
 
+    it("[CHOICES] ブロックに閉じタグがない場合でも選択肢を抽出すること", async () => {
+      // Given: LLM が [/CHOICES] 閉じタグなしの返答を返す
+      insertSession("schoice-notag", "閉じタグなし", TEST_USER_ID);
+      vi.mocked(extractText).mockReturnValueOnce("質問です。\n[CHOICES]\n選択肢A\n選択肢B\nその他（自分で入力）");
+      // When: start
+      const res = await authedRequest("/api/sessions/schoice-notag/start", { method: "POST" });
+      // Then: 選択肢が正しく抽出される
+      expect(res.status).toBe(200);
+      const data = (await res.json()) as any;
+      expect(data.choices).toEqual(["選択肢A", "選択肢B", "その他（自分で入力）"]);
+      expect(data.reply).toBe("質問です。");
+      expect(data.reply).not.toContain("[CHOICES]");
+    });
+
     it("[CHOICES] ブロックがない場合はフォールバック選択肢を返すこと", async () => {
       // Given: LLM が [CHOICES] ブロックなしの返答を返す
       insertSession("schoice-none", "選択肢なしテスト", TEST_USER_ID);

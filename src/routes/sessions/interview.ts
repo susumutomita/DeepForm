@@ -120,17 +120,28 @@ const FALLBACK_CHOICES: Record<Lang, string[]> = {
 };
 
 export function extractChoices(text: string, lang?: Lang): { text: string; choices: string[] } {
-  const match = text.match(/\[CHOICES\]([\s\S]*?)\[\/CHOICES\]/);
-  if (!match) {
-    // Fallback: provide default choices so the UI is never stuck
-    return { text: text.trim(), choices: FALLBACK_CHOICES[lang ?? "en"] };
+  // Try with closing tag first: [CHOICES]...[/CHOICES]
+  let match = text.match(/\[CHOICES\]([\s\S]*?)\[\/CHOICES\]/);
+  let cleanText: string;
+  let choicesText: string;
+
+  if (match) {
+    choicesText = match[1].trim();
+    cleanText = text.replace(/\[CHOICES\][\s\S]*?\[\/CHOICES\]/, "").trim();
+  } else {
+    // Fallback: [CHOICES] without closing tag — take everything after it
+    match = text.match(/\[CHOICES\]([\s\S]*)$/);
+    if (!match) {
+      return { text: text.trim(), choices: FALLBACK_CHOICES[lang ?? "en"] };
+    }
+    choicesText = match[1].trim();
+    cleanText = text.replace(/\[CHOICES\][\s\S]*$/, "").trim();
   }
-  const choicesText = match[1].trim();
+
   const choices = choicesText
     .split("\n")
     .map((c) => c.trim())
     .filter((c) => c.length > 0);
-  const cleanText = text.replace(/\[CHOICES\][\s\S]*?\[\/CHOICES\]/, "").trim();
   return { text: cleanText, choices: choices.length > 0 ? choices : FALLBACK_CHOICES[lang ?? "en"] };
 }
 

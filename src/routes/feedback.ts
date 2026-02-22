@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import { ZodError } from "zod";
 import { db } from "../db/index.ts";
+import { processFeedbackAsync } from "../helpers/feedback-to-issue.ts";
 import { callClaude, extractText, MODEL_FAST } from "../llm.ts";
 import type { AppEnv } from "../types.ts";
 import { appFeedbackSchema } from "../validation.ts";
@@ -8,24 +9,27 @@ import { appFeedbackSchema } from "../validation.ts";
 const feedbackRoutes = new Hono<AppEnv>();
 
 // ---------------------------------------------------------------------------
-// In-memory rate limiting: 1 request per IP per 60 seconds
+// In-memory rate limiting
 // ---------------------------------------------------------------------------
-const rateLimitMap = new Map<string, number>();
-const RATE_LIMIT_WINDOW_MS = 60_000;
+const feedbackRateLimitMap = new Map<string, number>();
+const deepdiveRateLimitMap = new Map<string, number>();
+const FEEDBACK_RATE_LIMIT_MS = 60_000; // 60s for feedback submission
+const DEEPDIVE_RATE_LIMIT_MS = 5_000; // 5s for deepdive (conversational)
 
-function isRateLimited(ip: string): boolean {
+function isRateLimited(ip: string, map: Map<string, number>, windowMs: number): boolean {
   const now = Date.now();
-  const lastRequest = rateLimitMap.get(ip);
-  if (lastRequest && now - lastRequest < RATE_LIMIT_WINDOW_MS) {
+  const lastRequest = map.get(ip);
+  if (lastRequest && now - lastRequest < windowMs) {
     return true;
   }
-  rateLimitMap.set(ip, now);
+  map.set(ip, now);
   return false;
 }
 
 /** テスト用: レートリミットマップをクリアする */
 export function clearRateLimitMap(): void {
-  rateLimitMap.clear();
+  feedbackRateLimitMap.clear();
+  deepdiveRateLimitMap.clear();
 }
 
 // ---------------------------------------------------------------------------
@@ -35,7 +39,7 @@ feedbackRoutes.post("/", async (c) => {
   try {
     // Rate limit by IP
     const ip = c.req.header("x-forwarded-for")?.split(",")[0]?.trim() || c.req.header("x-real-ip") || "unknown";
-    if (isRateLimited(ip)) {
+    if (isRateLimited(ip, feedbackRateLimitMap, FEEDBACK_RATE_LIMIT_MS)) {
       return c.json({ error: "送信は60秒に1回までです。しばらく待ってから再度お試しください。" }, 429);
     }
 
@@ -50,6 +54,9 @@ feedbackRoutes.post("/", async (c) => {
       .insertInto("feedback")
       .values({ user_id: userId, type, message, page: page ?? null, ip_address: ip })
       .execute();
+
+    // Fire-and-forget: AI analysis + GitHub Issue creation
+    processFeedbackAsync(type, message);
 
     return c.json({ ok: true }, 201);
   } catch (e) {
@@ -69,8 +76,8 @@ feedbackRoutes.post("/", async (c) => {
 feedbackRoutes.post("/deepdive", async (c) => {
   try {
     const ip = c.req.header("x-forwarded-for")?.split(",")[0]?.trim() || c.req.header("x-real-ip") || "unknown";
-    if (isRateLimited(ip)) {
-      return c.json({ error: "送信は60秒に1回までです。" }, 429);
+    if (isRateLimited(ip, deepdiveRateLimitMap, DEEPDIVE_RATE_LIMIT_MS)) {
+      return c.json({ error: "少し待ってから送信してください。" }, 429);
     }
 
     const body = await c.req.json();
@@ -119,6 +126,12 @@ ${turnCount >= 3 ? "\nThis is the final turn. Summarize the feedback concisely a
           ip_address: ip,
         })
         .execute();
+    }
+
+    // Fire-and-forget: create issue from final deepdive summary
+    if (isFinal) {
+      const fullConvo = messages.map((m) => `${m.role}: ${m.content}`).join("\n");
+      processFeedbackAsync("deepdive", `[AI Deep-dive]\n${fullConvo}\n\nAI Summary: ${cleanReply}`);
     }
 
     return c.json({ reply: cleanReply, done: isFinal });

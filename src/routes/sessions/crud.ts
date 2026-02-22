@@ -1,4 +1,4 @@
-import crypto from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { ZodError } from "zod";
 import { SESSION_STATUS } from "../../constants.ts";
@@ -39,27 +39,40 @@ crudRoutes.post("/sessions", async (c) => {
       }
     }
 
-    const id = crypto.randomUUID();
+    const id = randomUUID();
     if (user) {
       await db.insertInto("sessions").values({ id, theme: theme.trim(), user_id: user.id }).execute();
     } else {
-      // Guest rate limit: 1 session per IP per month
-      const ip = c.req.header("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
-      const oneMonthAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
-      const recentGuest = await db
-        .selectFrom("sessions")
-        .select("id")
-        .where("user_id", "is", null)
-        .where("created_at", ">", oneMonthAgo)
-        .where("ip_address", "=", ip)
-        .executeTakeFirst();
-      if (recentGuest) {
-        return c.json({ error: "guest_limit", message: "ログインすると無制限に使えます" }, 429);
+      // Guest rate limit: 1 session per IP per month.
+      // Use the rightmost x-forwarded-for entry (appended by trusted exe.dev proxy,
+      // resistant to client-side spoofing). Store SHA-256 hash only (no raw IP).
+      const forwarded = c.req.header("x-forwarded-for");
+      const parts = forwarded
+        ?.split(",")
+        .map((s) => s.trim())
+        .filter(Boolean);
+      const ip = parts?.at(-1);
+      if (ip) {
+        const ipHash = createHash("sha256").update(ip).digest("hex");
+        const oneMonthAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+        const recentGuest = await db
+          .selectFrom("sessions")
+          .select("id")
+          .where("user_id", "is", null)
+          .where("created_at", ">", oneMonthAgo)
+          .where("ip_hash", "=", ipHash)
+          .executeTakeFirst();
+        if (recentGuest) {
+          return c.json({ error: "guest_limit" }, 429);
+        }
+        await db
+          .insertInto("sessions")
+          .values({ id, theme: theme.trim(), user_id: null, is_public: 0, ip_hash: ipHash })
+          .execute();
+      } else {
+        // No IP available (direct access without proxy) — skip rate limiting
+        await db.insertInto("sessions").values({ id, theme: theme.trim(), user_id: null, is_public: 0 }).execute();
       }
-      await db
-        .insertInto("sessions")
-        .values({ id, theme: theme.trim(), user_id: null, is_public: 0, ip_address: ip })
-        .execute();
     }
     return c.json({ sessionId: id, theme: theme.trim() });
   } catch (e) {
@@ -116,11 +129,13 @@ crudRoutes.get("/sessions/:id", async (c) => {
       | undefined;
     if (!session) return c.json({ error: "Session not found" }, 404);
 
-    // Access control: owner, public, or guest session (no owner = accessible by ID)
+    // Access control: owner or public.
+    // Guest sessions (user_id=null) are non-public by default.
+    // The UUID acts as an unguessable access token for the creator's browser session.
     const isOwner = user && session.user_id === user.id;
     const isPublic = session.is_public === 1;
     const isGuestSession = session.user_id === null;
-    if (!isOwner && !isPublic && !isGuestSession) return c.json({ error: "アクセス権限がありません" }, 403);
+    if (!isOwner && !isPublic && !isGuestSession) return c.json({ error: "Forbidden" }, 403);
 
     const messages = (await db
       .selectFrom("messages")

@@ -47,7 +47,7 @@ export const FULL_SCHEMA = `
     interview_style TEXT DEFAULT 'depth',
     deploy_token TEXT,
     github_repo_url TEXT,
-    ip_address TEXT
+    ip_hash TEXT
   );
   CREATE TABLE IF NOT EXISTS messages (
     id INTEGER PRIMARY KEY AUTOINCREMENT,

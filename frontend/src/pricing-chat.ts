@@ -18,14 +18,21 @@ export function initPricingChat(): void {
   // Show greeting (static, no API call)
   appendMessage('assistant', t('pricing.consult.greeting'));
 
+  // Bind collapsible toggle
+  const toggleBtn = document.getElementById('pricing-consult-toggle');
+  const container = document.getElementById('pricing-consult');
+  toggleBtn?.addEventListener('click', () => {
+    container?.classList.toggle('open');
+  });
+
   // Bind send button
   const sendBtn = document.getElementById('pricing-chat-send');
   sendBtn?.addEventListener('click', sendPricingMessage);
 
-  // Bind Shift+Enter to send
+  // Bind Enter to send (Shift+Enter for newline reserved for future textarea)
   const input = document.getElementById('pricing-chat-input') as HTMLInputElement | null;
   input?.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter' && e.shiftKey) {
+    if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       sendPricingMessage();
     }

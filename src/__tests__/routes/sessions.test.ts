@@ -1206,26 +1206,22 @@ describe("セッション API", () => {
       expect(data.sessionId).toBeDefined();
       expect(data.theme).toBe("ゲストテーマ");
       const row = rawDb.prepare("SELECT * FROM sessions WHERE id = ?").get(data.sessionId) as any;
-      expect(row.is_public).toBe(1);
+      expect(row.is_public).toBe(0);
       expect(row.user_id).toBeNull();
     });
 
-    it("ゲストセッションにはセッション上限が適用されないこと", async () => {
-      // Given: 認証なし（上限チェックはスキップされる）
-      // When: 複数のゲストセッションを作成
-      const res1 = await app.request("/api/sessions", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ theme: "ゲスト1" }),
-      });
-      const res2 = await app.request("/api/sessions", {
+    it("ゲストセッションは同一IPで月に1回までに制限されること", async () => {
+      // Given: 認証なしで既に1セッション作成済み（上のテストで作成）
+      // When: 2回目のゲストセッションを作成
+      const res = await app.request("/api/sessions", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ theme: "ゲスト2" }),
       });
-      // Then: 両方とも成功
-      expect(res1.status).toBe(200);
-      expect(res2.status).toBe(200);
+      // Then: 429 で制限される
+      expect(res.status).toBe(429);
+      const data = (await res.json()) as any;
+      expect(data.error).toBe("guest_limit");
     });
   });
 

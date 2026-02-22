@@ -43,7 +43,23 @@ crudRoutes.post("/sessions", async (c) => {
     if (user) {
       await db.insertInto("sessions").values({ id, theme: theme.trim(), user_id: user.id }).execute();
     } else {
-      await db.insertInto("sessions").values({ id, theme: theme.trim(), user_id: null, is_public: 1 }).execute();
+      // Guest rate limit: 1 session per IP per month
+      const ip = c.req.header("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
+      const oneMonthAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+      const recentGuest = await db
+        .selectFrom("sessions")
+        .select("id")
+        .where("user_id", "is", null)
+        .where("created_at", ">", oneMonthAgo)
+        .where("ip_address", "=", ip)
+        .executeTakeFirst();
+      if (recentGuest) {
+        return c.json({ error: "guest_limit", message: "ログインすると無制限に使えます" }, 429);
+      }
+      await db
+        .insertInto("sessions")
+        .values({ id, theme: theme.trim(), user_id: null, is_public: 0, ip_address: ip })
+        .execute();
     }
     return c.json({ sessionId: id, theme: theme.trim() });
   } catch (e) {
@@ -100,10 +116,11 @@ crudRoutes.get("/sessions/:id", async (c) => {
       | undefined;
     if (!session) return c.json({ error: "Session not found" }, 404);
 
-    // Access control: owner or public
+    // Access control: owner, public, or guest session (no owner = accessible by ID)
     const isOwner = user && session.user_id === user.id;
     const isPublic = session.is_public === 1;
-    if (!isOwner && !isPublic) return c.json({ error: "アクセス権限がありません" }, 403);
+    const isGuestSession = session.user_id === null;
+    if (!isOwner && !isPublic && !isGuestSession) return c.json({ error: "アクセス権限がありません" }, 403);
 
     const messages = (await db
       .selectFrom("messages")

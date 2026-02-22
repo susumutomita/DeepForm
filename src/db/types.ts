@@ -20,6 +20,7 @@ export interface SessionTable {
   interview_style: Generated<string>; // DEFAULT 'depth'
   deploy_token: string | null;
   github_repo_url: string | null;
+  ip_address: string | null;
 }
 
 export interface MessageTable {

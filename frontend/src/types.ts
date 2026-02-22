@@ -340,4 +340,7 @@ export interface DeepFormWindow extends Window {
   // Feedback
   openFeedbackModal: () => void;
   closeFeedbackModal: () => void;
+
+  // Pricing
+  createCheckoutOrScroll: () => Promise<void>;
 }

@@ -27,7 +27,7 @@ install_ci:
 
 .PHONY: clean
 clean:
-	bunx rimraf public_dist frontend/dist public/app.js public/i18n.js public/style.css
+	bunx rimraf public_dist frontend/dist public
 
 .PHONY: build
 build: install
@@ -39,7 +39,7 @@ start: install build
 	bun run start
 
 .PHONY: dev
-dev: install
+dev: install build
 	mkdir -p data
 	bun run dev
 

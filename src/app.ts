@@ -20,8 +20,14 @@ const app = new Hono();
 // Security headers
 app.use("*", secureHeaders());
 
-// Determine static file root: prefer Vite build output, fall back to legacy public/
+// Determine static file root: require Vite build output (public_dist)
 const distDir = path.resolve("public_dist");
+if (!fs.existsSync(distDir)) {
+  console.warn(
+    "[WARNING] public_dist/ not found. Run 'make build' to build the frontend.\n" +
+      "          Falling back to public/ which may contain outdated legacy code.",
+  );
+}
 const staticRoot = fs.existsSync(distDir) ? "./public_dist" : "./public";
 console.info(`Serving static files from: ${staticRoot}`);
 

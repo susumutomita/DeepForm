@@ -1,99 +1,57 @@
-/**
- * Security Policy page for DeepForm
- */
+import { t } from '../i18n';
+
 export function renderSecurityPolicy(): string {
   return `
 <article class="policy-page">
-  <p class="policy-meta">最終更新日: 2026年2月</p>
+  <p class="policy-meta">${t('security.lastUpdated')}</p>
+  <h1>${t('security.title')}</h1>
+  <p>${t('security.intro')}</p>
 
-  <h1>セキュリティポリシー</h1>
+  <h2>${t('security.s1.title')}</h2>
+  <p>${t('security.s1.desc1')}</p>
+  <p><strong>${t('security.s1.desc2')}</strong></p>
 
-  <p>
-    本ページでは、DeepForm（以下「本サービス」）におけるセキュリティ対策およびデータ保護の取り組みについて説明します。
-  </p>
+  <h2>${t('security.s2.title')}</h2>
+  <p>${t('security.s2.desc')}</p>
 
-  <h2>1. 認証</h2>
-  <p>
-    本サービスは、exe.dev のプロキシベース認証システム（「Login with exe」）を採用しています。
-    認証は exe.dev のインフラストラクチャによって処理され、ユーザーIDおよびメールアドレスは
-    HTTPヘッダー（<code>X-ExeDev-UserID</code> / <code>X-ExeDev-Email</code>）を通じて安全に受け渡されます。
-  </p>
-  <p>
-    <strong>本サービスはパスワードを一切保存しません。</strong>
-    認証に関するすべてのセキュリティ管理は exe.dev 側で行われます。
-  </p>
-
-  <h2>2. 通信の暗号化</h2>
-  <p>
-    本サービスへのすべての通信は、exe.dev のリバースプロキシを経由し、HTTPS（TLS）によって暗号化されます。
-    ユーザーのブラウザとサーバー間の通信は、第三者による傍受から保護されています。
-  </p>
-
-  <h2>3. データの保存</h2>
-  <p>
-    ユーザーデータは、exe.dev の仮想マシン上の SQLite データベースに保存されます。
-  </p>
+  <h2>${t('security.s3.title')}</h2>
+  <p>${t('security.s3.desc')}</p>
   <ul>
-    <li>データベースファイルは exe.dev のVM上にローカルに保存されます</li>
-    <li>データベースは保存時の暗号化（encryption at rest）は適用されていません</li>
-    <li>VMへのアクセスは exe.dev の管理者に限定されています</li>
+    <li>${t('security.s3.item1')}</li>
+    <li>${t('security.s3.item2')}</li>
+    <li>${t('security.s3.item3')}</li>
   </ul>
 
-  <h2>4. AI 処理におけるデータの取り扱い</h2>
-  <p>
-    インタビュー内容の処理のため、ユーザーが入力したテキストデータは Anthropic Claude API に送信されます。
-  </p>
+  <h2>${t('security.s4.title')}</h2>
+  <p>${t('security.s4.desc')}</p>
   <ul>
-    <li>API との通信は HTTPS によって暗号化されます</li>
-    <li>送信されるデータは、ファクト抽出・仮説生成・仕様書生成等の目的に限定されます</li>
-    <li>Anthropic のデータ取り扱いについては、<a href="https://www.anthropic.com/privacy" target="_blank" rel="noopener noreferrer">Anthropic のプライバシーポリシー</a>をご参照ください</li>
+    <li>${t('security.s4.item1')}</li>
+    <li>${t('security.s4.item2')}</li>
+    <li>${t('security.s4.item3')}</li>
   </ul>
 
-  <h2>5. セッションの分離</h2>
-  <p>
-    各ユーザーは、自身が作成したインタビューセッションのみにアクセスできます。
-    他のユーザーのセッションデータには、通常の操作ではアクセスできない設計となっています。
-  </p>
+  <h2>${t('security.s5.title')}</h2>
+  <p>${t('security.s5.desc')}</p>
 
-  <h2>6. セッションの共有</h2>
-  <p>
-    セッションの共有は、ユーザーの明示的な操作によってのみ行われます。
-    ユーザーがセッションを共有した場合、共有先のユーザーがそのセッションの内容を閲覧できるようになります。
-    キャンペーン機能を通じたセッション参加についても、ユーザーの自発的な操作が必要です。
-  </p>
+  <h2>${t('security.s6.title')}</h2>
+  <p>${t('security.s6.desc')}</p>
 
-  <h2>7. 保存しない情報</h2>
-  <p>本サービスでは、以下の情報を保存しません。</p>
+  <h2>${t('security.s7.title')}</h2>
+  <p>${t('security.s7.desc')}</p>
   <ul>
-    <li><strong>パスワード:</strong> 認証は exe.dev が管理しており、本サービスはパスワードを取り扱いません</li>
-    <li><strong>決済情報:</strong> 本サービスは無料で提供されており、クレジットカード番号等の決済情報は一切取り扱いません</li>
-    <li><strong>認証トークン:</strong> exe.dev の認証トークンはプロキシ層で処理され、本サービスのアプリケーション層には到達しません</li>
+    <li>${t('security.s7.item1')}</li>
+    <li>${t('security.s7.item2')}</li>
+    <li>${t('security.s7.item3')}</li>
   </ul>
 
-  <h2>8. 脆弱性の報告</h2>
-  <p>
-    本サービスのセキュリティ上の脆弱性を発見された場合は、以下の方法でご報告ください。
-  </p>
-  <ul>
-    <li><strong>GitHub Issues:</strong> <a href="https://github.com/susumutomita/DeepForm/issues" target="_blank" rel="noopener noreferrer">https://github.com/susumutomita/DeepForm/issues</a> にて報告</li>
-  </ul>
-  <p>
-    脆弱性の報告にあたっては、影響範囲や再現手順をできるだけ詳しくお知らせください。
-    報告を受けた場合、速やかに調査・対応を行います。
-  </p>
+  <h2>${t('security.s8.title')}</h2>
+  <p>${t('security.s8.desc')}</p>
 
-  <h2>9. オープンソース</h2>
-  <p>
-    本サービスのソースコードは GitHub 上でオープンソースとして公開されています。
-    これにより、誰でもコードを確認し、セキュリティ上の問題を検証することが可能です。
-    透明性の確保を通じて、サービスの信頼性向上に努めています。
-  </p>
+  <h2>${t('security.s9.title')}</h2>
+  <p>${t('security.s9.desc')}</p>
 
-  <h2>10. セキュリティ対策の更新</h2>
-  <p>
-    本サービスのセキュリティ対策は、脅威の変化や技術の進歩に応じて継続的に見直し・改善を行います。
-    本ポリシーの内容は、必要に応じて更新されます。
-  </p>
+  <h2>${t('security.s10.title')}</h2>
+  <p>${t('security.s10.desc')}</p>
 </article>
 `;
 }

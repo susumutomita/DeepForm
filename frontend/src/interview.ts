@@ -133,7 +133,7 @@ export async function openSession(sessionId: string, isNew = false): Promise<voi
     const stepMap: Record<string, StepName> = {
       'interviewing': 'interview', 'analyzed': 'facts', 'respondent_done': 'facts',
       'hypothesized': 'hypotheses', 'prd_generated': 'prd', 'spec_generated': 'spec',
-      'readiness_checked': 'readiness',
+      'readiness_checked': 'spec', // Readiness step hidden from UI; map to spec
     };
     const activeStep = stepMap[session.status] || 'interview';
     activateStep(activeStep);
@@ -983,8 +983,8 @@ export function activateStep(stepName: string): void {
 }
 
 function updateStepNav(status: string): void {
-  const order = ['interviewing', 'analyzed', 'hypothesized', 'prd_generated', 'spec_generated', 'readiness_checked'];
-  const stepNames: StepName[] = ['interview', 'facts', 'hypotheses', 'prd', 'spec', 'readiness'];
+  const order = ['interviewing', 'analyzed', 'hypothesized', 'prd_generated', 'spec_generated'];
+  const stepNames: StepName[] = ['interview', 'facts', 'hypotheses', 'prd', 'spec'];
   const s = status === 'respondent_done' ? 'analyzed' : status;
   const currentIndex = order.indexOf(s);
   stepNames.forEach((name, i) => {

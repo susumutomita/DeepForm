@@ -27,7 +27,7 @@ function showUpgradeModal(upgradeUrl: string): void {
   card.innerHTML = `
     <h3>🚀 Upgrade to Pro</h3>
     <p style="margin: 1rem 0; color: var(--text-dim);">
-      PRD generation, spec export, and readiness checks are available on the Pro plan.
+      PRD generation, spec export, and deploy are available on the Pro plan.
     </p>
     <div style="background: var(--bg-input); border-radius: 8px; padding: 1rem; margin: 1rem 0;">
       <div style="font-size: 2rem; font-weight: 700;">$29<span style="font-size: 1rem; font-weight: 400; color: var(--text-dim);">/month</span></div>
@@ -982,7 +982,9 @@ export function activateStep(stepName: string): void {
 function updateStepNav(status: string): void {
   const order = ['interviewing', 'analyzed', 'hypothesized', 'prd_generated', 'spec_generated'];
   const stepNames: StepName[] = ['interview', 'facts', 'hypotheses', 'prd', 'spec'];
-  const s = status === 'respondent_done' ? 'analyzed' : status;
+  const s = status === 'respondent_done' ? 'analyzed'
+    : status === 'readiness_checked' ? 'spec_generated'
+    : status;
   const currentIndex = order.indexOf(s);
   stepNames.forEach((name, i) => {
     const el = document.querySelector(`.step-nav .step[data-step="${name}"]`);

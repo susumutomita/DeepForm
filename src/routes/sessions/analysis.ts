@@ -400,10 +400,10 @@ IMPORTANT: Respond in the SAME LANGUAGE as the input data.
   8. portability（移植性）: 適応性、設置性、置換性
 
 実装制約（CRITICAL — この PRD を実装するエージェントへの必須指示）:
-- 各機能の acceptanceCriteria には「データ経路が実物（本物の DB/API 接続）であること」を含める
-- モックデータ、ハードコードされた配列、スタブ API での実装は完了とみなさない
-- 「UI が表示される」だけでは受け入れ基準を満たさない。バックエンドからの実データ取得・保存が動作して初めて完了
-- バックエンド未完成の場合、先にバックエンド側の最小実装（仮でも本物の I/O）を作ること
+- モックデータ禁止: ハードコードされた配列、フェイクのシードデータ、スタブ API での実装は完了とみなさない
+- 空状態は正常: データがない場合は「データがありません」と表示し、作成フォームを提供すること。サンプルデータで埋めて動いてるように見せるのは禁止
+- データ往復検証必須: 各機能は「作成 → DB保存 → ページリロード → データが残っている」を確認すること。リロードで消えるなら完成ではない
+- バックエンドファースト: DBテーブル → APIエンドポイント（実 DB クエリ付き）→ UI の順で実装すること
 - 未実装部分は UI 上で明示的に「未実装」と表示し、モックで補完してはならない`;
 
     const response = await callClaude(
@@ -504,11 +504,13 @@ Max 4 tables. Minimal columns.
 |------|-------|------|------|
 | Name | Setup | Action | Expected |
 
-## Implementation Constraints
-- Real DB/API connections only. No mock data.
-- Backend-first: implement API before UI.
-- Show "Not implemented" for unfinished features.
-- All API endpoints must be callable by external services (API-first design).
+## Implementation Constraints (CRITICAL — coding agents MUST follow)
+- **NO MOCK DATA**: Every screen must display real data from the database. Hardcoded arrays, placeholder JSON, and fake seed data that pretends to be user data are all prohibited.
+- **Empty state is real state**: When no data exists, show "No data yet" with a form/action to create the first record. Never fill the screen with sample data to make it look functional.
+- **Backend-first**: Implement database tables → API endpoints (with real DB queries) → UI last. Do not build UI until the API returns real data.
+- **Verify data round-trip**: After implementing each feature, confirm: create → save to DB → reload page → data still there. If it disappears on reload, it's not done.
+- **Show "Not implemented" for unfinished features** — never stub them with fake responses.
+- **All API endpoints must be callable by external services** (API-first design).
 
 SIZE RULES (HARD LIMITS):
 - Total output MUST be under 2000 tokens.

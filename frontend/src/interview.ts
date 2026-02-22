@@ -372,6 +372,7 @@ export async function doRunReadiness(): Promise<void> {
     const categories = data.readiness?.categories ?? data.categories ?? [];
     renderReadiness(categories);
     showToast(t('toast.readinessDone'));
+    if (currentSessionId) showCompletionFeedback(currentSessionId);
   } catch (e: any) {
     hideLoading();
     if (e.status === 402 || e.upgrade) {
@@ -907,6 +908,7 @@ function renderReadiness(categories: ReadinessCategory[]): void {
 }
 
 // --- Completion Feedback ---
+// Safe: all innerHTML content below is hardcoded static HTML, not user input
 function showCompletionFeedback(sessionId: string): void {
   const storageKey = `deepform_feedback_${sessionId}`;
   if (localStorage.getItem(storageKey)) return;
@@ -915,6 +917,7 @@ function showCompletionFeedback(sessionId: string): void {
   overlay.className = 'completion-feedback-overlay';
   const card = document.createElement('div');
   card.className = 'completion-feedback-card';
+  // Safe: static HTML template with no user-supplied data
   card.innerHTML = `
     <h3>🎉 分析が完了しました！</h3>
     <p>DeepForm の体験はいかがでしたか？</p>

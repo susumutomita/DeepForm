@@ -1192,27 +1192,73 @@ describe("セッション API", () => {
   // POST /api/sessions - ゲストセッション作成
   // -------------------------------------------------------------------------
   describe("POST /api/sessions - ゲストセッション作成", () => {
-    it("未認証の場合 is_public=1 かつ user_id=null でセッションが作成されること", async () => {
+    const GUEST_HEADERS = {
+      "Content-Type": "application/json",
+      "x-forwarded-for": "192.0.2.1",
+    };
+
+    it("未認証の場合 is_public=0 かつ user_id=null でセッションが作成されること", async () => {
       // Given: 認証なし
       // When: テーマを指定して POST
       const res = await app.request("/api/sessions", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: GUEST_HEADERS,
         body: JSON.stringify({ theme: "ゲストテーマ" }),
       });
-      // Then: セッションが is_public=1, user_id=null で作成される
+      // Then: セッションが is_public=0, user_id=null で作成される
       expect(res.status).toBe(200);
       const data = (await res.json()) as any;
       expect(data.sessionId).toBeDefined();
       expect(data.theme).toBe("ゲストテーマ");
       const row = rawDb.prepare("SELECT * FROM sessions WHERE id = ?").get(data.sessionId) as any;
-      expect(row.is_public).toBe(1);
+      expect(row.is_public).toBe(0);
       expect(row.user_id).toBeNull();
+      // IP はハッシュ化されて保存される
+      expect(row.ip_hash).toBeDefined();
+      expect(row.ip_hash).not.toBe("192.0.2.1");
+      expect(row.ip_hash).toHaveLength(64); // SHA-256 hex
     });
 
-    it("ゲストセッションにはセッション上限が適用されないこと", async () => {
-      // Given: 認証なし（上限チェックはスキップされる）
-      // When: 複数のゲストセッションを作成
+    it("ゲストセッションは同一IPで月に1回までに制限されること", async () => {
+      // Given: 認証なしで既に1セッション作成済み
+      const first = await app.request("/api/sessions", {
+        method: "POST",
+        headers: GUEST_HEADERS,
+        body: JSON.stringify({ theme: "ゲスト1" }),
+      });
+      expect(first.status).toBe(200);
+      // When: 同一 IP で2回目のゲストセッションを作成
+      const res = await app.request("/api/sessions", {
+        method: "POST",
+        headers: GUEST_HEADERS,
+        body: JSON.stringify({ theme: "ゲスト2" }),
+      });
+      // Then: 429 で制限される
+      expect(res.status).toBe(429);
+      const data = (await res.json()) as any;
+      expect(data.error).toBe("guest_limit");
+    });
+
+    it("異なる IP なら別のゲストセッションを作成できること", async () => {
+      // Given: IP-A でセッション作成済み
+      const first = await app.request("/api/sessions", {
+        method: "POST",
+        headers: GUEST_HEADERS,
+        body: JSON.stringify({ theme: "ゲスト1" }),
+      });
+      expect(first.status).toBe(200);
+      // When: 別の IP-B でセッション作成
+      const res = await app.request("/api/sessions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "x-forwarded-for": "198.51.100.1" },
+        body: JSON.stringify({ theme: "ゲスト2" }),
+      });
+      // Then: 成功する
+      expect(res.status).toBe(200);
+    });
+
+    it("x-forwarded-for がない場合はレート制限をスキップすること", async () => {
+      // Given/When: ヘッダーなしで2回作成
       const res1 = await app.request("/api/sessions", {
         method: "POST",
         headers: { "Content-Type": "application/json" },

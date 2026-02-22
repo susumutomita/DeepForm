@@ -20,6 +20,7 @@ export interface SessionTable {
   interview_style: Generated<string>; // DEFAULT 'depth'
   deploy_token: string | null;
   github_repo_url: string | null;
+  ip_hash: string | null;
 }
 
 export interface MessageTable {
@@ -96,6 +97,18 @@ export interface PageViewTable {
   created_at: Generated<string>;
 }
 
+export interface ApiKeyTable {
+  id: string;
+  user_id: string;
+  name: string;
+  key_hash: string;
+  key_prefix: string;
+  is_active: Generated<number>; // 0/1 for SQLite compat
+  last_used_at: string | null;
+  created_at: Generated<string>;
+  updated_at: Generated<string>;
+}
+
 // ---------------------------------------------------------------------------
 // Database — union of all tables
 // ---------------------------------------------------------------------------
@@ -109,4 +122,5 @@ export interface Database {
   auth_sessions: AuthSessionTable;
   feedback: FeedbackTable;
   page_views: PageViewTable;
+  api_keys: ApiKeyTable;
 }

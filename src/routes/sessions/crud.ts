@@ -43,7 +43,23 @@ crudRoutes.post("/sessions", async (c) => {
     if (user) {
       await db.insertInto("sessions").values({ id, theme: theme.trim(), user_id: user.id }).execute();
     } else {
-      await db.insertInto("sessions").values({ id, theme: theme.trim(), user_id: null, is_public: 0 }).execute();
+      // Guest rate limit: 1 session per IP per month
+      const ip = c.req.header("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
+      const oneMonthAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+      const recentGuest = await db
+        .selectFrom("sessions")
+        .select("id")
+        .where("user_id", "is", null)
+        .where("created_at", ">", oneMonthAgo)
+        .where("ip_address", "=", ip)
+        .executeTakeFirst();
+      if (recentGuest) {
+        return c.json({ error: "guest_limit", message: "ログインすると無制限に使えます" }, 429);
+      }
+      await db
+        .insertInto("sessions")
+        .values({ id, theme: theme.trim(), user_id: null, is_public: 0, ip_address: ip })
+        .execute();
     }
     return c.json({ sessionId: id, theme: theme.trim() });
   } catch (e) {

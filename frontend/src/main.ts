@@ -146,7 +146,13 @@ function showGuestNotice(theme: string): void {
       if (input) input.value = '';
       await openSession(data.sessionId, true);
     } catch (e: any) {
-      showToast(e.message, true);
+      if (e.message?.includes('guest_limit') || e.message?.includes('ログイン')) {
+        showToast(t('guest.limit'), true);
+        // Redirect to login after short delay
+        setTimeout(() => { window.location.href = '/api/auth/github'; }, 2000);
+      } else {
+        showToast(e.message, true);
+      }
     }
   });
   card.appendChild(guestBtn);

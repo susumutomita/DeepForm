@@ -25,11 +25,13 @@ class StaticMigrationProvider {
     const m002 = await import("./migrations/002_add_analysis_unique.ts");
     const m003 = await import("./migrations/003_backfill_columns.ts");
     const m004 = await import("./migrations/004_add_github_repo_url.ts");
+    const m005 = await import("./migrations/005_add_session_ip.ts");
     return {
       "001_initial_schema": m001,
       "002_add_analysis_unique": m002,
       "003_backfill_columns": m003,
       "004_add_github_repo_url": m004,
+      "005_add_session_ip": m005,
     };
   }
 }

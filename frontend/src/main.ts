@@ -20,7 +20,6 @@ import { openPolicy, closeModal } from './modal';
 import { openFeedbackModal, closeFeedbackModal } from './feedback';
 import { showCampaignAnalytics } from './campaign-analytics';
 import { showAnalytics } from './analytics';
-import { initPricingChat } from './pricing-chat';
 import { t } from './i18n';
 import { renderPrivacyPolicy } from './pages/privacy';
 import { renderTerms } from './pages/terms';
@@ -178,8 +177,7 @@ function showGuestNotice(theme: string): void {
 // Pricing
 w.createCheckoutOrScroll = async () => {
   if (!isLoggedIn()) {
-    // Scroll to chat widget
-    document.getElementById('pricing-consult')?.scrollIntoView({ behavior: 'smooth' });
+    showToast(t('pricing.loginRequired'), true);
     return;
   }
   try {
@@ -241,9 +239,6 @@ async function init(): Promise<void> {
   } catch {
     // Plan check is non-critical
   }
-
-  // Pricing AI chat
-  initPricingChat();
 
   // Step nav clicks
   document.querySelectorAll('.step-nav .step').forEach(el => {

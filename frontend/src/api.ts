@@ -299,6 +299,10 @@ export function submitAppFeedback(type: string, message: string, page?: string):
   return post('/api/feedback', { type, message, page });
 }
 
+export function feedbackDeepdive(message: string, history?: Array<{ role: string; content: string }>): Promise<{ reply: string; done: boolean }> {
+  return post('/api/feedback/deepdive', { message, history });
+}
+
 // Campaign Analytics
 export function getCampaignAnalytics(campaignId: string): Promise<CampaignAnalytics> {
   return request(`/api/campaigns/${campaignId}/analytics`);

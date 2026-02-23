@@ -198,6 +198,7 @@ export async function sendMessage(choiceText?: string): Promise<void> {
   const btnSend = document.getElementById('btn-send') as HTMLButtonElement | null;
   if (btnSend) btnSend.disabled = true;
   const bubble = addStreamingBubble('chat-container');
+  let interviewEnded = false;
 
   try {
     await api.sendChatStream(currentSessionId, message, {
@@ -205,8 +206,14 @@ export async function sendMessage(choiceText?: string): Promise<void> {
       onMeta: () => {},
       onDone: (data) => {
         finalizeStreamingBubble(bubble);
-        if (data.readyForAnalysis || (data.turnCount && data.turnCount >= 3)) {
-          // Show the "start analysis" button — user decides when to proceed
+        if (data.readyForAnalysis) {
+          interviewEnded = true;
+          disableInterviewInput();
+          showAnalysisButton();
+          doRunFullPipeline();
+          return;
+        }
+        if (data.turnCount && data.turnCount >= 3) {
           showAnalysisButton();
         }
         if (data.choices?.length) {
@@ -222,9 +229,19 @@ export async function sendMessage(choiceText?: string): Promise<void> {
     finalizeStreamingBubble(bubble);
     showToast(e.message, true);
   } finally {
-    if (btnSend) btnSend.disabled = false;
-    input?.focus();
+    if (!interviewEnded) {
+      if (btnSend) btnSend.disabled = false;
+      input?.focus();
+    }
   }
+}
+
+function disableInterviewInput(): void {
+  const input = document.getElementById('chat-input') as HTMLTextAreaElement | null;
+  if (input) { input.disabled = true; input.placeholder = ''; }
+  const btnSend = document.getElementById('btn-send') as HTMLButtonElement | null;
+  if (btnSend) btnSend.disabled = true;
+  removeChoiceButtons('chat-container');
 }
 
 function showAnalysisButton(): void {
@@ -367,21 +384,41 @@ export async function doRunSpec(): Promise<void> {
 export async function doRunReadiness(): Promise<void> {
   if (!currentSessionId) return;
   showLoading(t('loading.readiness'));
+  showStreamingPreview();
   try {
-    const data = await api.runReadiness(currentSessionId);
-    const categories = data.readiness?.categories ?? data.categories ?? [];
-    renderReadiness(categories);
-    showToast(t('toast.readinessDone'));
-    if (currentSessionId) showCompletionFeedback(currentSessionId);
+    await api.runReadinessStream(currentSessionId, {
+      onStageRunning: () => {
+        showLoading(t('loading.readiness'));
+      },
+      onStageStream: (_stage, text) => {
+        appendStreamingText(text);
+      },
+      onStageData: (_stage, data) => {
+        const categories = data.readiness?.categories ?? data.categories ?? [];
+        renderReadiness(categories);
+      },
+      onDone: () => {
+        hideLoading();
+        hideStreamingPreview();
+        updateStepNav('readiness_checked');
+        activateStep('spec');
+        showToast(t('toast.readinessDone'));
+        if (currentSessionId) showCompletionFeedback(currentSessionId);
+      },
+      onError: (error) => {
+        hideLoading();
+        hideStreamingPreview();
+        showToast(error, true);
+      },
+    });
   } catch (e: any) {
     hideLoading();
+    hideStreamingPreview();
     if (e.status === 402 || e.upgrade) {
       showUpgradeModal(e.upgradeUrl || PAYMENT_LINK);
       return;
     }
     showToast(e.message, true);
-  } finally {
-    hideLoading();
   }
 }
 

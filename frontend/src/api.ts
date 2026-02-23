@@ -185,8 +185,8 @@ export interface PipelineCallbacks {
   onError: (error: string) => void;
 }
 
-export async function runPipeline(sessionId: string, cb: PipelineCallbacks): Promise<void> {
-  const res = await fetch(`/api/sessions/${sessionId}/pipeline`, {
+async function streamSSE(url: string, cb: PipelineCallbacks): Promise<void> {
+  const res = await fetch(url, {
     method: 'POST',
     headers: { 'Accept': 'text/event-stream', 'Content-Type': 'application/json' },
   });
@@ -235,6 +235,14 @@ export async function runPipeline(sessionId: string, cb: PipelineCallbacks): Pro
       }
     }
   }
+}
+
+export function runPipeline(sessionId: string, cb: PipelineCallbacks): Promise<void> {
+  return streamSSE(`/api/sessions/${sessionId}/pipeline`, cb);
+}
+
+export function runReadinessStream(sessionId: string, cb: PipelineCallbacks): Promise<void> {
+  return streamSSE(`/api/sessions/${sessionId}/readiness-stream`, cb);
 }
 
 // GitHub Save

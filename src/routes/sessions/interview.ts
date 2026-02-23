@@ -280,7 +280,9 @@ interviewRoutes.post("/sessions/:id/chat", async (c) => {
                 .catch((err) => console.error("Failed to save message:", err));
               const readyForAnalysis = cleanText.includes("[READY_FOR_ANALYSIS]") || turnCount >= 8;
               controller.enqueue(
-                encoder.encode(`data: ${JSON.stringify({ type: "done", readyForAnalysis, turnCount, choices })}\n\n`),
+                encoder.encode(
+                  `data: ${JSON.stringify({ type: "done", readyForAnalysis, turnCount, choices: readyForAnalysis ? [] : choices })}\n\n`,
+                ),
               );
               controller.close();
             });
@@ -320,7 +322,7 @@ interviewRoutes.post("/sessions/:id/chat", async (c) => {
       reply: cleanReply.replace("[READY_FOR_ANALYSIS]", "").trim(),
       turnCount,
       readyForAnalysis,
-      choices,
+      choices: readyForAnalysis ? [] : choices,
     });
   } catch (e) {
     if (e instanceof ZodError) return c.json({ error: formatZodError(e) }, 400);

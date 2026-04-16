@@ -22,7 +22,18 @@ export const ANALYSIS_TYPE = {
   READINESS: "readiness",
   CAMPAIGN_ANALYTICS: "campaign_analytics",
   CAMPAIGN_TRIAGE: "campaign_triage",
+  CLAUDE_CODE_PROMPT: "claude_code_prompt",
 } as const;
+
+// ---------------------------------------------------------------------------
+// Interview style values
+// ---------------------------------------------------------------------------
+export const INTERVIEW_STYLE = {
+  DEPTH: "depth",
+  CLAUDE_CODE: "claude_code",
+} as const;
+
+export type InterviewStyle = (typeof INTERVIEW_STYLE)[keyof typeof INTERVIEW_STYLE];
 
 // ---------------------------------------------------------------------------
 // Admin configuration

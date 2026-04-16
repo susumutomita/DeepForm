@@ -2,10 +2,12 @@ import { Hono } from "hono";
 import type { AppEnv } from "../../types.ts";
 import { analysisRoutes } from "./analysis.ts";
 import { campaignRoutes } from "./campaigns.ts";
+import { claudeCodeExportRoutes } from "./claude-code-export.ts";
 import { crudRoutes } from "./crud.ts";
 import { githubSaveRoutes } from "./github-save.ts";
 import { interviewRoutes } from "./interview.ts";
 import { pipelineRoutes } from "./pipeline.ts";
+import { postReleaseFeedbackRoutes } from "./post-release-feedback.ts";
 
 const sessionRoutes = new Hono<AppEnv>();
 
@@ -15,5 +17,7 @@ sessionRoutes.route("", analysisRoutes);
 sessionRoutes.route("", pipelineRoutes);
 sessionRoutes.route("", campaignRoutes);
 sessionRoutes.route("", githubSaveRoutes);
+sessionRoutes.route("", claudeCodeExportRoutes);
+sessionRoutes.route("", postReleaseFeedbackRoutes);
 
 export { sessionRoutes };

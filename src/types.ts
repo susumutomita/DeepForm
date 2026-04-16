@@ -20,6 +20,7 @@ export interface Session {
   campaign_id: string | null;
   user_id?: string | null;
   is_public?: number;
+  interview_style?: "depth" | "claude_code";
   deploy_token?: string | null;
   github_repo_url?: string | null;
 }
@@ -35,7 +36,15 @@ export interface Message {
 export interface AnalysisResult {
   id: number;
   session_id: string;
-  type: "facts" | "hypotheses" | "prd" | "spec" | "campaign_analytics" | "readiness" | "campaign_triage";
+  type:
+    | "facts"
+    | "hypotheses"
+    | "prd"
+    | "spec"
+    | "campaign_analytics"
+    | "readiness"
+    | "campaign_triage"
+    | "claude_code_prompt";
   data: string;
   created_at: string;
 }

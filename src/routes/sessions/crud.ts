@@ -20,7 +20,7 @@ crudRoutes.post("/sessions", async (c) => {
   try {
     const user = c.get("user");
     const body = await c.req.json();
-    const { theme } = createSessionSchema.parse(body);
+    const { theme, interview_style } = createSessionSchema.parse(body);
 
     if (user) {
       // Enforce session limit per user
@@ -41,7 +41,7 @@ crudRoutes.post("/sessions", async (c) => {
 
     const id = randomUUID();
     if (user) {
-      await db.insertInto("sessions").values({ id, theme: theme.trim(), user_id: user.id }).execute();
+      await db.insertInto("sessions").values({ id, theme: theme.trim(), user_id: user.id, interview_style }).execute();
     } else {
       // Guest rate limit: 1 session per IP per month.
       // Use the rightmost x-forwarded-for entry (appended by trusted exe.dev proxy,

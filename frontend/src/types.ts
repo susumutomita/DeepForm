@@ -144,6 +144,8 @@ export interface Analysis {
   readiness?: ReadinessData;
 }
 
+export type InterviewStyle = 'depth' | 'claude_code';
+
 export interface Session {
   id: string;
   theme: string;
@@ -155,6 +157,7 @@ export interface Session {
   user_id?: string;
   mode?: 'normal' | 'campaign_respondent';
   respondent_name?: string;
+  interview_style?: InterviewStyle;
 }
 
 export interface SessionDetail {
@@ -283,6 +286,28 @@ export interface CampaignJoinResponse {
   error?: string;
 }
 
+/** Claude Code prompt export result */
+export interface ClaudeCodeExport {
+  prompt: string;
+  sessionId: string;
+  theme: string;
+  exportedAt: string;
+}
+
+/** Post-release feedback question */
+export interface PostReleaseFeedbackQuestion {
+  id: string;
+  question: string;
+  type: 'multiple_choice' | 'scale' | 'text';
+  choices?: string[];
+}
+
+/** Post-release feedback submission */
+export interface PostReleaseFeedbackEntry {
+  questionId: string;
+  answer: string;
+}
+
 /** All step names in the app (6 steps). */
 export type StepName = 'interview' | 'facts' | 'hypotheses' | 'prd' | 'spec' | 'readiness';
 
@@ -320,6 +345,9 @@ export interface DeepFormWindow extends Window {
   completeCampaignInterview: () => Promise<void>;
   submitCampaignFeedback: () => Promise<void>;
   handleCampaignKeydown: (event: KeyboardEvent) => void;
+
+  // Claude Code
+  exportClaudeCodePrompt: () => Promise<void>;
 
   // Campaign Analytics
   showCampaignAnalytics: (campaignId: string) => Promise<void>;

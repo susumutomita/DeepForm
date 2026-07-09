@@ -1,4 +1,16 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { ANALYSIS_TYPE, INTERVIEW_STYLE } from "../constants.ts";
+
+describe("定数の定義", () => {
+  it("INTERVIEW_STYLE が正しい値を含むべき", () => {
+    expect(INTERVIEW_STYLE.DEPTH).toBe("depth");
+    expect(INTERVIEW_STYLE.CLAUDE_CODE).toBe("claude_code");
+  });
+
+  it("ANALYSIS_TYPE に CLAUDE_CODE_PROMPT が含まれるべき", () => {
+    expect(ANALYSIS_TYPE.CLAUDE_CODE_PROMPT).toBe("claude_code_prompt");
+  });
+});
 
 describe("PRO_GATE フィーチャーフラグ", () => {
   beforeEach(() => {

@@ -7,7 +7,7 @@ import {
   showHome, openSession, sendMessage, handleChatKeydown,
   doRunAnalysis, doRunHypotheses, doRunPRD, doRunSpec, doRunReadiness, doRunFullPipeline,
   exportSpecJSON, exportPRDMarkdown, doDeployToExeDev, doSaveToGitHub, activateStep,
-  getCurrentSessionId,
+  getCurrentSessionId, doExportClaudeCodePrompt,
 } from './interview';
 import { initInlineEdit, destroyInlineEdit } from './inline-edit';
 import {
@@ -25,9 +25,14 @@ import { renderPrivacyPolicy } from './pages/privacy';
 import { renderTerms } from './pages/terms';
 import { renderSecurityPolicy } from './pages/security';
 import * as api from './api';
-import type { DeepFormWindow } from './types';
+import type { DeepFormWindow, InterviewStyle } from './types';
 
 const w = window as unknown as DeepFormWindow;
+
+function getSelectedInterviewStyle(): InterviewStyle {
+  const select = document.getElementById('interview-style-select') as HTMLSelectElement | null;
+  return (select?.value as InterviewStyle) || 'depth';
+}
 
 // --- Global function bindings for HTML onclick handlers ---
 w.showHome = () => { showHome(); loadSessions(); };
@@ -49,6 +54,7 @@ w.exportPRDMarkdown = exportPRDMarkdown;
 w.deployToExeDev = doDeployToExeDev;
 w.saveToGitHub = doSaveToGitHub;
 w.activateStep = activateStep;
+w.exportClaudeCodePrompt = doExportClaudeCodePrompt;
 w.logout = doLogout;
 w.setLang = (lang: string) => { setLang(lang); loadSessions(); };
 
@@ -87,7 +93,8 @@ w.startNewSession = async () => {
   }
 
   try {
-    const data = await api.createSession(theme, currentLang);
+    const style = getSelectedInterviewStyle();
+    const data = await api.createSession(theme, currentLang, style);
     input.value = '';
     await openSession(data.sessionId, true);
   } catch (e: any) {
@@ -141,7 +148,8 @@ function showGuestNotice(theme: string): void {
   guestBtn.addEventListener('click', async () => {
     overlay.remove();
     try {
-      const data = await api.createSession(theme, currentLang);
+      const style = getSelectedInterviewStyle();
+      const data = await api.createSession(theme, currentLang, style);
       const input = document.getElementById('theme-input') as HTMLTextAreaElement | null;
       if (input) input.value = '';
       await openSession(data.sessionId, true);

@@ -70,6 +70,12 @@
           <div class="theme-input-area">
             <textarea id="theme-input" data-i18n="hero.placeholder" placeholder="例：研究室の週末オペを楽にしたい…" rows="2"></textarea>
             <label for="theme-input" class="sr-only" data-i18n="hero.inputLabel">課題テーマを入力</label>
+            <div class="interview-style-selector">
+              <select id="interview-style-select">
+                <option value="depth">通常インタビュー（深掘り）</option>
+                <option value="claude_code">Claude Code 向け（短縮・構造化）</option>
+              </select>
+            </div>
             <button id="btn-start" class="btn btn-primary btn-lg" onclick="startNewSession()">
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
               <span data-i18n="hero.cta">インタビューを開始</span>
@@ -399,6 +405,10 @@
                   <button class="btn btn-secondary" onclick="saveToGitHub()" id="btn-github-save" style="display:none">
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 00-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0020 4.77 5.07 5.07 0 0019.91 1S18.73.65 16 2.48a13.38 13.38 0 00-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 005 4.77a5.44 5.44 0 00-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 009 18.13V22"/></svg>
                     <span data-i18n="spec.saveGithub">GitHub に保存</span>
+                  </button>
+                  <button class="btn btn-secondary btn-claude-code" onclick="exportClaudeCodePrompt()">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
+                    <span>Claude Code プロンプトをコピー</span>
                   </button>
                 </div>
               </details>

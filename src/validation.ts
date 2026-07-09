@@ -2,6 +2,7 @@ import { z } from "zod";
 
 export const createSessionSchema = z.object({
   theme: z.string().min(1, "テーマを入力してください").max(500, "テーマは500文字以内で入力してください"),
+  interview_style: z.enum(["depth", "claude_code"]).optional().default("depth"),
 });
 
 export const chatMessageSchema = z.object({

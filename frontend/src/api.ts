@@ -1,7 +1,8 @@
 // === DeepForm API Client ===
 import type {
   ChatResponse, FactsData, HypothesesData, PRDData, SpecData, ReadinessData,
-  Session, SessionDetail,
+  Session, SessionDetail, ClaudeCodeExport, PostReleaseFeedbackEntry,
+  PostReleaseFeedbackQuestion, InterviewStyle,
   CampaignInfo, CampaignJoinResponse, CampaignAnalytics,
   CampaignAIAnalysis, CampaignExport, User,
 } from './types';
@@ -67,8 +68,8 @@ export function logout(): Promise<void> {
 }
 
 // Sessions
-export function createSession(theme: string, lang?: string): Promise<{ sessionId: string }> {
-  return post('/api/sessions', { theme, lang });
+export function createSession(theme: string, lang?: string, interviewStyle?: InterviewStyle): Promise<{ sessionId: string }> {
+  return post('/api/sessions', { theme, lang, interview_style: interviewStyle || 'depth' });
 }
 
 export function getSessions(): Promise<Session[]> {
@@ -322,4 +323,30 @@ export function generateCampaignAnalytics(campaignId: string): Promise<CampaignA
 
 export function exportCampaignAnalytics(campaignId: string): Promise<CampaignExport> {
   return request(`/api/campaigns/${campaignId}/export`);
+}
+
+// Claude Code Export
+export function generateClaudeCodeExport(sessionId: string): Promise<ClaudeCodeExport> {
+  return post(`/api/sessions/${sessionId}/claude-code-export`);
+}
+
+export function getClaudeCodeExport(sessionId: string): Promise<ClaudeCodeExport> {
+  return request(`/api/sessions/${sessionId}/claude-code-export`);
+}
+
+// Post-release Feedback
+export function getPostReleaseFeedbackQuestions(sessionId: string): Promise<{ theme: string; questions: PostReleaseFeedbackQuestion[] }> {
+  return request(`/api/sessions/${sessionId}/post-release-feedback/questions`);
+}
+
+export function submitPostReleaseFeedback(sessionId: string, entries: PostReleaseFeedbackEntry[], respondentName?: string): Promise<{ ok: boolean }> {
+  return post(`/api/sessions/${sessionId}/post-release-feedback`, { entries, respondentName });
+}
+
+export function getPostReleaseFeedback(sessionId: string): Promise<{ sessionId: string; theme: string; feedbackCount: number; feedback: Array<{ id: number; message: string; createdAt: string }> }> {
+  return request(`/api/sessions/${sessionId}/post-release-feedback`);
+}
+
+export function refineFromFeedback(sessionId: string): Promise<{ refinedPrompt: string; changesSummary: string[]; topPriority: string; feedbackCount: number }> {
+  return post(`/api/sessions/${sessionId}/post-release-feedback/refine`);
 }

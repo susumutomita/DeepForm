@@ -374,6 +374,35 @@ a:hover { color: var(--primary-hover); }
 }
 .theme-input-area textarea::placeholder { color: var(--text-muted); }
 
+/* Interview style selector */
+.interview-style-selector {
+  width: 100%;
+}
+.interview-style-selector select {
+  width: 100%;
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  font-family: var(--font);
+  font-size: 14px;
+  padding: 8px 12px;
+  cursor: pointer;
+}
+.interview-style-selector select:focus {
+  outline: none;
+  border-color: var(--border-focus);
+}
+
+/* Claude Code export button */
+.btn-claude-code {
+  border-color: #81a2be;
+  color: #81a2be;
+}
+.btn-claude-code:hover {
+  background: rgba(129, 162, 190, 0.1);
+}
+
 /* === Sections === */
 .section {
   max-width: 1100px;

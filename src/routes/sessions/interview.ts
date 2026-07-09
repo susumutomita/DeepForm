@@ -1,5 +1,6 @@
 import { Hono } from "hono";
 import { ZodError } from "zod";
+import { INTERVIEW_STYLE } from "../../constants.ts";
 import { now } from "../../db/helpers.ts";
 import { db } from "../../db/index.ts";
 import { formatZodError } from "../../helpers/format.ts";
@@ -112,6 +113,96 @@ Choices should be specific and relevant to the question you just asked.
 The last choice must always be "${l.otherChoice}".${readyNote}`;
 }
 
+// ---------------------------------------------------------------------------
+// Claude Code interview prompts — structured, shorter, choice-heavy
+// ---------------------------------------------------------------------------
+
+/**
+ * Claude Code interview has a fixed question flow with 5 structured questions.
+ * Each turn maps to a specific topic. The AI adapts the exact wording but
+ * stays within the topic for that turn.
+ */
+const CLAUDE_CODE_TOPICS = ["target_user", "current_pain", "success_criteria", "must_not_fail", "constraints"] as const;
+
+function buildClaudeCodeStartPrompt(lang: Lang, theme: string): string {
+  const l = LANG_LABEL[lang];
+  return `You are a structured requirements interviewer helping a non-engineer define what they want to build.
+Your goal is to collect just enough information to generate implementation-ready instructions for a coding agent (Claude Code).
+
+Topic: "${theme}"
+
+This is a SHORT interview (5 questions total). You are asking question 1 of 5.
+
+Question 1: WHO will use this?
+Ask the user to describe who will use this tool/feature. Offer concrete choices.
+Be warm and brief. Respond in ${l.langName}. Keep your message under 100 characters (excluding [CHOICES]).
+
+CRITICAL FORMAT RULE — you MUST end your response with a [CHOICES] block:
+[CHOICES]
+自分だけ（個人ツール）
+チームメンバー（社内ツール）
+顧客・エンドユーザー（外部向け）
+まだ決まっていない
+${l.otherChoice}
+[/CHOICES]
+
+Never omit the [CHOICES] block.`;
+}
+
+function buildClaudeCodeChatPrompt(lang: Lang, theme: string, turnCount: number): string {
+  const l = LANG_LABEL[lang];
+  const topicIndex = Math.min(turnCount, CLAUDE_CODE_TOPICS.length - 1);
+  const topic = CLAUDE_CODE_TOPICS[topicIndex];
+
+  const topicPrompts: Record<string, string> = {
+    target_user: `Question ${turnCount + 1} of 5: WHO will use this?
+Ask about the target user. Offer concrete persona choices.`,
+    current_pain: `Question ${turnCount + 1} of 5: WHAT problem are they facing now?
+Ask what the user currently struggles with or works around. Focus on specific pain, not abstract goals.
+Offer choices that describe concrete pain scenarios related to the topic.`,
+    success_criteria: `Question ${turnCount + 1} of 5: WHAT does success look like?
+Ask what "done" means — what should the user be able to do after this is built?
+Offer choices describing measurable outcomes.`,
+    must_not_fail: `Question ${turnCount + 1} of 5: WHAT must NOT fail?
+Ask what would be unacceptable — data loss? Wrong calculations? Downtime?
+Offer choices about critical failure modes.`,
+    constraints: `Question ${turnCount + 1} of 5: ANY constraints or preferences?
+Ask about tech preferences, timeline, integrations, or things to avoid.
+Offer common constraint choices. Include "特になし（おまかせ）" as an option.`,
+  };
+
+  const isLastQuestion = turnCount >= CLAUDE_CODE_TOPICS.length - 1;
+  const readyNote = isLastQuestion
+    ? `\nThis is the LAST question. After the user answers, add "[READY_FOR_ANALYSIS]" at the end of your reply.`
+    : "";
+
+  return `You are a structured requirements interviewer helping a non-engineer define what they want to build.
+Your goal is to collect just enough information to generate implementation-ready instructions for Claude Code.
+
+Topic: "${theme}"
+
+${topicPrompts[topic] || topicPrompts.constraints}
+
+Rules:
+1. Ask exactly ONE question
+2. Keep your message under 100 characters (excluding [CHOICES])
+3. Respond in ${l.langName}
+4. Always offer 4-5 specific choices plus "${l.otherChoice}"
+5. Include "わからない" or "I don't know" as a valid choice where reasonable
+6. Be warm and encouraging — the user is not a developer
+
+OUTPUT FORMAT (MANDATORY):
+<your short question>
+
+[CHOICES]
+<choice 1>
+<choice 2>
+<choice 3>
+<choice 4>
+${l.otherChoice}
+[/CHOICES]${readyNote}`;
+}
+
 const FALLBACK_CHOICES: Record<Lang, string[]> = {
   ja: ["はい、そうです", "いいえ、違います", "もう少し詳しく聞きたいです", "その他（自分で入力）"],
   en: ["Yes, that's right", "No, that's different", "I'd like to explain more", "Other (type your own)"],
@@ -167,7 +258,10 @@ interviewRoutes.post("/sessions/:id/start", async (c) => {
 
     const body = await c.req.json().catch(() => ({}));
     const lang = resolveLang(body.lang);
-    const systemPrompt = buildStartPrompt(lang, session.theme);
+    const isClaudeCode = session.interview_style === INTERVIEW_STYLE.CLAUDE_CODE;
+    const systemPrompt = isClaudeCode
+      ? buildClaudeCodeStartPrompt(lang, session.theme)
+      : buildStartPrompt(lang, session.theme);
     const startMessages = [{ role: "user" as const, content: getStartMsg(lang, session.theme) }];
 
     // Streaming response
@@ -252,7 +346,10 @@ interviewRoutes.post("/sessions/:id/chat", async (c) => {
 
     const turnCount = allMessages.filter((m) => m.role === "user").length;
 
-    const systemPrompt = buildChatPrompt(lang, session.theme, turnCount);
+    const isClaudeCode = session.interview_style === INTERVIEW_STYLE.CLAUDE_CODE;
+    const systemPrompt = isClaudeCode
+      ? buildClaudeCodeChatPrompt(lang, session.theme, turnCount)
+      : buildChatPrompt(lang, session.theme, turnCount);
 
     // Streaming response
     const wantsStream = c.req.header("accept")?.includes("text/event-stream");
@@ -278,7 +375,8 @@ interviewRoutes.post("/sessions/:id/chat", async (c) => {
                 .values({ session_id: id, role: "assistant", content: cleanText })
                 .execute()
                 .catch((err) => console.error("Failed to save message:", err));
-              const readyForAnalysis = cleanText.includes("[READY_FOR_ANALYSIS]") || turnCount >= 8;
+              const maxTurns = isClaudeCode ? 5 : 8;
+              const readyForAnalysis = cleanText.includes("[READY_FOR_ANALYSIS]") || turnCount >= maxTurns;
               controller.enqueue(
                 encoder.encode(
                   `data: ${JSON.stringify({ type: "done", readyForAnalysis, turnCount, choices: readyForAnalysis ? [] : choices })}\n\n`,
@@ -316,7 +414,8 @@ interviewRoutes.post("/sessions/:id/chat", async (c) => {
       })
       .execute();
 
-    const readyForAnalysis = rawReply.includes("[READY_FOR_ANALYSIS]") || turnCount >= 8;
+    const maxTurns = isClaudeCode ? 5 : 8;
+    const readyForAnalysis = rawReply.includes("[READY_FOR_ANALYSIS]") || turnCount >= maxTurns;
 
     return c.json({
       reply: cleanReply.replace("[READY_FOR_ANALYSIS]", "").trim(),
